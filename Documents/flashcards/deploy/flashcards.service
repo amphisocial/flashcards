@@ -1,0 +1,21 @@
+# /etc/systemd/system/flashcards.service
+
+[Unit]
+Description=Athena Flashcards app
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/apps/flashcards
+EnvironmentFile=/opt/apps/flashcards/.env
+ExecStart=/usr/bin/node server/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+ReadWritePaths=/opt/apps/flashcards/data
+
+[Install]
+WantedBy=multi-user.target
