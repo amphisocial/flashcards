@@ -301,3 +301,15 @@ textarea { min-height: 180px; line-height: 1.55; }
   .auth-area { gap: 6px; }
   .btn { padding: 9px 12px; }
 }
+
+.upgrade-gate {
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 16px;
+  padding: 18px;
+  margin: 12px 0;
+}
+
+.upgrade-gate p {
+  margin: 0 0 10px;
+}

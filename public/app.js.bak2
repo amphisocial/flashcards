@@ -95,43 +95,23 @@ function openAuth(mode) {
 
 async function submitAuth(event) {
   event.preventDefault();
-
-  const authError = $('#authError');
-  if (authError) {
-    authError.style.display = 'none';
-    authError.textContent = '';
-  }
-
   const payload = {
     email: $('#authEmail').value,
     password: $('#authPassword').value,
     firstName: $('#firstName').value,
     lastName: $('#lastName').value
   };
-
   try {
     const data = await api(state.authMode === 'signup' ? '/api/auth/register' : '/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
-
     state.user = data.user;
-    state.usage = {
-      used: 0,
-      limit: data.user?.limits?.setsPerDay || 5,
-      remaining: data.user?.limits?.setsPerDay || 5
-    };
-
-    updateAuthUI();
     $('#authDialog').close();
-
+    await refreshMe();
     await loadLibrary();
-    setStatus(`Welcome${state.user?.firstName ? `, ${state.user.firstName}` : ''}.`, 'success');
+    setStatus(`Welcome${state.user.firstName ? `, ${state.user.firstName}` : ''}.`, 'success');
   } catch (error) {
-    if (authError) {
-      authError.textContent = error.message;
-      authError.style.display = 'block';
-    }
     setStatus(error.message, 'error');
   }
 }
@@ -332,32 +312,13 @@ async function deleteSet(setId) {
 
 function openShare(setId) {
   state.shareSetId = setId;
-
-  const isTeam = state.user && state.user.plan === 'team';
-
   $('#shareEmails').value = '';
-  $('#shareTeamGate').style.display = isTeam ? 'none' : 'block';
-  $('#shareFormArea').style.display = isTeam ? 'block' : 'none';
-
   $('#shareDialog').showModal();
-
-  if (!isTeam) {
-    setStatus('Sharing requires the Teams plan. Upgrade to share this study set.', 'error');
-  }
 }
 
 async function shareSet(event) {
   event.preventDefault();
-
   if (!state.shareSetId) return;
-
-  if (!state.user || state.user.plan !== 'team') {
-    $('#shareTeamGate').style.display = 'block';
-    $('#shareFormArea').style.display = 'none';
-    setStatus('Sharing requires the Teams plan. Upgrade to share this study set.', 'error');
-    return;
-  }
-
   try {
     await api(`/api/quizlets/${state.shareSetId}/share`, {
       method: 'POST',
@@ -367,10 +328,6 @@ async function shareSet(event) {
     await loadLibrary();
     setStatus('Study set shared.', 'success');
   } catch (error) {
-    if (String(error.message || '').toLowerCase().includes('team')) {
-      $('#shareTeamGate').style.display = 'block';
-      $('#shareFormArea').style.display = 'none';
-    }
     setStatus(error.message, 'error');
   }
 }
@@ -437,8 +394,7 @@ function bindEvents() {
   $('#openLogin')?.addEventListener('click', () => openAuth('login'));
   $('#openSignup')?.addEventListener('click', () => openAuth('signup'));
   $('#authSubmit').addEventListener('click', submitAuth);
-  $('#shareSubmit')?.addEventListener('click', shareSet);
-  $('#upgradeTeamFromShare')?.addEventListener('click', () => checkout('team'));
+  $('#shareSubmit').addEventListener('click', shareSet);
   $$('.tab').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
   $('#extractBtn').addEventListener('click', extractDocument);
   $('#generateBtn').addEventListener('click', generateSet);

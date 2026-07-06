@@ -27,12 +27,14 @@ const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_
 const PLAN_LIMITS = {
   free: { label: 'Free', setsPerDay: 5, shareSeats: 0 },
   starter: { label: 'Starter', setsPerDay: 10, shareSeats: 0 },
-  team: { label: 'Teams', setsPerDay: 20, shareSeats: 30 }
+  pro: { label: 'Pro', setsPerDay: 20, shareSeats: 0 },
+  team: { label: 'Team', setsPerDay: 20, shareSeats: 30 }
 };
 
 const STRIPE_PRICE_TO_PLAN = Object.fromEntries(
   [
     [process.env.STRIPE_PRICE_STARTER, 'starter'],
+    [process.env.STRIPE_PRICE_PRO, 'pro'],
     [process.env.STRIPE_PRICE_TEAM, 'team']
   ].filter(([priceId]) => Boolean(priceId))
 );
@@ -693,6 +695,7 @@ app.post('/api/billing/checkout', requireUser, async (req, res) => {
   const plan = String(req.body.plan || '').toLowerCase();
   const priceByPlan = {
     starter: process.env.STRIPE_PRICE_STARTER,
+    pro: process.env.STRIPE_PRICE_PRO,
     team: process.env.STRIPE_PRICE_TEAM
   };
   const price = priceByPlan[plan];

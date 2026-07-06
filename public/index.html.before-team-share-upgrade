@@ -252,20 +252,11 @@
     <form method="dialog" class="modal-card">
       <button class="modal-close" value="cancel" aria-label="Close">×</button>
       <h2>Share study set</h2>
-
-      <div id="shareTeamGate" class="upgrade-gate" style="display:none">
-        <p><strong>Sharing is available on the Teams plan.</strong></p>
-        <p>Upgrade to Teams for $9.99/mo to share study sets with up to 30 invited users.</p>
-        <button type="button" class="btn primary large" id="upgradeTeamFromShare">Upgrade to Teams</button>
-      </div>
-
-      <div id="shareFormArea">
-        <p>Teams users can invite up to 30 people by email. Invited users can study shared sets for free.</p>
-        <label>Email addresses
-          <textarea id="shareEmails" placeholder="student1@example.com, student2@example.com"></textarea>
-        </label>
-        <button type="button" class="btn primary large" id="shareSubmit" value="default">Share</button>
-      </div>
+      <p>Team plan users can invite up to 30 people by email. Invited users can study shared sets for free.</p>
+      <label>Email addresses
+        <textarea id="shareEmails" placeholder="student1@example.com, student2@example.com"></textarea>
+      </label>
+      <button type="button" class="btn primary large" id="shareSubmit" value="default">Share</button>
     </form>
   </dialog>
 
@@ -276,6 +267,6 @@
     </button>
   </template>
 
-  <script src="/app.js?v=20260706-team-share"></script>
+  <script src="/app.js?v=20260706-pricing"></script>
 </body>
 </html>
