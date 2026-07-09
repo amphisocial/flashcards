@@ -96,6 +96,12 @@
             <label>Subject
               <input id="subject" placeholder="e.g., History, Math, Science" />
             </label>
+            <label id="satSectionLabel" style="display:none">SAT section
+              <select id="satSection">
+                <option value="Reading and Writing">Reading and Writing</option>
+                <option value="Math">Math</option>
+              </select>
+            </label>
           </div>
 
           <label class="wide-label">Extra instructions
@@ -124,6 +130,8 @@
             <div class="flashcard-inner">
               <div class="card-face card-front">
                 <span class="mini-label" id="frontLabel">Question</span>
+                <span class="difficulty-badge" id="difficultyBadge" style="display:none"></span>
+                <div class="passage-box" id="passageBox" style="display:none"></div>
                 <p id="cardFront">Create or select a study set to begin.</p>
                 <div class="choices" id="choices"></div>
               </div>

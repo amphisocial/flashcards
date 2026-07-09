@@ -357,6 +357,7 @@ function cleanCard(card, index, format) {
     ? choices.findIndex((choice) => normalized(choice) === normalized(back))
     : -1;
 
+  const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
   const base = {
     id: id('card'),
     front: front.slice(0, 500),
@@ -364,7 +365,9 @@ function cleanCard(card, index, format) {
     type,
     choices: type === 'slide' ? [] : choices,
     answerIndex,
-    explanation: String(card.explanation || '').trim().slice(0, 1200)
+    explanation: String(card.explanation || '').trim().slice(0, 1200),
+    passage: type === 'quiz' ? String(card.passage || '').trim().slice(0, 1400) : '',
+    difficulty: type === 'quiz' && DIFFICULTIES.has(String(card.difficulty || '').toLowerCase()) ? String(card.difficulty).toLowerCase() : ''
   };
 
   if (type !== 'slide') return base;
@@ -506,21 +509,26 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
 
 function buildGenerationPrompt({ content, cardCount, format, category, grade, subject, notes }) {
   const isSlides = format === 'slides';
+  const isSatPrep = String(category || '').trim().toLowerCase() === 'sat prep';
   const vars = {
     cardCount,
     category: category || 'General learning',
     grade: grade || 'Not specified',
     subject: subject || 'Not specified',
+    section: subject || 'Reading and Writing',
     format: format || 'mixed',
     notes: notes || (isSlides ? 'Make it clear, credible, and visually compelling.' : 'Make it clear, useful, and exam/interview ready.'),
     material: compactText(content, 15000)
   };
 
-  const baseTemplate = readTextFile(path.join(PROMPTS_DIR, isSlides ? 'slides.md' : 'study-cards.md'));
+  const templateFile = isSatPrep ? 'sat-prep.md' : isSlides ? 'slides.md' : 'study-cards.md';
+  const baseTemplate = readTextFile(path.join(PROMPTS_DIR, templateFile));
   let prompt = renderTemplate(baseTemplate, vars);
 
-  const skills = loadSkills(isSlides ? 'SLIDE_SKILLS' : 'CARD_SKILLS', isSlides ? 'action-titles,mece-structure,data-viz' : 'mece-structure');
-  if (skills) prompt += `\n\n---\nAdditional house style rules to follow:\n${skills}`;
+  if (!isSatPrep) {
+    const skills = loadSkills(isSlides ? 'SLIDE_SKILLS' : 'CARD_SKILLS', isSlides ? 'action-titles,mece-structure,data-viz' : 'mece-structure');
+    if (skills) prompt += `\n\n---\nAdditional house style rules to follow:\n${skills}`;
+  }
 
   const secretSauce = loadSecretSauce();
   if (secretSauce) prompt += `\n\n---\nHouse-specific instructions (always follow these, highest priority):\n${secretSauce}`;
@@ -608,6 +616,7 @@ function resolveProvider() {
 async function generateWithProvider(options) {
   const prompt = buildGenerationPrompt(options);
   const provider = resolveProvider();
+  const isSatPrep = String(options.category || '').trim().toLowerCase() === 'sat prep';
   try {
     let text;
     if (provider === 'gemini') text = await callGemini(prompt);
@@ -615,7 +624,13 @@ async function generateWithProvider(options) {
     else text = await callClaude(prompt);
     return await normalizeGeneratedSet(safeJsonFromText(text), options.cardCount, options.format);
   } catch (error) {
-    console.warn(`${provider} generation failed; using local fallback:`, error.message);
+    console.warn(`${provider} generation failed:`, error.message);
+    if (isSatPrep) {
+      // SAT-style questions require an actual model call — the generic local
+      // fallback (splitting sentences out of pasted text) produces exactly
+      // the kind of low-quality output this feature exists to avoid.
+      throw new Error('SAT Prep needs a working AI provider to write real practice questions. Check your AI_PROVIDER and API key in .env, then try again.');
+    }
     const fallback = fallbackGenerateCards(options);
     if (options.format === 'slides') await attachSlideImages(fallback.cards);
     return fallback;

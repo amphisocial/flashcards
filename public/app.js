@@ -53,15 +53,19 @@
   }
 
   async function generateSet() {
-    const content = getSourceContent();
+    const satMode = isSatPrep();
+    let content = getSourceContent();
+    if (satMode && content.trim().length < 20) {
+      content = `Generate an original, full-length SAT ${$('#satSection').value} practice set matching real digital SAT structure and difficulty. ${content.trim()}`.trim();
+    }
     if (!content || content.trim().length < 20) return setStatus('Add more content before generating.', 'error');
     const payload = {
       content,
       cardCount: Number($('#cardCount').value || 10),
-      format: $('#format').value,
+      format: satMode ? 'quiz' : $('#format').value,
       category: $('#category').value,
       grade: $('#grade').value,
-      subject: $('#subject').value,
+      subject: satMode ? $('#satSection').value : $('#subject').value,
       notes: $('#notes').value,
       sourceType: creator.activeTab
     };
@@ -266,6 +270,15 @@
     $('#cardExplanation').textContent = card.explanation || '';
     $('#cardFront').textContent = card.front;
 
+    const passageBox = $('#passageBox');
+    passageBox.style.display = card.passage ? '' : 'none';
+    passageBox.textContent = card.passage || '';
+
+    const badge = $('#difficultyBadge');
+    badge.style.display = card.difficulty ? '' : 'none';
+    badge.textContent = card.difficulty ? card.difficulty.charAt(0).toUpperCase() + card.difficulty.slice(1) : '';
+    badge.className = `difficulty-badge ${card.difficulty || ''}`.trim();
+
     if (!isQuiz(card)) {
       $('#frontLabel').textContent = 'Question';
       $('#choices').innerHTML = '';
@@ -402,6 +415,7 @@
     } else {
       addMessage('bot', 'Great. I have enough context. Choose your format and item count, then click "Generate."');
       $('#category').value = inferCategory(creator.chatAnswers[0]);
+      applySatPrepMode();
       $('#grade').value ||= creator.chatAnswers[1];
       $('#subject').value ||= creator.chatAnswers[2];
     }
@@ -418,7 +432,24 @@
 
   /* ---------- Wiring ---------- */
 
+  function isSatPrep() {
+    return $('#category').value === 'SAT prep';
+  }
+
+  function applySatPrepMode() {
+    const satMode = isSatPrep();
+    $('#satSectionLabel').style.display = satMode ? '' : 'none';
+    $('#subject').closest('label').style.display = satMode ? 'none' : '';
+    if (satMode) {
+      $('#format').value = 'quiz';
+      $('#pasteContent').placeholder = 'Optional: specific topics or skills to focus on (e.g., comma usage, quadratic equations, main-idea questions). Leave blank for a broad, real-exam-style mix across all content domains.';
+    } else {
+      $('#pasteContent').placeholder = 'Paste your material here. Example: FinOps principles, a chapter summary, interview notes, SAT topic notes...';
+    }
+  }
+
   function bindEvents() {
+    $('#category').addEventListener('change', applySatPrepMode);
     $$('.tab').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
     $('#extractBtn').addEventListener('click', extractDocument);
     $('#generateBtn').addEventListener('click', generateSet);
@@ -449,6 +480,7 @@
     bindEvents();
     resetChat();
     renderEmptyStudy();
+    applySatPrepMode();
     await initCommon();
     const params = new URLSearchParams(window.location.search);
     if (params.get('signedIn') === 'google') {

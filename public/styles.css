@@ -227,6 +227,34 @@ textarea { min-height: 180px; line-height: 1.55; }
 }
 .card-face p { font-size: clamp(1.15rem, 2.5vw, 1.75rem); line-height: 1.35; margin: 12px 0; }
 .card-face small { color: var(--muted); line-height: 1.5; }
+.passage-box {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin: 6px 0 14px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.difficulty-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin: 0 0 10px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.difficulty-badge.easy { color: var(--brand-2); border-color: rgba(20,217,196,0.4); background: rgba(20,217,196,0.1); }
+.difficulty-badge.medium { color: #ffcc66; border-color: rgba(255,204,102,0.4); background: rgba(255,204,102,0.1); }
+.difficulty-badge.hard { color: var(--danger); border-color: rgba(255,107,122,0.4); background: rgba(255,107,122,0.1); }
 .choices { display: grid; gap: 8px; margin-top: 12px; }
 .choice { border: 1px solid var(--line); border-radius: 14px; padding: 10px; color: var(--muted); background: rgba(0,0,0,0.14); }
 .study-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
