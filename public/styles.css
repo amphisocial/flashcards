@@ -195,10 +195,11 @@ textarea { min-height: 180px; line-height: 1.55; }
 
 .study-panel { position: sticky; top: 86px; }
 .flashcard {
-  height: 330px;
+  height: 360px;
   perspective: 1400px;
   cursor: pointer;
 }
+.flashcard.has-passage { height: 560px; }
 .flashcard-inner {
   position: relative;
   width: 100%;
@@ -213,50 +214,52 @@ textarea { min-height: 180px; line-height: 1.55; }
   backface-visibility: hidden;
   border: 1px solid var(--line);
   border-radius: 28px;
-  padding: 26px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  overflow-y: auto;
   background:
     radial-gradient(circle at top right, rgba(20,217,196,0.18), transparent 18rem),
     linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
 }
-.card-back { transform: rotateY(180deg); background:
+.card-face > * { flex-shrink: 0; }
+.card-back { transform: rotateY(180deg); justify-content: center; background:
   radial-gradient(circle at top left, rgba(255,204,102,0.17), transparent 18rem),
   linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
 }
-.card-face p { font-size: clamp(1.15rem, 2.5vw, 1.75rem); line-height: 1.35; margin: 12px 0; }
-.card-face small { color: var(--muted); line-height: 1.5; }
+.card-face p { font-size: clamp(1rem, 1.5vw, 1.3rem); line-height: 1.4; margin: 10px 0; }
+.card-face small { color: var(--muted); line-height: 1.5; font-size: 0.85rem; }
 .passage-box {
-  font-size: 0.95rem;
-  line-height: 1.6;
+  font-size: 0.88rem;
+  line-height: 1.55;
   color: var(--text);
   background: rgba(255,255,255,0.05);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 14px 16px;
-  margin: 6px 0 14px;
-  max-height: 220px;
+  padding: 12px 14px;
+  margin: 4px 0 12px;
+  max-height: 160px;
   overflow-y: auto;
 }
 .difficulty-badge {
   display: inline-block;
   width: fit-content;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 3px 10px;
   border-radius: 999px;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   border: 1px solid var(--line);
   color: var(--muted);
 }
 .difficulty-badge.easy { color: var(--brand-2); border-color: rgba(20,217,196,0.4); background: rgba(20,217,196,0.1); }
 .difficulty-badge.medium { color: #ffcc66; border-color: rgba(255,204,102,0.4); background: rgba(255,204,102,0.1); }
 .difficulty-badge.hard { color: var(--danger); border-color: rgba(255,107,122,0.4); background: rgba(255,107,122,0.1); }
-.choices { display: grid; gap: 8px; margin-top: 12px; }
-.choice { border: 1px solid var(--line); border-radius: 14px; padding: 10px; color: var(--muted); background: rgba(0,0,0,0.14); }
+.choices { display: grid; gap: 7px; margin-top: 10px; }
+.choice { border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; color: var(--muted); background: rgba(0,0,0,0.14); font-size: 0.92rem; line-height: 1.4; }
 .study-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
 .card-list { display: grid; gap: 8px; max-height: 280px; overflow: auto; padding-right: 4px; }
 .card-row { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.05); padding: 10px 12px; color: var(--muted); cursor: pointer; text-align: left; }
@@ -380,9 +383,13 @@ textarea { min-height: 180px; line-height: 1.55; }
 }
 body.no-scroll { overflow: hidden; }
 .study-panel.maximized { position: fixed; }
-.study-panel.maximized .flashcard { height: min(58vh, 560px); }
-.study-panel.maximized .card-list { max-height: none; }
-.study-panel.maximized .card-face p { font-size: clamp(1.4rem, 2.4vw, 2.2rem); }
+.study-panel.maximized .flashcard { height: min(62vh, 620px); max-width: 880px; margin: 0 auto; }
+.study-panel.maximized .flashcard.has-passage { height: min(80vh, 860px); max-width: 880px; margin: 0 auto; }
+.study-panel.maximized .card-list { max-height: none; max-width: 880px; margin: 0 auto; }
+.study-panel.maximized .study-actions { max-width: 880px; margin: 14px auto; }
+.study-panel.maximized .card-face p { font-size: clamp(1.15rem, 1.7vw, 1.55rem); }
+.study-panel.maximized .passage-box { font-size: 0.98rem; max-height: 260px; }
+.study-panel.maximized .choice { font-size: 1rem; padding: 11px 14px; }
 
 /* Quiz choices */
 .choice.selectable {

@@ -95,6 +95,11 @@
     study.flipped = false;
     study.answers = {};
     renderStudy();
+    const shouldAutoMaximize = set.category === 'SAT prep' || set.format === 'slides';
+    const studyPanel = $('#studyPanel');
+    if (shouldAutoMaximize && !studyPanel.classList.contains('maximized')) {
+      toggleMaximize(studyPanel, true);
+    }
   }
 
   const currentCard = () => study.set?.cards?.[study.index];
@@ -114,6 +119,7 @@
     $('#flipCard').style.display = '';
     $('#shuffleCards').style.display = '';
     $('#flashcard').classList.remove('flipped');
+    $('#flashcard').classList.remove('has-passage');
     $('#frontLabel').textContent = 'Question';
     $('#cardFront').textContent = 'Create or select a study set to begin. Pick a set from Your Library, or generate a new one.';
     $('#cardBack').textContent = 'The answer will appear here.';
@@ -266,6 +272,7 @@
     $('#flipCard').style.display = '';
     $('#shuffleCards').style.display = '';
     $('#flashcard').classList.toggle('flipped', study.flipped);
+    $('#flashcard').classList.toggle('has-passage', Boolean(card.passage));
     $('#cardBack').textContent = card.back;
     $('#cardExplanation').textContent = card.explanation || '';
     $('#cardFront').textContent = card.front;

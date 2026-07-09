@@ -24,3 +24,5 @@
 2026-07-09T17:55:24: Athena Flashcards running on 3004
 2026-07-09T20:23:53: ◇ injected env (19) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
 2026-07-09T20:23:53: Athena Flashcards running on 3004
+2026-07-09T20:39:53: ◇ injected env (19) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+2026-07-09T20:39:53: Athena Flashcards running on 3004
