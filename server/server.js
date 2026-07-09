@@ -14,6 +14,11 @@ const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const Stripe = require('stripe');
 
+// Load .env when present. Under systemd this is redundant (EnvironmentFile=
+// already injects it), but pm2 and plain `node server/server.js` need this
+// to pick up secrets/config from .env.
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const PORT = Number(process.env.PORT || 3004);
 const APP_BASE_URL = (process.env.APP_BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'athena_flashcards_session';
