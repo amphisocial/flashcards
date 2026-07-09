@@ -136,8 +136,49 @@
   }
 
   const SLIDE_ICONS = {
-    title: '✦', agenda: '🗂', content: '💡', stat: '📊', quote: '❝', section: '▤', closing: '🎯'
+    title: '✦', agenda: '🗂', content: '💡', stat: '📊', chart: '📈', quote: '❝', section: '▤', closing: '🎯'
   };
+
+  function renderChart(chart) {
+    const width = 560;
+    const height = 220;
+    const padding = { top: 16, right: 16, bottom: 32, left: 16 };
+    const plotW = width - padding.left - padding.right;
+    const plotH = height - padding.top - padding.bottom;
+    const values = chart.series.map((point) => point.value);
+    const maxValue = Math.max(...values, 0);
+    const minValue = Math.min(...values, 0);
+    const range = (maxValue - minValue) || 1;
+    const unit = chart.unit || '';
+
+    if (chart.type === 'line') {
+      const stepX = plotW / Math.max(1, chart.series.length - 1);
+      const points = chart.series.map((point, i) => {
+        const x = padding.left + i * stepX;
+        const y = padding.top + plotH - ((point.value - minValue) / range) * plotH;
+        return { x, y, point };
+      });
+      const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+      const dots = points.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="var(--brand-2)" />`).join('');
+      const labels = points.map((p) => `<text x="${p.x.toFixed(1)}" y="${height - 8}" text-anchor="middle" class="chart-axis-label">${escapeHtml(p.point.label)}</text>`).join('');
+      const valueLabels = points.map((p) => `<text x="${p.x.toFixed(1)}" y="${(p.y - 12).toFixed(1)}" text-anchor="middle" class="chart-value-label">${escapeHtml(String(p.point.value))}${escapeHtml(unit)}</text>`).join('');
+      return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg"><path d="${path}" fill="none" stroke="var(--brand-2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />${dots}${valueLabels}${labels}</svg>`;
+    }
+
+    const gap = 18;
+    const barW = (plotW - gap * (chart.series.length - 1)) / chart.series.length;
+    const bars = chart.series.map((point, i) => {
+      const x = padding.left + i * (barW + gap);
+      const barH = Math.max(4, ((point.value - Math.min(minValue, 0)) / range) * plotH);
+      const y = padding.top + plotH - barH;
+      return `
+        <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="6" fill="var(--brand-2)" opacity="${0.55 + (0.45 * (i + 1)) / chart.series.length}" />
+        <text x="${(x + barW / 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="middle" class="chart-value-label">${escapeHtml(String(point.value))}${escapeHtml(unit)}</text>
+        <text x="${(x + barW / 2).toFixed(1)}" y="${height - 8}" text-anchor="middle" class="chart-axis-label">${escapeHtml(point.label)}</text>
+      `;
+    }).join('');
+    return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg">${bars}</svg>`;
+  }
 
   function renderSlide(card) {
     $('#flashcard').style.display = 'none';
@@ -160,9 +201,18 @@
       .map((line) => line.replace(/^[-•*]\s*/, '').trim())
       .filter(Boolean);
     const bulletsEl = $('#slideBullets');
-    const showBullets = bullets.length && layout !== 'stat' && layout !== 'quote';
+    const showBullets = bullets.length && layout !== 'stat' && layout !== 'quote' && layout !== 'chart';
     bulletsEl.style.display = showBullets ? '' : 'none';
     bulletsEl.innerHTML = showBullets ? bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join('') : '';
+
+    const chartBox = $('#slideChart');
+    if (layout === 'chart' && card.chart?.series?.length) {
+      chartBox.style.display = '';
+      chartBox.innerHTML = renderChart(card.chart);
+    } else {
+      chartBox.style.display = 'none';
+      chartBox.innerHTML = '';
+    }
 
     const statBox = $('#slideStat');
     if (layout === 'stat' && card.stat?.value) {
@@ -183,7 +233,7 @@
     }
 
     const media = $('#slideMedia');
-    const usesMedia = layout !== 'quote';
+    const usesMedia = layout !== 'quote' && layout !== 'chart';
     if (usesMedia && card.imageUrl) {
       media.style.display = '';
       media.style.backgroundImage = `url("${card.imageUrl}")`;

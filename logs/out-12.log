@@ -10,3 +10,11 @@
 2026-07-09T17:07:29: Athena Flashcards running on 3004
 2026-07-09T17:15:52: Warning: TT: undefined function: 21
 2026-07-09T17:15:52: Warning: TT: undefined function: 21
+2026-07-09T17:22:45: Warning: TT: undefined function: 21
+2026-07-09T17:22:45: Warning: TT: undefined function: 21
+2026-07-09T17:24:16: ◇ injected env (17) from .env // tip: ⌘ enable debugging { debug: true }
+2026-07-09T17:24:16: Athena Flashcards running on 3004
+2026-07-09T17:38:55: ◇ injected env (17) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+2026-07-09T17:38:55: Athena Flashcards running on 3004
+2026-07-09T17:40:48: ◇ injected env (19) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+2026-07-09T17:40:48: Athena Flashcards running on 3004

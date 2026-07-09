@@ -268,7 +268,7 @@ async function fetchStockImage(query) {
 
 async function attachSlideImages(cards) {
   if (!process.env.PEXELS_API_KEY && !process.env.UNSPLASH_ACCESS_KEY) return;
-  const candidates = cards.filter((card) => card.type === 'slide' && card.imageQuery && card.layout !== 'quote');
+  const candidates = cards.filter((card) => card.type === 'slide' && card.imageQuery && card.layout !== 'quote' && card.layout !== 'chart');
   const batchSize = 4;
   for (let i = 0; i < candidates.length; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
@@ -282,6 +282,42 @@ async function attachSlideImages(cards) {
       }
     }));
   }
+}
+
+// ---- Configurable prompts & "skills" -----------------------------------
+// The actual generation prompts live as plain text files under
+// server/prompts/, not hardcoded in this file, so they can be tuned on the
+// server (house style, structural conventions, etc.) without a code change
+// or redeploy. Files are read fresh on every generation call.
+const PROMPTS_DIR = path.join(__dirname, 'prompts');
+const SKILLS_DIR = path.join(PROMPTS_DIR, 'skills');
+
+function readTextFile(filePath) {
+  try { return fs.readFileSync(filePath, 'utf8'); } catch { return ''; }
+}
+
+function renderTemplate(template, vars) {
+  return template.replace(/{{\s*(\w+)\s*}}/g, (_, key) => (vars[key] ?? ''));
+}
+
+function stripComments(text) {
+  return text
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n')
+    .trim();
+}
+
+function loadSkills(envVar, defaultList) {
+  const names = String(process.env[envVar] || defaultList).split(',').map((name) => name.trim()).filter(Boolean);
+  return names
+    .map((name) => readTextFile(path.join(SKILLS_DIR, `${name}.md`)).trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function loadSecretSauce() {
+  return stripComments(readTextFile(path.join(SKILLS_DIR, 'secret-sauce.md')));
 }
 
 function safeJsonFromText(text) {
@@ -302,7 +338,7 @@ function safeJsonFromText(text) {
   }
 }
 
-const SLIDE_LAYOUTS = new Set(['title', 'agenda', 'content', 'stat', 'quote', 'section', 'closing']);
+const SLIDE_LAYOUTS = new Set(['title', 'agenda', 'content', 'stat', 'chart', 'quote', 'section', 'closing']);
 
 function cleanCard(card, index, format) {
   const front = String(card.front || card.term || card.question || card.title || `Card ${index + 1}`).trim();
@@ -343,13 +379,25 @@ function cleanCard(card, index, format) {
         attribution: String((card.quote && card.quote.attribution) || '').trim().slice(0, 120)
       }
     : null;
+  const chart = card.chart && Array.isArray(card.chart.series) && card.chart.series.length
+    ? {
+        type: card.chart.type === 'line' ? 'line' : 'bar',
+        unit: String(card.chart.unit || '').trim().slice(0, 12),
+        series: card.chart.series
+          .slice(0, 6)
+          .map((point) => ({ label: String(point.label || '').trim().slice(0, 24), value: Number(point.value) }))
+          .filter((point) => point.label && Number.isFinite(point.value))
+      }
+    : null;
+  const resolvedLayout = layout === 'chart' && (!chart || chart.series.length < 2) ? 'content' : layout;
 
   return {
     ...base,
-    layout,
+    layout: resolvedLayout,
     kicker: String(card.kicker || '').trim().slice(0, 60),
     stat,
     quote,
+    chart: resolvedLayout === 'chart' ? chart : null,
     imageQuery: String(card.imageQuery || '').trim().slice(0, 80),
     imageUrl: null,
     imageCredit: null,
@@ -457,61 +505,27 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
 }
 
 function buildGenerationPrompt({ content, cardCount, format, category, grade, subject, notes }) {
-  if (format === 'slides') {
-    return `You are a senior presentation designer at a top-tier strategy consulting firm (Deloitte/McKinsey caliber). Build a polished, boardroom-ready presentation of exactly ${cardCount} slides from the provided material.
+  const isSlides = format === 'slides';
+  const vars = {
+    cardCount,
+    category: category || 'General learning',
+    grade: grade || 'Not specified',
+    subject: subject || 'Not specified',
+    format: format || 'mixed',
+    notes: notes || (isSlides ? 'Make it clear, credible, and visually compelling.' : 'Make it clear, useful, and exam/interview ready.'),
+    material: compactText(content, 15000)
+  };
 
-Study goal/category: ${category || 'General learning'}
-Grade/level: ${grade || 'Not specified'}
-Subject/topic: ${subject || 'Not specified'}
-Extra instructions: ${notes || 'Make it clear, credible, and visually compelling.'}
+  const baseTemplate = readTextFile(path.join(PROMPTS_DIR, isSlides ? 'slides.md' : 'study-cards.md'));
+  let prompt = renderTemplate(baseTemplate, vars);
 
-Design a deck with genuine narrative structure, not a flat list of slides. Vary the layout of each slide using this exact set of layout values:
-- "title": the opening slide. Used only once, as slide 1.
-- "agenda": a short outline of what the deck covers. Optional, at most once, only for decks of 6+ slides.
-- "content": a standard slide with a clear headline and 3-5 sharp, non-redundant bullet points.
-- "stat": a slide built around one standout number pulled or reasonably inferred from the material (e.g. "42%", "3.2x", "$18M"). Use sparingly and only when the material supports it.
-- "quote": a slide spotlighting one powerful, paraphrased insight framed as a pull-quote in your own words (never a verbatim quote from a copyrighted source). Use sparingly.
-- "section": a short divider slide that introduces a new part of the deck. Use only in longer decks (10+ slides).
-- "closing": the final slide. Used only once, as the last slide — key takeaways and/or a clear next step.
+  const skills = loadSkills(isSlides ? 'SLIDE_SKILLS' : 'CARD_SKILLS', isSlides ? 'action-titles,mece-structure,data-viz' : 'mece-structure');
+  if (skills) prompt += `\n\n---\nAdditional house style rules to follow:\n${skills}`;
 
-Rules:
-- Return JSON only, no markdown fences, no commentary.
-- Use this exact shape:
-  {"title":"Deck title",
-   "cards":[
-     {"type":"slide","layout":"title","front":"Deck headline","kicker":"Eyebrow label e.g. Q3 Strategy Review","back":"One-line subtitle/positioning statement","imageQuery":"2-4 word generic visual search phrase","explanation":"Optional speaker notes"},
-     {"type":"slide","layout":"content","front":"Slide headline","kicker":"Section label, optional","back":"Bullet one\\nBullet two\\nBullet three","imageQuery":"2-4 word generic visual search phrase","explanation":"Optional speaker notes"},
-     {"type":"slide","layout":"stat","front":"Slide headline","stat":{"value":"42%","label":"One sentence of context for the number"},"explanation":"Optional speaker notes"},
-     {"type":"slide","layout":"quote","front":"Slide headline","quote":{"text":"A punchy, paraphrased insight in your own words","attribution":"Source of the idea, e.g. Industry research, or leave blank"},"explanation":"Optional speaker notes"},
-     {"type":"slide","layout":"closing","front":"Closing headline","back":"Takeaway one\\nTakeaway two\\nTakeaway three","kicker":"Summary","explanation":"Optional speaker notes"}
-   ]}
-- Bullets: one idea per line, no bullet symbols, no filler, 6-14 words each.
-- imageQuery: only for "title" and "content" layouts. Keep it generic and professional (e.g. "team meeting whiteboard", "data center servers", "city skyline finance") — never a brand, logo, or named real person.
-- kicker is a short eyebrow label (2-5 words), optional except recommended on title/section/closing slides.
-- Do not repeat the same layout more than twice in a row.
-- Avoid hallucinating facts not supported by the material — if data for a "stat" slide isn't clearly supported, omit that layout entirely.
-- Avoid hallucinating facts not supported by the material.
+  const secretSauce = loadSecretSauce();
+  if (secretSauce) prompt += `\n\n---\nHouse-specific instructions (always follow these, highest priority):\n${secretSauce}`;
 
-Material:
-${compactText(content, 15000)}`;
-  }
-  return `You are an expert study coach. Create exactly ${cardCount} high-quality study cards from the provided material.
-
-Study goal/category: ${category || 'General learning'}
-Grade/level: ${grade || 'Not specified'}
-Subject/topic: ${subject || 'Not specified'}
-Format preference: ${format || 'mixed'}
-Extra instructions: ${notes || 'Make it clear, useful, and exam/interview ready.'}
-
-Rules:
-- Return JSON only.
-- Use this exact shape: {"title":"...", "cards":[{"front":"...", "back":"...", "type":"flashcard"}, {"front":"...", "back":"...", "type":"quiz", "choices":["...","...","...","..."], "explanation":"..."}]}
-- For quiz cards, include 4 concise choices and make the correct answer exactly match the back field.
-- Prefer application-oriented questions over trivia.
-- Avoid hallucinating facts not supported by the material. If the material is thin, create concept-check cards from what is provided.
-
-Material:
-${compactText(content, 15000)}`;
+  return prompt;
 }
 
 async function callOpenAI(prompt) {

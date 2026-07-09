@@ -503,6 +503,13 @@ body.no-scroll { overflow: hidden; }
 }
 .slide-quote cite { font-style: normal; color: var(--muted); font-size: 0.92rem; }
 
+.slide-chart { margin-top: 4px; }
+.chart-svg { width: 100%; height: auto; display: block; }
+.chart-value-label { fill: var(--text); font-size: 12px; font-weight: 800; font-family: Inter, sans-serif; }
+.chart-axis-label { fill: var(--muted); font-size: 11px; font-weight: 600; font-family: Inter, sans-serif; }
+
+.slide-stage.layout-chart { grid-template-columns: 1fr; }
+
 .slide-stage.layout-title .slide-content,
 .slide-stage.layout-closing .slide-content { justify-content: center; }
 .slide-stage.layout-title h2,
@@ -512,7 +519,8 @@ body.no-scroll { overflow: hidden; }
 .slide-stage.layout-section { grid-template-columns: 1fr; }
 .slide-stage.layout-title .slide-media,
 .slide-stage.layout-closing .slide-media,
-.slide-stage.layout-section .slide-media { display: none !important; }
+.slide-stage.layout-section .slide-media,
+.slide-stage.layout-chart .slide-media { display: none !important; }
 .slide-stage.layout-section .slide-content { align-items: center; text-align: center; }
 .slide-stage.layout-quote { grid-template-columns: 1fr; }
 
