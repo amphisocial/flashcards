@@ -3,15 +3,7 @@
   const { state, $, $$, escapeHtml, setStatus, api, updateUsagePill, initCommon } = window.AppCommon;
 
   const study = { set: null, index: 0, flipped: false, answers: {} };
-  const creator = { activeTab: 'paste', chatAnswers: [] };
-
-  const coachPrompts = [
-    'What are you preparing for? Example: CIO interview, SAT history, Grade 8 science, GMAT quant.',
-    'What grade, level, or audience should I tune this for?',
-    'What subject or topic should the cards focus on?',
-    'Tell me the source material, notes, concepts, or syllabus you want covered.',
-    'Any special style? Example: multiple choice, executive language, simple explanations, hard exam questions.'
-  ];
+  const creator = { activeTab: 'paste', chatMessages: [], chatReady: false, chatSeed: null, plan: null };
 
   const normalize = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -35,15 +27,81 @@
       $('#uploadContent').value = data.text;
       $('#uploadContent').readOnly = false;
       setStatus(`Extracted ${data.characters.toLocaleString()} characters from ${data.filename}.`, 'success');
+      $('#planBtn').style.display = data.text.trim().length > 40 ? '' : 'none';
+      $('#planPreview').style.display = 'none';
+      creator.plan = null;
     } catch (error) {
       setStatus(error.message, 'error');
     }
   }
 
+  const FORMAT_ICONS = { flashcard: '🗂', quiz: '❓', slides: '🖥' };
+
+  async function planDocument() {
+    const content = $('#uploadContent').value;
+    if (!content || content.trim().length < 40) return setStatus('Extract a document first.', 'error');
+    setStatus('Analyzing document and planning sections...');
+    $('#planBtn').disabled = true;
+    try {
+      const data = await api('/api/generate/plan', {
+        method: 'POST',
+        body: JSON.stringify({
+          content,
+          cardCount: Number($('#cardCount').value || 10),
+          category: $('#category').value,
+          grade: $('#grade').value,
+          subject: $('#subject').value
+        })
+      });
+      creator.plan = data.sections;
+      $('#planReasoning').textContent = data.reasoning || '';
+      $('#planSections').innerHTML = data.sections.map((section, index) => `
+        <div class="plan-section-row">
+          <span class="plan-section-icon">${FORMAT_ICONS[section.format] || '🗂'}</span>
+          <span class="plan-section-title">${escapeHtml(section.title)}</span>
+          <span class="plan-section-meta">${section.format} · ${section.cardCount} items</span>
+        </div>
+      `).join('');
+      $('#planPreview').style.display = '';
+      setStatus(`Planned ${data.sections.length} section${data.sections.length === 1 ? '' : 's'} — review, then build the full set.`, 'success');
+    } catch (error) {
+      setStatus(error.message, 'error');
+    } finally {
+      $('#planBtn').disabled = false;
+    }
+  }
+
+  async function buildPlan() {
+    if (!creator.plan || !creator.plan.length) return setStatus('Plan the document first.', 'error');
+    setStatus('Building your study set from the plan...');
+    $('#buildPlanBtn').disabled = true;
+    try {
+      const data = await api('/api/generate/execute-plan', {
+        method: 'POST',
+        body: JSON.stringify({
+          sections: creator.plan,
+          category: $('#category').value,
+          grade: $('#grade').value,
+          subject: $('#subject').value,
+          notes: $('#notes').value
+        })
+      });
+      state.usage = data.usage;
+      updateUsagePill();
+      loadSetIntoStudy(data.set || data.quizlet);
+      setStatus('Study set built from your document plan and saved to Your Library.', 'success');
+      const creatorPanel = $('#creatorPanel');
+      if (creatorPanel.classList.contains('maximized')) toggleMaximize(creatorPanel, false);
+      $('#studyPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      setStatus(error.message, 'error');
+    } finally {
+      $('#buildPlanBtn').disabled = false;
+    }
+  }
+
   function buildChatContent() {
-    return creator.chatAnswers
-      .map((answer, index) => `${coachPrompts[index]}\n${answer}`)
-      .join('\n\n');
+    return creator.chatSeed?.contentSeed || '';
   }
 
   function getSourceContent() {
@@ -54,18 +112,17 @@
 
   async function generateSet() {
     const satMode = isSatPrep();
-    let content = getSourceContent();
-    if (satMode && content.trim().length < 20) {
-      content = `Generate an original, full-length SAT ${$('#satSection').value} practice set matching real digital SAT structure and difficulty. ${content.trim()}`.trim();
-    }
+    if (satMode) return startSatSession();
+
+    const content = getSourceContent();
     if (!content || content.trim().length < 20) return setStatus('Add more content before generating.', 'error');
     const payload = {
       content,
       cardCount: Number($('#cardCount').value || 10),
-      format: satMode ? 'quiz' : $('#format').value,
+      format: $('#format').value,
       category: $('#category').value,
       grade: $('#grade').value,
-      subject: satMode ? $('#satSection').value : $('#subject').value,
+      subject: $('#subject').value,
       notes: $('#notes').value,
       sourceType: creator.activeTab
     };
@@ -87,9 +144,127 @@
     }
   }
 
+  /* ---------- Adaptive SAT practice ---------- */
+
+  const sat = { sessionId: null, stage: 0, totalStages: 0, stageCardIds: [], section: '' };
+
+  function resetSatState() {
+    sat.sessionId = null;
+    sat.stage = 0;
+    sat.totalStages = 0;
+    sat.stageCardIds = [];
+    $('#satStageBar').style.display = 'none';
+    $('#satSubmitStage').style.display = 'none';
+    $('#satResults').style.display = 'none';
+  }
+
+  function renderSatStageBar() {
+    $('#satStageBar').style.display = sat.sessionId ? '' : 'none';
+    if (!sat.sessionId) return;
+    $('#satStageLabel').textContent = `Stage ${sat.stage} of ${sat.totalStages} — ${sat.section}`;
+    $('#satStageProgress').style.width = `${(sat.stage / sat.totalStages) * 100}%`;
+    const answeredCount = sat.stageCardIds.filter((cardId) => study.answers[cardId] != null).length;
+    const submitBtn = $('#satSubmitStage');
+    submitBtn.style.display = '';
+    submitBtn.disabled = answeredCount < sat.stageCardIds.length;
+    submitBtn.textContent = answeredCount < sat.stageCardIds.length
+      ? `Answer all ${sat.stageCardIds.length} questions to continue (${answeredCount}/${sat.stageCardIds.length})`
+      : (sat.stage >= sat.totalStages ? 'Submit final stage & see results →' : 'Submit stage & continue →');
+  }
+
+  async function startSatSession() {
+    const section = $('#satSection').value;
+    const grade = $('#grade').value;
+    const totalQuestions = Number($('#cardCount').value || 16);
+    setStatus('Starting your adaptive practice session...');
+    $('#generateBtn').disabled = true;
+    try {
+      const data = await api('/api/sat/session', {
+        method: 'POST',
+        body: JSON.stringify({ section, grade, totalQuestions, focusNotes: getSourceContent().trim() })
+      });
+      sat.sessionId = data.sessionId;
+      sat.stage = data.stage;
+      sat.totalStages = data.totalStages;
+      sat.section = section;
+      sat.stageCardIds = data.cards.map((card) => card.id);
+      study.set = { title: data.title, cards: [...data.cards] };
+      study.index = 0;
+      study.flipped = false;
+      study.answers = {};
+      $('#satResults').style.display = 'none';
+      renderStudy();
+      renderSatStageBar();
+      setStatus(`Stage 1 of ${sat.totalStages} — answer every question, then submit to continue.`, 'success');
+      const studyPanel = $('#studyPanel');
+      if (!studyPanel.classList.contains('maximized')) toggleMaximize(studyPanel, true);
+      $('#studyPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      setStatus(error.message, 'error');
+    } finally {
+      $('#generateBtn').disabled = false;
+    }
+  }
+
+  async function submitSatStage() {
+    if (!sat.sessionId) return;
+    const answers = sat.stageCardIds.map((cardId) => ({ cardId, selectedIndex: study.answers[cardId] }));
+    const button = $('#satSubmitStage');
+    button.disabled = true;
+    button.textContent = 'Grading...';
+    try {
+      const data = await api(`/api/sat/session/${sat.sessionId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({ answers })
+      });
+      if (data.done) {
+        sat.sessionId = null;
+        $('#satStageBar').style.display = 'none';
+        $('#satSubmitStage').style.display = 'none';
+        renderSatResults(data.overallAccuracy, data.domainStats);
+        state.usage = data.usage;
+        updateUsagePill();
+        setStatus('Adaptive practice complete — saved to Your Library.', 'success');
+      } else {
+        sat.stage = data.stage;
+        sat.stageCardIds = data.cards.map((card) => card.id);
+        study.set.cards.push(...data.cards);
+        study.index = study.set.cards.length - data.cards.length;
+        study.flipped = false;
+        renderStudy();
+        renderSatStageBar();
+        const trend = data.runningAccuracy >= 0.75 ? 'Nice work — the next stage steps up the difficulty.'
+          : data.runningAccuracy <= 0.45 ? 'The next stage eases up to build confidence.'
+          : 'The next stage stays balanced based on your performance.';
+        setStatus(`Stage ${data.stage} of ${sat.totalStages}. ${trend}`, 'success');
+      }
+    } catch (error) {
+      setStatus(error.message, 'error');
+      renderSatStageBar();
+    }
+  }
+
+  function renderSatResults(accuracy, domainStats) {
+    const panel = $('#satResults');
+    panel.style.display = '';
+    $('#satScorePct').textContent = `${Math.round(accuracy * 100)}%`;
+    const entries = Object.entries(domainStats || {});
+    $('#satDomainBars').innerHTML = entries.map(([domain, stats]) => {
+      const pct = stats.total ? Math.round((stats.correct / stats.total) * 100) : 0;
+      return `
+        <div class="sat-domain-row">
+          <div class="sat-domain-label"><span>${escapeHtml(domain)}</span><span>${stats.correct}/${stats.total}</span></div>
+          <div class="slide-progress-track"><div class="slide-progress-fill" style="width:${pct}%"></div></div>
+        </div>
+      `;
+    }).join('');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   /* ---------- Study ---------- */
 
   function loadSetIntoStudy(set) {
+    resetSatState();
     study.set = set;
     study.index = 0;
     study.flipped = false;
@@ -143,6 +318,7 @@
       renderCard(card);
     }
     renderCardList(set);
+    if (sat.sessionId) renderSatStageBar();
   }
 
   const SLIDE_ICONS = {
@@ -396,10 +572,17 @@
 
   /* ---------- Guided chat ---------- */
 
+  /* ---------- Guided chat (real planning agent) ---------- */
+
   function resetChat() {
-    creator.chatAnswers = [];
+    creator.chatMessages = [];
+    creator.chatReady = false;
+    creator.chatSeed = null;
     $('#chatBox').innerHTML = '';
-    addMessage('bot', coachPrompts[0]);
+    $('#chatReadyBanner').style.display = 'none';
+    $('#chatInput').disabled = false;
+    $('#chatSend').disabled = false;
+    addMessage('bot', "Hi! Tell me what you'd like to study, and I'll ask a couple of quick questions to build the right set for you.");
   }
 
   function addMessage(kind, text) {
@@ -408,33 +591,55 @@
     div.textContent = text;
     $('#chatBox').appendChild(div);
     $('#chatBox').scrollTop = $('#chatBox').scrollHeight;
+    return div;
   }
 
-  function sendChat() {
+  async function sendChat() {
+    if (creator.chatReady) return;
     const input = $('#chatInput');
     const answer = input.value.trim();
     if (!answer) return;
     addMessage('user', answer);
-    creator.chatAnswers.push(answer);
+    creator.chatMessages.push({ role: 'user', content: answer });
     input.value = '';
-    if (creator.chatAnswers.length < coachPrompts.length) {
-      addMessage('bot', coachPrompts[creator.chatAnswers.length]);
-    } else {
-      addMessage('bot', 'Great. I have enough context. Choose your format and item count, then click "Generate."');
-      $('#category').value = inferCategory(creator.chatAnswers[0]);
-      applySatPrepMode();
-      $('#grade').value ||= creator.chatAnswers[1];
-      $('#subject').value ||= creator.chatAnswers[2];
+    input.disabled = true;
+    $('#chatSend').disabled = true;
+    const thinking = addMessage('bot thinking', 'Thinking...');
+    try {
+      const data = await api('/api/chat/coach', {
+        method: 'POST',
+        body: JSON.stringify({ messages: creator.chatMessages })
+      });
+      thinking.remove();
+      if (data.ready) {
+        creator.chatReady = true;
+        creator.chatSeed = data;
+        addMessage('bot', `Got it — I have what I need to build "${data.title || 'your study set'}."`);
+        $('#category').value = data.category;
+        applySatPrepMode();
+        $('#grade').value ||= data.grade || '';
+        if (isSatPrep()) {
+          if (['Reading and Writing', 'Math'].includes(data.subject)) $('#satSection').value = data.subject;
+        } else {
+          $('#subject').value ||= data.subject || '';
+          $('#format').value = data.format || 'mixed';
+          if (data.notes) $('#notes').value ||= data.notes;
+        }
+        $('#chatReadyBanner').style.display = '';
+        $('#chatReadyBanner').textContent = 'Ready — review the settings below, then click Generate.';
+      } else {
+        creator.chatMessages.push({ role: 'assistant', content: data.message });
+        addMessage('bot', data.message);
+        input.disabled = false;
+        $('#chatSend').disabled = false;
+        input.focus();
+      }
+    } catch (error) {
+      thinking.remove();
+      addMessage('bot', `Sorry, I hit a snag: ${error.message}`);
+      input.disabled = false;
+      $('#chatSend').disabled = false;
     }
-  }
-
-  function inferCategory(text) {
-    const lower = String(text || '').toLowerCase();
-    if (lower.includes('sat')) return 'SAT prep';
-    if (lower.includes('gmat')) return 'GMAT prep';
-    if (lower.includes('interview')) return 'Interview preparation';
-    if (lower.includes('grade')) return 'Grade-level study';
-    return 'General learning';
   }
 
   /* ---------- Wiring ---------- */
@@ -447,18 +652,26 @@
     const satMode = isSatPrep();
     $('#satSectionLabel').style.display = satMode ? '' : 'none';
     $('#subject').closest('label').style.display = satMode ? 'none' : '';
+    $('#format').closest('label').style.display = satMode ? 'none' : '';
     if (satMode) {
       $('#format').value = 'quiz';
       $('#pasteContent').placeholder = 'Optional: specific topics or skills to focus on (e.g., comma usage, quadratic equations, main-idea questions). Leave blank for a broad, real-exam-style mix across all content domains.';
+      $('#generateBtn').textContent = 'Start Adaptive Practice';
+      $('#cardCount').title = 'Total questions across both adaptive stages';
     } else {
       $('#pasteContent').placeholder = 'Paste your material here. Example: FinOps principles, a chapter summary, interview notes, SAT topic notes...';
+      $('#generateBtn').textContent = 'Generate';
+      $('#cardCount').title = '';
     }
   }
 
   function bindEvents() {
     $('#category').addEventListener('change', applySatPrepMode);
+    $('#satSubmitStage').addEventListener('click', submitSatStage);
     $$('.tab').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
     $('#extractBtn').addEventListener('click', extractDocument);
+    $('#planBtn').addEventListener('click', planDocument);
+    $('#buildPlanBtn').addEventListener('click', buildPlan);
     $('#generateBtn').addEventListener('click', generateSet);
     $('#flashcard').addEventListener('click', flipCard);
     $('#flipCard').addEventListener('click', flipCard);

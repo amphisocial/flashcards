@@ -64,10 +64,11 @@ function readStore() {
     parsed.sessions ||= [];
     parsed.quizlets ||= [];
     parsed.events ||= [];
+    parsed.satSessions ||= [];
     return parsed;
   } catch (error) {
     console.error('Failed to read store:', error);
-    return { users: [], sessions: [], quizlets: [], events: [] };
+    return { users: [], sessions: [], quizlets: [], events: [], satSessions: [] };
   }
 }
 
@@ -367,6 +368,7 @@ function cleanCard(card, index, format) {
     answerIndex,
     explanation: String(card.explanation || '').trim().slice(0, 1200),
     passage: type === 'quiz' ? String(card.passage || '').trim().slice(0, 1400) : '',
+    domain: type === 'quiz' ? String(card.domain || '').trim().slice(0, 60) : '',
     difficulty: type === 'quiz' && DIFFICULTIES.has(String(card.difficulty || '').toLowerCase()) ? String(card.difficulty).toLowerCase() : ''
   };
 
@@ -507,7 +509,7 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
   return { title, cards };
 }
 
-function buildGenerationPrompt({ content, cardCount, format, category, grade, subject, notes }) {
+function buildGenerationPrompt({ content, cardCount, format, category, grade, subject, notes, difficultySkew }) {
   const isSlides = format === 'slides';
   const isSatPrep = String(category || '').trim().toLowerCase() === 'sat prep';
   const vars = {
@@ -518,7 +520,8 @@ function buildGenerationPrompt({ content, cardCount, format, category, grade, su
     section: subject || 'Reading and Writing',
     format: format || 'mixed',
     notes: notes || (isSlides ? 'Make it clear, credible, and visually compelling.' : 'Make it clear, useful, and exam/interview ready.'),
-    material: compactText(content, 15000)
+    material: compactText(content, 15000),
+    difficultySkew: difficultySkew || 'roughly 30% easy, 40% medium, 30% hard'
   };
 
   const templateFile = isSatPrep ? 'sat-prep.md' : isSlides ? 'slides.md' : 'study-cards.md';
@@ -855,6 +858,33 @@ app.get('/auth/google/callback', async (req, res) => {
   }
 });
 
+function buildStudySetObject(user, { title, cards, category, subject, grade, format, sourceType, extra }) {
+  return {
+    id: id('set'),
+    ownerId: user.id,
+    ownerEmail: user.email,
+    title,
+    sourceType: sourceType || 'content',
+    category: String(category || '').trim(),
+    subject: String(subject || '').trim(),
+    grade: String(grade || '').trim(),
+    format,
+    invitedEmails: [],
+    cards,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    ...(extra || {})
+  };
+}
+
+function saveGeneratedSet(user, options) {
+  const store = readStore();
+  const studySet = buildStudySetObject(user, options);
+  store.quizlets.push(studySet); // store key kept as "quizlets" for backward compatibility with existing data
+  writeStore(store);
+  return studySet;
+}
+
 app.post('/api/extract', requireUser, upload.single('document'), async (req, res) => {
   try {
     const text = await extractUploadText(req.file);
@@ -886,28 +916,346 @@ app.post('/api/generate', requireUser, async (req, res) => {
       notes: req.body.notes
     });
 
-    const store = readStore();
-    const studySet = {
-      id: id('set'),
-      ownerId: req.user.id,
-      ownerEmail: req.user.email,
+    const studySet = saveGeneratedSet(req.user, {
       title: generated.title,
-      sourceType: req.body.sourceType || 'content',
-      category: String(req.body.category || '').trim(),
-      subject: String(req.body.subject || '').trim(),
-      grade: String(req.body.grade || '').trim(),
-      format,
-      invitedEmails: [],
       cards: generated.cards,
-      createdAt: nowIso(),
-      updatedAt: nowIso()
-    };
-    store.quizlets.push(studySet); // store key kept as "quizlets" for backward compatibility with existing data
-    writeStore(store);
+      category: req.body.category,
+      subject: req.body.subject,
+      grade: req.body.grade,
+      format,
+      sourceType: req.body.sourceType
+    });
     res.json({ set: studySet, quizlet: studySet, usage: canCreateSet(req.user) });
   } catch (error) {
     console.error('Generation error:', error);
     res.status(500).json({ error: error.message || 'Could not generate the study set.' });
+  }
+});
+
+// ---- Adaptive SAT practice engine ---------------------------------------
+// A genuinely stateful, multi-step agent: it generates a diagnostic batch,
+// grades the student's real answers server-side, decides how to adjust
+// difficulty for the next batch (mirroring the real digital SAT's adaptive
+// module structure), and repeats for a fixed number of stages before
+// finalizing everything into one saved, reviewable study set.
+const SAT_TOTAL_QUESTIONS_DEFAULT = 16;
+const SAT_STAGES = 2;
+
+function skewForStage(stage, priorAccuracy) {
+  if (stage === 1) return 'roughly 40% easy, 40% medium, 20% hard (this is a diagnostic first stage, keep it broad and welcoming)';
+  if (priorAccuracy >= 0.75) return 'roughly 10% easy, 35% medium, 55% hard (the student performed well on the previous stage — raise the challenge, like the real exam would)';
+  if (priorAccuracy <= 0.45) return 'roughly 55% easy, 35% medium, 10% hard (the student struggled on the previous stage — rebuild confidence and reinforce fundamentals before increasing difficulty again)';
+  return 'roughly 25% easy, 50% medium, 25% hard (balanced, matching solid-but-not-perfect performance)';
+}
+
+function gradeStageAnswers(cards, answers) {
+  const answerMap = new Map((Array.isArray(answers) ? answers : []).map((a) => [a.cardId, a.selectedIndex]));
+  let correct = 0;
+  const domainStats = {};
+  const graded = cards.map((card) => {
+    const raw = answerMap.get(card.id);
+    const selectedIndex = raw === undefined || raw === null ? null : Number(raw);
+    const isCorrect = selectedIndex !== null && selectedIndex === card.answerIndex;
+    if (isCorrect) correct += 1;
+    const domain = card.domain || 'General';
+    domainStats[domain] ||= { correct: 0, total: 0 };
+    domainStats[domain].total += 1;
+    if (isCorrect) domainStats[domain].correct += 1;
+    return { cardId: card.id, selectedIndex, isCorrect };
+  });
+  return { correct, total: cards.length, accuracy: cards.length ? correct / cards.length : 0, domainStats, graded };
+}
+
+function mergeDomainStats(target, addition) {
+  for (const [domain, stats] of Object.entries(addition)) {
+    target[domain] ||= { correct: 0, total: 0 };
+    target[domain].correct += stats.correct;
+    target[domain].total += stats.total;
+  }
+  return target;
+}
+
+app.post('/api/sat/session', requireUser, async (req, res) => {
+  const usage = canCreateSet(req.user);
+  if (!usage.ok) {
+    return res.status(429).json({ error: `Daily limit reached for your ${publicUser(req.user).planLabel} plan. Upgrade or try again tomorrow.`, usage });
+  }
+  const section = ['Reading and Writing', 'Math'].includes(req.body.section) ? req.body.section : 'Reading and Writing';
+  const grade = String(req.body.grade || '').trim();
+  const focusNotes = compactText(req.body.focusNotes || '', 2000);
+  const totalQuestions = Math.max(4, Math.min(40, Number(req.body.totalQuestions || SAT_TOTAL_QUESTIONS_DEFAULT)));
+  const perStage = Math.max(2, Math.round(totalQuestions / SAT_STAGES));
+
+  try {
+    const generated = await generateWithProvider({
+      content: `Adaptive SAT diagnostic — stage 1 of ${SAT_STAGES} for the ${section} section.${focusNotes ? ` Focus areas requested: ${focusNotes}` : ''}`,
+      cardCount: perStage,
+      format: 'quiz',
+      category: 'SAT prep',
+      grade,
+      subject: section,
+      difficultySkew: skewForStage(1, null)
+    });
+
+    const session = {
+      id: id('sat'),
+      userId: req.user.id,
+      section,
+      grade,
+      focusNotes,
+      stage: 1,
+      totalStages: SAT_STAGES,
+      perStage,
+      allCards: [...generated.cards],
+      stageCardIds: [generated.cards.map((c) => c.id)],
+      domainStats: {},
+      overallCorrect: 0,
+      overallTotal: 0,
+      status: 'in_progress',
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    const store = readStore();
+    store.satSessions.push(session);
+    writeStore(store);
+
+    res.json({ sessionId: session.id, stage: 1, totalStages: SAT_STAGES, cards: generated.cards, title: generated.title });
+  } catch (error) {
+    console.error('SAT session start error:', error);
+    res.status(500).json({ error: error.message || 'Could not start the adaptive practice session.' });
+  }
+});
+
+app.post('/api/sat/session/:id/submit', requireUser, async (req, res) => {
+  const store = readStore();
+  const session = store.satSessions.find((s) => s.id === req.params.id && s.userId === req.user.id);
+  if (!session) return res.status(404).json({ error: 'Practice session not found.' });
+  if (session.status !== 'in_progress') return res.status(400).json({ error: 'This practice session has already finished.' });
+
+  const currentStageCardIds = session.stageCardIds[session.stage - 1] || [];
+  const currentStageCards = session.allCards.filter((card) => currentStageCardIds.includes(card.id));
+  const stageResult = gradeStageAnswers(currentStageCards, req.body.answers);
+
+  session.overallCorrect += stageResult.correct;
+  session.overallTotal += stageResult.total;
+  mergeDomainStats(session.domainStats, stageResult.domainStats);
+  session.updatedAt = nowIso();
+
+  if (session.stage >= session.totalStages) {
+    session.status = 'completed';
+    const accuracy = session.overallTotal ? session.overallCorrect / session.overallTotal : 0;
+    const studySet = buildStudySetObject(req.user, {
+      title: `SAT ${session.section} Adaptive Practice`,
+      cards: session.allCards,
+      category: 'SAT prep',
+      subject: session.section,
+      grade: session.grade,
+      format: 'quiz',
+      sourceType: 'adaptive',
+      extra: { adaptive: true, overallAccuracy: accuracy, domainStats: session.domainStats }
+    });
+    store.quizlets.push(studySet);
+    session.finalSetId = studySet.id;
+    writeStore(store);
+    return res.json({
+      done: true,
+      stageResult,
+      overallAccuracy: accuracy,
+      domainStats: session.domainStats,
+      set: studySet,
+      usage: canCreateSet(req.user)
+    });
+  }
+
+  try {
+    const nextStage = session.stage + 1;
+    const skew = skewForStage(nextStage, stageResult.accuracy);
+    const generated = await generateWithProvider({
+      content: `Adaptive SAT — stage ${nextStage} of ${session.totalStages} for the ${session.section} section. Prior stage accuracy: ${Math.round(stageResult.accuracy * 100)}%.${session.focusNotes ? ` Focus areas requested: ${session.focusNotes}` : ''}`,
+      cardCount: session.perStage,
+      format: 'quiz',
+      category: 'SAT prep',
+      grade: session.grade,
+      subject: session.section,
+      difficultySkew: skew
+    });
+    session.stage = nextStage;
+    session.allCards.push(...generated.cards);
+    session.stageCardIds.push(generated.cards.map((c) => c.id));
+    writeStore(store);
+    res.json({
+      done: false,
+      stage: nextStage,
+      totalStages: session.totalStages,
+      cards: generated.cards,
+      stageResult,
+      runningAccuracy: session.overallTotal ? session.overallCorrect / session.overallTotal : 0,
+      domainStats: session.domainStats
+    });
+  } catch (error) {
+    console.error('SAT session next-stage error:', error);
+    res.status(500).json({ error: error.message || 'Could not generate the next stage.' });
+  }
+});
+
+app.get('/api/sat/session/:id', requireUser, (req, res) => {
+  const store = readStore();
+  const session = store.satSessions.find((s) => s.id === req.params.id && s.userId === req.user.id);
+  if (!session) return res.status(404).json({ error: 'Practice session not found.' });
+  res.json({
+    session: {
+      id: session.id,
+      section: session.section,
+      stage: session.stage,
+      totalStages: session.totalStages,
+      status: session.status,
+      domainStats: session.domainStats
+    }
+  });
+});
+
+// ---- Guided chat planning agent -----------------------------------------
+// A real multi-turn agent (not a scripted form): the client sends the full
+// conversation each turn, the model decides whether it has enough context
+// to build a good study set or needs to ask another question, and responds
+// with a structured decision either way.
+function buildCoachPrompt(messages) {
+  const transcript = (Array.isArray(messages) ? messages : [])
+    .map((m) => `${m.role === 'user' ? 'Student' : 'Coach'}: ${String(m.content || '').trim()}`)
+    .join('\n');
+  const base = readTextFile(path.join(PROMPTS_DIR, 'coach.md'));
+  return renderTemplate(base, { transcript: transcript || '(nothing yet — this is the first message)' });
+}
+
+app.post('/api/chat/coach', requireUser, async (req, res) => {
+  const messages = Array.isArray(req.body.messages) ? req.body.messages.slice(-20) : [];
+  const provider = resolveProvider();
+  try {
+    const prompt = buildCoachPrompt(messages);
+    let text;
+    if (provider === 'gemini') text = await callGemini(prompt);
+    else if (provider === 'openai') text = await callOpenAI(prompt);
+    else text = await callClaude(prompt);
+    const parsed = safeJsonFromText(text);
+
+    if (parsed.ready) {
+      return res.json({
+        ready: true,
+        title: String(parsed.title || '').trim().slice(0, 90),
+        category: String(parsed.category || 'General learning').trim(),
+        subject: String(parsed.subject || '').trim().slice(0, 80),
+        grade: String(parsed.grade || '').trim().slice(0, 60),
+        format: ['mixed', 'flashcard', 'quiz', 'slides'].includes(parsed.format) ? parsed.format : 'mixed',
+        notes: String(parsed.notes || '').trim().slice(0, 300),
+        contentSeed: String(parsed.contentSeed || '').trim().slice(0, 4000)
+      });
+    }
+    res.json({ ready: false, message: String(parsed.message || 'Could you tell me a bit more about what you want to study?').trim().slice(0, 500) });
+  } catch (error) {
+    console.error('Coach chat error:', error);
+    const friendly = /API_KEY is not configured/.test(error.message) ? 'The study coach needs an AI provider configured. Check AI_PROVIDER and your API key in .env.' : error.message;
+    res.status(500).json({ error: friendly || 'The study coach is unavailable right now. Try the Paste content tab instead.' });
+  }
+});
+
+// ---- Document ingestion planning agent -----------------------------------
+// Two-step agent for uploaded documents: first it plans (reads the whole
+// document, decides how to divide it into sections and which format suits
+// each one), then a second step executes that plan section-by-section and
+// merges the results into one mixed-format study set. The plan is returned
+// to the client for a transparency check before anything is generated.
+app.post('/api/generate/plan', requireUser, async (req, res) => {
+  const cardCount = Math.max(2, Math.min(60, Number(req.body.cardCount || 10)));
+  const content = compactText(req.body.content || '', 50000);
+  if (content.length < 40) return res.status(400).json({ error: 'Add more source content before planning.' });
+
+  const vars = {
+    cardCount,
+    category: req.body.category || 'General learning',
+    grade: req.body.grade || 'Not specified',
+    subject: req.body.subject || 'Not specified',
+    material: compactText(content, 18000)
+  };
+  const base = readTextFile(path.join(PROMPTS_DIR, 'ingest-plan.md'));
+  const prompt = renderTemplate(base, vars);
+  const provider = resolveProvider();
+
+  try {
+    let text;
+    if (provider === 'gemini') text = await callGemini(prompt);
+    else if (provider === 'openai') text = await callOpenAI(prompt);
+    else text = await callClaude(prompt);
+    const parsed = safeJsonFromText(text);
+
+    const ALLOWED_FORMATS = new Set(['flashcard', 'quiz', 'slides']);
+    let sections = (Array.isArray(parsed.sections) ? parsed.sections : [])
+      .slice(0, 8)
+      .map((section) => ({
+        title: String(section.title || 'Section').trim().slice(0, 90),
+        format: ALLOWED_FORMATS.has(section.format) ? section.format : 'flashcard',
+        cardCount: Math.max(1, Math.round(Number(section.cardCount) || 1)),
+        content: compactText(section.content || '', 12000)
+      }))
+      .filter((section) => section.content.length > 10);
+    if (!sections.length) throw new Error('Could not identify sections in this document.');
+
+    const sum = sections.reduce((total, section) => total + section.cardCount, 0);
+    if (sum !== cardCount) {
+      const scale = cardCount / sum;
+      let running = 0;
+      sections = sections.map((section, index) => {
+        const isLast = index === sections.length - 1;
+        const scaled = isLast ? Math.max(1, cardCount - running) : Math.max(1, Math.round(section.cardCount * scale));
+        running += scaled;
+        return { ...section, cardCount: scaled };
+      });
+    }
+
+    res.json({ reasoning: String(parsed.reasoning || '').trim().slice(0, 300), sections });
+  } catch (error) {
+    console.error('Ingest plan error:', error);
+    const friendly = /API_KEY is not configured/.test(error.message) ? 'Document planning needs an AI provider configured. Check AI_PROVIDER and your API key in .env.' : error.message;
+    res.status(500).json({ error: friendly || 'Could not analyze this document.' });
+  }
+});
+
+app.post('/api/generate/execute-plan', requireUser, async (req, res) => {
+  const usage = canCreateSet(req.user);
+  if (!usage.ok) {
+    return res.status(429).json({ error: `Daily limit reached for your ${publicUser(req.user).planLabel} plan. Upgrade or try again tomorrow.`, usage });
+  }
+  const sections = Array.isArray(req.body.sections) ? req.body.sections.slice(0, 8) : [];
+  if (!sections.length) return res.status(400).json({ error: 'No plan sections provided.' });
+
+  const { category, grade, subject, notes } = req.body;
+
+  try {
+    const allCards = [];
+    for (const section of sections) {
+      const format = ['flashcard', 'quiz', 'slides'].includes(section.format) ? section.format : 'flashcard';
+      const sectionCardCount = Math.max(1, Math.min(30, Number(section.cardCount) || 3));
+      const sectionContent = compactText(section.content || '', 15000);
+      if (sectionContent.length < 10) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const generated = await generateWithProvider({ content: sectionContent, cardCount: sectionCardCount, format, category, grade, subject, notes });
+      allCards.push(...generated.cards);
+    }
+    if (!allCards.length) throw new Error('No cards could be generated from this plan.');
+
+    const title = String(req.body.title || '').trim() || 'AI Study Set';
+    const studySet = saveGeneratedSet(req.user, {
+      title,
+      cards: allCards,
+      category,
+      subject,
+      grade,
+      format: 'mixed',
+      sourceType: 'document-plan'
+    });
+    res.json({ set: studySet, quizlet: studySet, usage: canCreateSet(req.user) });
+  } catch (error) {
+    console.error('Execute plan error:', error);
+    res.status(500).json({ error: error.message || 'Could not generate the study set from this plan.' });
   }
 });
 

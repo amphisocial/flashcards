@@ -170,6 +170,29 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { border-color: rgba(20,217,196,0.75); box-shadow: 0 0 0 4px rgba(20,217,196,0.09); }
 textarea { min-height: 180px; line-height: 1.55; }
 .upload-box { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+#planBtn { margin: 4px 0 0; }
+.plan-preview {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+}
+.plan-reasoning { margin: 0 0 12px; color: var(--muted); font-size: 0.86rem; font-style: italic; }
+.plan-sections { display: grid; gap: 8px; margin-bottom: 14px; }
+.plan-section-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.14);
+  font-size: 0.9rem;
+}
+.plan-section-icon { font-size: 1rem; }
+.plan-section-title { flex: 1; font-weight: 600; }
+.plan-section-meta { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
 .control-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
 .wide-label { margin-top: 14px; }
 .form-actions { display: flex; align-items: center; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
@@ -191,7 +214,18 @@ textarea { min-height: 180px; line-height: 1.55; }
 .message { max-width: 86%; padding: 12px 14px; border-radius: 18px; line-height: 1.45; }
 .message.bot { background: rgba(255,255,255,0.09); color: var(--text); align-self: flex-start; }
 .message.user { background: rgba(124,92,255,0.42); align-self: flex-end; }
+.message.thinking { opacity: 0.6; font-style: italic; }
 .chat-input-row { display: flex; gap: 10px; margin: 12px 0; }
+.chat-ready-banner {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(20,217,196,0.14);
+  border: 1px solid rgba(20,217,196,0.5);
+  color: var(--brand-2);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
 
 .study-panel { position: sticky; top: 86px; }
 .flashcard {
@@ -261,6 +295,41 @@ textarea { min-height: 180px; line-height: 1.55; }
 .choices { display: grid; gap: 7px; margin-top: 10px; }
 .choice { border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; color: var(--muted); background: rgba(0,0,0,0.14); font-size: 0.92rem; line-height: 1.4; }
 .study-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
+
+.sat-stage-bar { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 14px; }
+.sat-stage-bar span { font-size: 0.82rem; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
+
+.sat-results {
+  margin-top: 20px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(150deg, rgba(124,92,255,0.1), rgba(20,217,196,0.06));
+}
+.sat-results h3 { margin: 0 0 4px; font-size: 1.3rem; }
+.sat-results-caveat { margin: 0 0 18px; color: var(--muted); font-size: 0.82rem; }
+.sat-results-summary { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
+.sat-score-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid var(--brand-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20,217,196,0.08);
+  flex-shrink: 0;
+}
+.sat-score-circle span { font-size: 1.7rem; font-weight: 900; letter-spacing: -0.03em; }
+.sat-score-circle small { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.sat-domain-bars { display: grid; gap: 12px; }
+.sat-domain-row { display: grid; gap: 5px; }
+.sat-domain-label { display: flex; justify-content: space-between; font-size: 0.86rem; }
+.sat-domain-label span:last-child { color: var(--muted); font-weight: 700; }
+@media (max-width: 600px) {
+  .sat-results-summary { grid-template-columns: 1fr; justify-items: center; }
+}
 .card-list { display: grid; gap: 8px; max-height: 280px; overflow: auto; padding-right: 4px; }
 .card-row { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.05); padding: 10px 12px; color: var(--muted); cursor: pointer; text-align: left; }
 .card-row.active { color: var(--text); border-color: rgba(20,217,196,0.65); background: rgba(20,217,196,0.09); }

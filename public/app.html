@@ -57,6 +57,12 @@
               <button class="btn soft" id="extractBtn">Extract text</button>
             </div>
             <textarea id="uploadContent" placeholder="Extracted text will appear here. You can edit it before generating." readonly></textarea>
+            <button class="btn soft" id="planBtn" style="display:none">🧭 Analyze document &amp; plan sections</button>
+            <div class="plan-preview" id="planPreview" style="display:none">
+              <p class="plan-reasoning" id="planReasoning"></p>
+              <div class="plan-sections" id="planSections"></div>
+              <button class="btn primary" id="buildPlanBtn">Build full set from this plan</button>
+            </div>
           </div>
 
           <div class="tab-panel" id="tab-chat">
@@ -65,6 +71,7 @@
               <input id="chatInput" placeholder="Answer the coach prompt..." />
               <button class="btn primary" id="chatSend">Send</button>
             </div>
+            <div class="chat-ready-banner" id="chatReadyBanner" style="display:none"></div>
             <button class="btn ghost" id="resetChat">Restart guided chat</button>
           </div>
 
@@ -82,12 +89,12 @@
             </label>
             <label>Category
               <select id="category">
-                <option>General learning</option>
+                <option>Interview preparation</option>
                 <option>SAT prep</option>
                 <option>GMAT prep</option>
                 <option>Grade-level study</option>
                 <option>Professional certification</option>
-                <option>Interview preparation</option>
+                <option>General learning</option>
               </select>
             </label>
             <label>Grade / level
@@ -169,13 +176,31 @@
             </div>
           </div>
 
+          <div class="sat-stage-bar" id="satStageBar" style="display:none">
+            <span id="satStageLabel"></span>
+            <div class="slide-progress-track"><div class="slide-progress-fill" id="satStageProgress"></div></div>
+          </div>
+
           <div class="study-actions" id="studyActions">
             <button class="btn soft" id="prevCard">← Previous</button>
             <button class="btn primary" id="flipCard">Flip</button>
             <button class="btn soft" id="nextCard">Next →</button>
             <button class="btn ghost" id="shuffleCards">Shuffle</button>
           </div>
+          <button class="btn primary large" id="satSubmitStage" style="display:none">Submit stage & continue →</button>
           <div class="card-list" id="cardList"></div>
+
+          <div class="sat-results" id="satResults" style="display:none">
+            <h3>Practice complete</h3>
+            <p class="sat-results-caveat">This is an informal practice accuracy score, not an official or scaled SAT score.</p>
+            <div class="sat-results-summary">
+              <div class="sat-score-circle" id="satScoreCircle">
+                <span id="satScorePct">0%</span>
+                <small>accuracy</small>
+              </div>
+              <div class="sat-domain-bars" id="satDomainBars"></div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
