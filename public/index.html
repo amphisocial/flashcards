@@ -124,6 +124,11 @@
       </div>
       <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
       <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
+      <ul class="pw-hints" id="pwHints" style="display:none">
+        <li data-rule="len">At least 8 characters</li>
+        <li data-rule="num">At least one number</li>
+      </ul>
+      <div class="modal-error" id="authError" role="alert"></div>
       <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
       <a class="google-link" href="/auth/google">Continue with Google</a>
       <p class="switch-auth" id="switchAuth"></p>

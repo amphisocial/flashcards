@@ -218,6 +218,72 @@ function stripHtml(text) {
   return String(text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+// ---- Optional stock photography for slide decks -----------------------
+// Set PEXELS_API_KEY (preferred, generous free tier) or UNSPLASH_ACCESS_KEY
+// in .env to have slides fetch a real, relevant photo per slide. If neither
+// is set, slides still render at full quality using a designed gradient +
+// icon treatment instead of a photo — no external calls are made.
+const imageCache = new Map();
+
+async function fetchStockImage(query) {
+  const key = String(query || '').trim().toLowerCase();
+  if (!key) return null;
+  if (imageCache.has(key)) return imageCache.get(key);
+
+  let result = null;
+  try {
+    if (process.env.PEXELS_API_KEY) {
+      const response = await fetch(`https://api.pexels.com/v1/search?query=${encodeURIComponent(key)}&per_page=1&orientation=landscape`, {
+        headers: { Authorization: process.env.PEXELS_API_KEY }
+      });
+      const data = await response.json();
+      const photo = data.photos?.[0];
+      if (photo) {
+        result = {
+          url: photo.src?.large2x || photo.src?.large || photo.src?.original,
+          credit: `Photo by ${photo.photographer} on Pexels`,
+          creditUrl: photo.url
+        };
+      }
+    } else if (process.env.UNSPLASH_ACCESS_KEY) {
+      const response = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(key)}&per_page=1&orientation=landscape`, {
+        headers: { Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}` }
+      });
+      const data = await response.json();
+      const photo = data.results?.[0];
+      if (photo) {
+        result = {
+          url: photo.urls?.regular,
+          credit: `Photo by ${photo.user?.name || 'Unsplash'} on Unsplash`,
+          creditUrl: photo.links?.html
+        };
+      }
+    }
+  } catch (error) {
+    console.warn('Stock image fetch failed:', error.message);
+  }
+  imageCache.set(key, result);
+  return result;
+}
+
+async function attachSlideImages(cards) {
+  if (!process.env.PEXELS_API_KEY && !process.env.UNSPLASH_ACCESS_KEY) return;
+  const candidates = cards.filter((card) => card.type === 'slide' && card.imageQuery && card.layout !== 'quote');
+  const batchSize = 4;
+  for (let i = 0; i < candidates.length; i += batchSize) {
+    const batch = candidates.slice(i, i + batchSize);
+    // eslint-disable-next-line no-await-in-loop
+    await Promise.all(batch.map(async (card) => {
+      const image = await fetchStockImage(card.imageQuery);
+      if (image) {
+        card.imageUrl = image.url;
+        card.imageCredit = image.credit;
+        card.imageCreditUrl = image.creditUrl;
+      }
+    }));
+  }
+}
+
 function safeJsonFromText(text) {
   const raw = String(text || '').trim();
   try {
@@ -236,6 +302,8 @@ function safeJsonFromText(text) {
   }
 }
 
+const SLIDE_LAYOUTS = new Set(['title', 'agenda', 'content', 'stat', 'quote', 'section', 'closing']);
+
 function cleanCard(card, index, format) {
   const front = String(card.front || card.term || card.question || card.title || `Card ${index + 1}`).trim();
   const back = String(card.back || card.answer || card.definition || card.body || '').trim();
@@ -252,7 +320,8 @@ function cleanCard(card, index, format) {
   const answerIndex = type === 'quiz'
     ? choices.findIndex((choice) => normalized(choice) === normalized(back))
     : -1;
-  return {
+
+  const base = {
     id: id('card'),
     front: front.slice(0, 500),
     back: back.slice(0, type === 'slide' ? 2400 : 1200) || 'Review the source material and add your answer here.',
@@ -261,9 +330,34 @@ function cleanCard(card, index, format) {
     answerIndex,
     explanation: String(card.explanation || '').trim().slice(0, 1200)
   };
+
+  if (type !== 'slide') return base;
+
+  const layout = SLIDE_LAYOUTS.has(card.layout) ? card.layout : (index === 0 ? 'title' : 'content');
+  const stat = card.stat && (card.stat.value || card.stat.label)
+    ? { value: String(card.stat.value || '').trim().slice(0, 24), label: String(card.stat.label || '').trim().slice(0, 140) }
+    : null;
+  const quote = card.quote && (typeof card.quote === 'string' ? card.quote : card.quote.text)
+    ? {
+        text: String(typeof card.quote === 'string' ? card.quote : card.quote.text || '').trim().slice(0, 320),
+        attribution: String((card.quote && card.quote.attribution) || '').trim().slice(0, 120)
+      }
+    : null;
+
+  return {
+    ...base,
+    layout,
+    kicker: String(card.kicker || '').trim().slice(0, 60),
+    stat,
+    quote,
+    imageQuery: String(card.imageQuery || '').trim().slice(0, 80),
+    imageUrl: null,
+    imageCredit: null,
+    imageCreditUrl: null
+  };
 }
 
-function normalizeGeneratedSet(payload, requestedCount, format) {
+async function normalizeGeneratedSet(payload, requestedCount, format) {
   const title = String(payload.title || payload.name || 'AI Study Set').trim().slice(0, 90) || 'AI Study Set';
   const rawCards = Array.isArray(payload.cards) ? payload.cards : [];
   const cards = rawCards
@@ -271,6 +365,7 @@ function normalizeGeneratedSet(payload, requestedCount, format) {
     .map((card, index) => cleanCard(card, index, format))
     .filter((card) => card.front && card.back);
   if (!cards.length) throw new Error('No usable cards were generated.');
+  if (format === 'slides') await attachSlideImages(cards);
   return { title, cards };
 }
 
@@ -288,21 +383,47 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
 
   if (format === 'slides') {
     const perSlide = 3;
+    const topic = [subject, category].filter(Boolean).join(' ') || 'business strategy';
+    const numberSentence = sentences.find((sentence) => /\b\d[\d,.]*%?/.test(sentence));
+    const numberMatch = numberSentence ? numberSentence.match(/\b\d[\d,.]*%?/) : null;
+
     for (let index = 0; index < cardCount; index += 1) {
+      const isFirst = index === 0;
+      const isLast = index === cardCount - 1 && cardCount > 1;
+      const isStat = !isFirst && !isLast && numberMatch && index === 1;
+      let layout = 'content';
+      if (isFirst) layout = 'title';
+      else if (isLast) layout = 'closing';
+      else if (isStat) layout = 'stat';
+
       const bullets = [];
-      for (let b = 0; b < perSlide; b += 1) {
-        const sentence = sentences[(index * perSlide + b) % Math.max(1, sentences.length)];
-        if (sentence) bullets.push(sentence.length > 160 ? `${sentence.slice(0, 157)}...` : sentence);
+      if (layout === 'content') {
+        for (let b = 0; b < perSlide; b += 1) {
+          const sentence = sentences[(index * perSlide + b) % Math.max(1, sentences.length)];
+          if (sentence) bullets.push(sentence.length > 160 ? `${sentence.slice(0, 157)}...` : sentence);
+        }
       }
-      cards.push({
+
+      const card = {
         id: id('card'),
-        front: `Key points ${index + 1}`,
-        back: bullets.join('\n') || 'Add source material to generate stronger slides.',
+        front: isFirst ? title : isLast ? 'Key takeaways' : isStat ? 'By the numbers' : `Key points ${index + 1}`,
+        back: layout === 'content'
+          ? (bullets.join('\n') || 'Add source material to generate stronger slides.')
+          : layout === 'title' ? (category || subject || 'A concise, professional overview.') : '',
         type: 'slide',
+        layout,
+        kicker: isFirst ? (category || 'Overview') : isLast ? 'Summary' : '',
         choices: [],
         answerIndex: -1,
+        stat: isStat && numberMatch ? { value: numberMatch[0], label: numberSentence.slice(0, 140) } : null,
+        quote: null,
+        imageQuery: layout === 'content' || layout === 'title' ? topic : '',
+        imageUrl: null,
+        imageCredit: null,
+        imageCreditUrl: null,
         explanation: 'Generated locally because no AI provider key was configured or the provider call failed.'
-      });
+      };
+      cards.push(card);
     }
     return { title, cards };
   }
@@ -337,18 +458,38 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
 
 function buildGenerationPrompt({ content, cardCount, format, category, grade, subject, notes }) {
   if (format === 'slides') {
-    return `You are an expert educator building a short presentation. Create exactly ${cardCount} presentation slides from the provided material.
+    return `You are a senior presentation designer at a top-tier strategy consulting firm (Deloitte/McKinsey caliber). Build a polished, boardroom-ready presentation of exactly ${cardCount} slides from the provided material.
 
 Study goal/category: ${category || 'General learning'}
 Grade/level: ${grade || 'Not specified'}
 Subject/topic: ${subject || 'Not specified'}
-Extra instructions: ${notes || 'Make it clear, useful, and well structured.'}
+Extra instructions: ${notes || 'Make it clear, credible, and visually compelling.'}
+
+Design a deck with genuine narrative structure, not a flat list of slides. Vary the layout of each slide using this exact set of layout values:
+- "title": the opening slide. Used only once, as slide 1.
+- "agenda": a short outline of what the deck covers. Optional, at most once, only for decks of 6+ slides.
+- "content": a standard slide with a clear headline and 3-5 sharp, non-redundant bullet points.
+- "stat": a slide built around one standout number pulled or reasonably inferred from the material (e.g. "42%", "3.2x", "$18M"). Use sparingly and only when the material supports it.
+- "quote": a slide spotlighting one powerful, paraphrased insight framed as a pull-quote in your own words (never a verbatim quote from a copyrighted source). Use sparingly.
+- "section": a short divider slide that introduces a new part of the deck. Use only in longer decks (10+ slides).
+- "closing": the final slide. Used only once, as the last slide — key takeaways and/or a clear next step.
 
 Rules:
-- Return JSON only.
-- Use this exact shape: {"title":"...", "cards":[{"type":"slide", "front":"Slide title", "back":"First bullet point\\nSecond bullet point\\nThird bullet point", "explanation":"Optional short speaker notes"}]}
-- Each slide's back field contains 3-5 concise bullet points separated by newline characters. One idea per bullet. No bullet symbols.
-- Order the slides as a logical presentation: opening/overview slide, key ideas, then a summary or takeaways slide.
+- Return JSON only, no markdown fences, no commentary.
+- Use this exact shape:
+  {"title":"Deck title",
+   "cards":[
+     {"type":"slide","layout":"title","front":"Deck headline","kicker":"Eyebrow label e.g. Q3 Strategy Review","back":"One-line subtitle/positioning statement","imageQuery":"2-4 word generic visual search phrase","explanation":"Optional speaker notes"},
+     {"type":"slide","layout":"content","front":"Slide headline","kicker":"Section label, optional","back":"Bullet one\\nBullet two\\nBullet three","imageQuery":"2-4 word generic visual search phrase","explanation":"Optional speaker notes"},
+     {"type":"slide","layout":"stat","front":"Slide headline","stat":{"value":"42%","label":"One sentence of context for the number"},"explanation":"Optional speaker notes"},
+     {"type":"slide","layout":"quote","front":"Slide headline","quote":{"text":"A punchy, paraphrased insight in your own words","attribution":"Source of the idea, e.g. Industry research, or leave blank"},"explanation":"Optional speaker notes"},
+     {"type":"slide","layout":"closing","front":"Closing headline","back":"Takeaway one\\nTakeaway two\\nTakeaway three","kicker":"Summary","explanation":"Optional speaker notes"}
+   ]}
+- Bullets: one idea per line, no bullet symbols, no filler, 6-14 words each.
+- imageQuery: only for "title" and "content" layouts. Keep it generic and professional (e.g. "team meeting whiteboard", "data center servers", "city skyline finance") — never a brand, logo, or named real person.
+- kicker is a short eyebrow label (2-5 words), optional except recommended on title/section/closing slides.
+- Do not repeat the same layout more than twice in a row.
+- Avoid hallucinating facts not supported by the material — if data for a "stat" slide isn't clearly supported, omit that layout entirely.
 - Avoid hallucinating facts not supported by the material.
 
 Material:
@@ -458,10 +599,12 @@ async function generateWithProvider(options) {
     if (provider === 'gemini') text = await callGemini(prompt);
     else if (provider === 'openai') text = await callOpenAI(prompt);
     else text = await callClaude(prompt);
-    return normalizeGeneratedSet(safeJsonFromText(text), options.cardCount, options.format);
+    return await normalizeGeneratedSet(safeJsonFromText(text), options.cardCount, options.format);
   } catch (error) {
     console.warn(`${provider} generation failed; using local fallback:`, error.message);
-    return fallbackGenerateCards(options);
+    const fallback = fallbackGenerateCards(options);
+    if (options.format === 'slides') await attachSlideImages(fallback.cards);
+    return fallback;
   }
 }
 
@@ -591,6 +734,7 @@ app.post('/api/auth/register', (req, res) => {
   const lastName = String(req.body.lastName || '').trim();
   if (!email || !email.includes('@')) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  if (!/\d/.test(password)) return res.status(400).json({ error: 'Password must include at least one number.' });
 
   const store = readStore();
   if (store.users.some((user) => user.email === email)) return res.status(409).json({ error: 'An account already exists for this email.' });

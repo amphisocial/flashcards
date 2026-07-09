@@ -17,6 +17,18 @@ window.AppCommon = (() => {
 
   let toastTimer = null;
   function setStatus(message, type = '') {
+    // Native <dialog> elements render in the browser's top layer, above the
+    // entire rest of the page — including a page-level toast, even one with
+    // a high z-index. While a dialog is open, show messages inside it.
+    const openDialog = document.querySelector('dialog[open]');
+    const dialogError = openDialog?.querySelector('.modal-error');
+    if (dialogError) {
+      dialogError.textContent = message || '';
+      dialogError.classList.toggle('visible', Boolean(message));
+      dialogError.classList.toggle('error', type === 'error');
+      dialogError.classList.toggle('success', type === 'success');
+      return;
+    }
     const inline = $('#statusText');
     if (inline) {
       inline.textContent = message || '';
@@ -28,6 +40,25 @@ window.AppCommon = (() => {
       toast.className = `toast show ${type}`.trim();
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => toast.classList.remove('show'), 4200);
+    }
+  }
+
+  function clearDialogError(dialog) {
+    const box = dialog?.querySelector('.modal-error');
+    if (box) { box.textContent = ''; box.classList.remove('visible', 'error', 'success'); }
+  }
+
+  function setButtonLoading(button, loading, loadingText) {
+    if (!button) return;
+    if (loading) {
+      button.dataset.originalText ||= button.textContent;
+      button.textContent = loadingText || 'Please wait…';
+      button.disabled = true;
+      button.classList.add('is-loading');
+    } else {
+      button.textContent = loadingText || button.dataset.originalText || button.textContent;
+      button.disabled = false;
+      button.classList.remove('is-loading');
     }
   }
 
@@ -92,28 +123,73 @@ window.AppCommon = (() => {
     $('#authNames').style.display = isSignup ? 'grid' : 'none';
     $('#authPassword').autocomplete = isSignup ? 'new-password' : 'current-password';
     $('#authSubmit').textContent = isSignup ? 'Create free account' : 'Log in';
+    $('#pwHints').style.display = isSignup ? 'flex' : 'none';
     $('#switchAuth').innerHTML = isSignup
       ? 'Already have an account? <button type="button" id="switchAuthBtn">Log in</button>'
       : 'New here? <button type="button" id="switchAuthBtn">Create an account</button>';
     $('#switchAuthBtn').addEventListener('click', () => openAuth(isSignup ? 'login' : 'signup'));
+    clearDialogError(dialog);
+    $('#authEmail').value = '';
+    $('#authPassword').value = '';
+    updatePasswordHints();
     dialog.showModal();
+    $('#authEmail').focus();
+  }
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function passwordChecks(password) {
+    return {
+      len: password.length >= 8,
+      num: /\d/.test(password)
+    };
+  }
+
+  function updatePasswordHints() {
+    const hints = $('#pwHints');
+    if (!hints || hints.style.display === 'none') return;
+    const checks = passwordChecks($('#authPassword')?.value || '');
+    hints.querySelectorAll('li').forEach((li) => {
+      const ok = checks[li.dataset.rule];
+      li.classList.toggle('met', Boolean(ok));
+    });
   }
 
   async function submitAuth(event) {
     event.preventDefault();
+    const dialog = $('#authDialog');
+    clearDialogError(dialog);
+
+    const email = $('#authEmail').value.trim();
+    const password = $('#authPassword').value;
+    const isSignup = state.authMode === 'signup';
+
+    if (!email || !EMAIL_RE.test(email)) {
+      return setStatus('Enter a valid email address.', 'error');
+    }
+    if (isSignup) {
+      const checks = passwordChecks(password);
+      if (!checks.len) return setStatus('Password must be at least 8 characters.', 'error');
+      if (!checks.num) return setStatus('Password must include at least one number.', 'error');
+    } else if (!password) {
+      return setStatus('Enter your password.', 'error');
+    }
+
     const payload = {
-      email: $('#authEmail').value,
-      password: $('#authPassword').value,
+      email,
+      password,
       firstName: $('#firstName')?.value || '',
       lastName: $('#lastName')?.value || ''
     };
+    const button = $('#authSubmit');
+    setButtonLoading(button, true, isSignup ? 'Creating account…' : 'Logging in…');
     try {
-      const data = await api(state.authMode === 'signup' ? '/api/auth/register' : '/api/auth/login', {
+      const data = await api(isSignup ? '/api/auth/register' : '/api/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
       state.user = data.user;
-      $('#authDialog').close();
+      dialog.close();
       if (document.body.dataset.page === 'landing') {
         window.location.href = '/app';
         return;
@@ -121,6 +197,8 @@ window.AppCommon = (() => {
       updateAuthUI();
     } catch (error) {
       setStatus(error.message, 'error');
+    } finally {
+      setButtonLoading(button, false, isSignup ? 'Create free account' : 'Log in');
     }
   }
 
@@ -166,6 +244,7 @@ window.AppCommon = (() => {
 
   function bindCommon() {
     $('#authSubmit')?.addEventListener('click', submitAuth);
+    $('#authPassword')?.addEventListener('input', updatePasswordHints);
     $$('.checkout').forEach((button) => button.addEventListener('click', () => checkout(button.dataset.plan)));
   }
 
@@ -181,5 +260,5 @@ window.AppCommon = (() => {
     }
   }
 
-  return { state, $, $$, escapeHtml, setStatus, api, openAuth, refreshMe, requireSignedIn, checkout, updateAuthUI, updateUsagePill, initCommon };
+  return { state, $, $$, escapeHtml, setStatus, api, openAuth, refreshMe, requireSignedIn, checkout, updateAuthUI, updateUsagePill, initCommon, setButtonLoading, clearDialogError };
 })();

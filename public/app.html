@@ -137,10 +137,27 @@
           </div>
 
           <div class="slide-view" id="slideView" style="display:none">
-            <span class="mini-label" id="slideKicker">Slide 1</span>
-            <h3 id="slideTitle"></h3>
-            <ul id="slideBullets"></ul>
-            <small id="slideNotes"></small>
+            <div class="slide-stage" id="slideStage">
+              <div class="slide-media" id="slideMedia"><span class="media-icon" id="mediaIcon"></span></div>
+              <div class="slide-content">
+                <span class="slide-kicker" id="slideKicker"></span>
+                <h2 id="slideTitle"></h2>
+                <ul class="slide-bullets" id="slideBullets"></ul>
+                <div class="slide-stat" id="slideStat" style="display:none">
+                  <span class="stat-value" id="statValue"></span>
+                  <span class="stat-label" id="statLabel"></span>
+                </div>
+                <blockquote class="slide-quote" id="slideQuote" style="display:none">
+                  <p id="quoteText"></p>
+                  <cite id="quoteAttribution"></cite>
+                </blockquote>
+              </div>
+            </div>
+            <div class="slide-progress-track"><div class="slide-progress-fill" id="slideProgressFill"></div></div>
+            <div class="slide-footer">
+              <small id="slideNotes"></small>
+              <small class="slide-credit" id="slideCredit"></small>
+            </div>
           </div>
 
           <div class="study-actions" id="studyActions">

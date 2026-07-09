@@ -135,19 +135,75 @@
     renderCardList(set);
   }
 
+  const SLIDE_ICONS = {
+    title: '✦', agenda: '🗂', content: '💡', stat: '📊', quote: '❝', section: '▤', closing: '🎯'
+  };
+
   function renderSlide(card) {
     $('#flashcard').style.display = 'none';
     $('#slideView').style.display = 'flex';
     $('#flipCard').style.display = 'none';
     $('#shuffleCards').style.display = 'none';
-    $('#slideKicker').textContent = `Slide ${study.index + 1} of ${study.set.cards.length}`;
+
+    const layout = card.layout || 'content';
+    const stage = $('#slideStage');
+    stage.className = `slide-stage layout-${layout} accent-${study.index % 5}`;
+
+    const kicker = $('#slideKicker');
+    kicker.textContent = card.kicker || '';
+    kicker.style.display = card.kicker ? '' : 'none';
+
     $('#slideTitle').textContent = card.front;
+
     const bullets = String(card.back || '')
       .split(/\n+/)
       .map((line) => line.replace(/^[-•*]\s*/, '').trim())
       .filter(Boolean);
-    $('#slideBullets').innerHTML = bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join('');
+    const bulletsEl = $('#slideBullets');
+    const showBullets = bullets.length && layout !== 'stat' && layout !== 'quote';
+    bulletsEl.style.display = showBullets ? '' : 'none';
+    bulletsEl.innerHTML = showBullets ? bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join('') : '';
+
+    const statBox = $('#slideStat');
+    if (layout === 'stat' && card.stat?.value) {
+      statBox.style.display = '';
+      $('#statValue').textContent = card.stat.value;
+      $('#statLabel').textContent = card.stat.label || '';
+    } else {
+      statBox.style.display = 'none';
+    }
+
+    const quoteBox = $('#slideQuote');
+    if (layout === 'quote' && card.quote?.text) {
+      quoteBox.style.display = '';
+      $('#quoteText').textContent = card.quote.text;
+      $('#quoteAttribution').textContent = card.quote.attribution || '';
+    } else {
+      quoteBox.style.display = 'none';
+    }
+
+    const media = $('#slideMedia');
+    const usesMedia = layout !== 'quote';
+    if (usesMedia && card.imageUrl) {
+      media.style.display = '';
+      media.style.backgroundImage = `url("${card.imageUrl}")`;
+      $('#mediaIcon').style.display = 'none';
+    } else if (usesMedia) {
+      media.style.display = '';
+      media.style.backgroundImage = '';
+      $('#mediaIcon').style.display = '';
+      $('#mediaIcon').textContent = SLIDE_ICONS[layout] || '💡';
+    } else {
+      media.style.display = 'none';
+    }
+
     $('#slideNotes').textContent = card.explanation || '';
+    const credit = $('#slideCredit');
+    credit.textContent = card.imageCredit || '';
+    credit.style.display = card.imageCredit ? '' : 'none';
+
+    const total = study.set.cards.length;
+    $('#slideProgressFill').style.width = `${((study.index + 1) / total) * 100}%`;
   }
 
   function renderCard(card) {

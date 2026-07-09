@@ -6,3 +6,7 @@
 2026-07-09T15:25:40: Warning: TT: undefined function: 21
 2026-07-09T15:25:40: Warning: TT: invalid function id: 136
 2026-07-09T15:25:40: Warning: TT: invalid function id: 136
+2026-07-09T17:07:29: ◇ injected env (15) from .env // tip: ⌘ suppress logs { quiet: true }
+2026-07-09T17:07:29: Athena Flashcards running on 3004
+2026-07-09T17:15:52: Warning: TT: undefined function: 21
+2026-07-09T17:15:52: Warning: TT: undefined function: 21

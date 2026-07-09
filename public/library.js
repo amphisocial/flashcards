@@ -1,6 +1,6 @@
 /* Your Library page: lists sets you created and sets shared with you. */
 (() => {
-  const { state, $, escapeHtml, setStatus, api, initCommon } = window.AppCommon;
+  const { state, $, escapeHtml, setStatus, api, initCommon, setButtonLoading, clearDialogError } = window.AppCommon;
 
   let shareSetId = null;
 
@@ -69,21 +69,27 @@
     $('#shareEmails').value = '';
     $('#shareTeamGate').style.display = isTeam ? 'none' : 'block';
     $('#shareFormArea').style.display = isTeam ? 'block' : 'none';
+    clearDialogError($('#shareDialog'));
     $('#shareDialog').showModal();
   }
 
   async function shareSet(event) {
     event.preventDefault();
     if (!shareSetId) return;
+    clearDialogError($('#shareDialog'));
     if (!state.user || state.user.plan !== 'team') {
       $('#shareTeamGate').style.display = 'block';
       $('#shareFormArea').style.display = 'none';
       return;
     }
+    const emails = $('#shareEmails').value.trim();
+    if (!emails) return setStatus('Enter at least one email address.', 'error');
+    const button = $('#shareSubmit');
+    setButtonLoading(button, true, 'Sharing…');
     try {
       await api(`/api/sets/${shareSetId}/share`, {
         method: 'POST',
-        body: JSON.stringify({ emails: $('#shareEmails').value })
+        body: JSON.stringify({ emails })
       });
       $('#shareDialog').close();
       await loadLibrary();
@@ -94,6 +100,8 @@
         $('#shareFormArea').style.display = 'none';
       }
       setStatus(error.message, 'error');
+    } finally {
+      setButtonLoading(button, false, 'Share');
     }
   }
 
