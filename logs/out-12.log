@@ -18,3 +18,7 @@
 2026-07-09T17:38:55: Athena Flashcards running on 3004
 2026-07-09T17:40:48: ◇ injected env (19) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
 2026-07-09T17:40:48: Athena Flashcards running on 3004
+2026-07-09T17:51:28: ◇ injected env (19) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+2026-07-09T17:51:28: Athena Flashcards running on 3004
+2026-07-09T17:55:24: ◇ injected env (19) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+2026-07-09T17:55:24: Athena Flashcards running on 3004

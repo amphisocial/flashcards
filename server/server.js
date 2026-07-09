@@ -836,7 +836,7 @@ app.get('/auth/google/callback', async (req, res) => {
     createSession(res, user.id);
     res.redirect('/app?signedIn=google');
   } catch (error) {
-    res.status(400).send(`Google sign-in failed: ${error.message}`);
+    res.redirect(`/?googleError=${encodeURIComponent(error.message)}`);
   }
 });
 

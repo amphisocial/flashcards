@@ -450,7 +450,14 @@
     resetChat();
     renderEmptyStudy();
     await initCommon();
-    const setId = new URLSearchParams(window.location.search).get('set');
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signedIn') === 'google') {
+      setStatus('Signed in with Google.', 'success');
+      params.delete('signedIn');
+      const rest = params.toString();
+      window.history.replaceState({}, '', rest ? `${window.location.pathname}?${rest}` : window.location.pathname);
+    }
+    const setId = params.get('set');
     if (setId) await openSet(setId);
   }
 
