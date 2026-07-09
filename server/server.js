@@ -1,7 +1,8 @@
 /*
  * Athena Flashcards
- * Simple Express app for AI-generated flashcards / quizlet-style study sets.
- * Stores users, sessions, usage, quizlets and share invites in data/store.json.
+ * Simple Express app for AI-generated flashcards, quizzes, and slide study sets.
+ * Stores users, sessions, usage, study sets and share invites in data/store.json.
+ * (The store.json key "quizlets" is retained for backward compatibility with existing data.)
  */
 
 const express = require('express');
@@ -231,16 +232,28 @@ function safeJsonFromText(text) {
 }
 
 function cleanCard(card, index, format) {
-  const front = String(card.front || card.term || card.question || `Card ${index + 1}`).trim();
-  const back = String(card.back || card.answer || card.definition || '').trim();
+  const front = String(card.front || card.term || card.question || card.title || `Card ${index + 1}`).trim();
+  const back = String(card.back || card.answer || card.definition || card.body || '').trim();
   const choices = Array.isArray(card.choices) ? card.choices.map((choice) => String(choice).trim()).filter(Boolean).slice(0, 5) : [];
-  const type = choices.length >= 2 || format === 'quiz' ? 'quiz' : 'flashcard';
+  let type;
+  if (card.type === 'slide' || format === 'slides') {
+    type = 'slide';
+  } else if (choices.length >= 2 || format === 'quiz') {
+    type = 'quiz';
+  } else {
+    type = 'flashcard';
+  }
+  const normalized = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const answerIndex = type === 'quiz'
+    ? choices.findIndex((choice) => normalized(choice) === normalized(back))
+    : -1;
   return {
     id: id('card'),
     front: front.slice(0, 500),
-    back: back.slice(0, 1200) || 'Review the source material and add your answer here.',
+    back: back.slice(0, type === 'slide' ? 2400 : 1200) || 'Review the source material and add your answer here.',
     type,
-    choices,
+    choices: type === 'slide' ? [] : choices,
+    answerIndex,
     explanation: String(card.explanation || '').trim().slice(0, 1200)
   };
 }
@@ -268,6 +281,27 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
   const title = titleParts.length ? `${titleParts.join(' • ')} Study Set` : 'AI Study Set';
   const cards = [];
 
+  if (format === 'slides') {
+    const perSlide = 3;
+    for (let index = 0; index < cardCount; index += 1) {
+      const bullets = [];
+      for (let b = 0; b < perSlide; b += 1) {
+        const sentence = sentences[(index * perSlide + b) % Math.max(1, sentences.length)];
+        if (sentence) bullets.push(sentence.length > 160 ? `${sentence.slice(0, 157)}...` : sentence);
+      }
+      cards.push({
+        id: id('card'),
+        front: `Key points ${index + 1}`,
+        back: bullets.join('\n') || 'Add source material to generate stronger slides.',
+        type: 'slide',
+        choices: [],
+        answerIndex: -1,
+        explanation: 'Generated locally because no AI provider key was configured or the provider call failed.'
+      });
+    }
+    return { title, cards };
+  }
+
   for (let index = 0; index < cardCount; index += 1) {
     const sentence = sentences[index % Math.max(1, sentences.length)] || clean || 'Add source material to generate stronger flashcards.';
     const short = sentence.length > 140 ? `${sentence.slice(0, 137)}...` : sentence;
@@ -289,6 +323,7 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
       back,
       type: format === 'quiz' ? 'quiz' : 'flashcard',
       choices: quizChoices,
+      answerIndex: format === 'quiz' ? 0 : -1,
       explanation: 'Generated locally because no AI provider key was configured or the provider call failed.'
     });
   }
@@ -296,6 +331,24 @@ function fallbackGenerateCards({ content, cardCount, format, subject, category, 
 }
 
 function buildGenerationPrompt({ content, cardCount, format, category, grade, subject, notes }) {
+  if (format === 'slides') {
+    return `You are an expert educator building a short presentation. Create exactly ${cardCount} presentation slides from the provided material.
+
+Study goal/category: ${category || 'General learning'}
+Grade/level: ${grade || 'Not specified'}
+Subject/topic: ${subject || 'Not specified'}
+Extra instructions: ${notes || 'Make it clear, useful, and well structured.'}
+
+Rules:
+- Return JSON only.
+- Use this exact shape: {"title":"...", "cards":[{"type":"slide", "front":"Slide title", "back":"First bullet point\\nSecond bullet point\\nThird bullet point", "explanation":"Optional short speaker notes"}]}
+- Each slide's back field contains 3-5 concise bullet points separated by newline characters. One idea per bullet. No bullet symbols.
+- Order the slides as a logical presentation: opening/overview slide, key ideas, then a summary or takeaways slide.
+- Avoid hallucinating facts not supported by the material.
+
+Material:
+${compactText(content, 15000)}`;
+  }
   return `You are an expert study coach. Create exactly ${cardCount} high-quality study cards from the provided material.
 
 Study goal/category: ${category || 'General learning'}
@@ -357,11 +410,49 @@ async function callGemini(prompt) {
   return payload.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n') || '';
 }
 
+async function callClaude(prompt) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured.');
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+      max_tokens: 8000,
+      system: 'Return strict JSON only. Do not include markdown fences or commentary.',
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message || 'Anthropic request failed.');
+  return (payload.content || []).map((part) => part.text || '').join('\n');
+}
+
+// The AI provider is controlled by the server operator via .env, never by the
+// browser. Set AI_PROVIDER=claude | openai | gemini (aliases: anthropic, google).
+// If AI_PROVIDER is unset, the first provider with an API key configured wins.
+function resolveProvider() {
+  const raw = String(process.env.AI_PROVIDER || '').trim().toLowerCase();
+  const aliases = { anthropic: 'claude', claude: 'claude', openai: 'openai', gpt: 'openai', google: 'gemini', gemini: 'gemini' };
+  if (aliases[raw]) return aliases[raw];
+  if (raw) console.warn(`[ai] Unknown AI_PROVIDER "${raw}" — falling back to auto-detection.`);
+  if (process.env.ANTHROPIC_API_KEY) return 'claude';
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.GEMINI_API_KEY) return 'gemini';
+  return 'claude';
+}
+
 async function generateWithProvider(options) {
   const prompt = buildGenerationPrompt(options);
-  const provider = options.provider === 'gemini' ? 'gemini' : 'openai';
+  const provider = resolveProvider();
   try {
-    const text = provider === 'gemini' ? await callGemini(prompt) : await callOpenAI(prompt);
+    let text;
+    if (provider === 'gemini') text = await callGemini(prompt);
+    else if (provider === 'openai') text = await callOpenAI(prompt);
+    else text = await callClaude(prompt);
     return normalizeGeneratedSet(safeJsonFromText(text), options.cardCount, options.format);
   } catch (error) {
     console.warn(`${provider} generation failed; using local fallback:`, error.message);
@@ -580,7 +671,7 @@ app.get('/auth/google/callback', async (req, res) => {
     if (!profileResponse.ok || !profile.email) throw new Error('Could not read Google profile.');
     const user = upsertGoogleUser(profile);
     createSession(res, user.id);
-    res.redirect('/?signedIn=google');
+    res.redirect('/app?signedIn=google');
   } catch (error) {
     res.status(400).send(`Google sign-in failed: ${error.message}`);
   }
@@ -602,7 +693,7 @@ app.post('/api/generate', requireUser, async (req, res) => {
   }
 
   const cardCount = Math.max(1, Math.min(60, Number(req.body.cardCount || 10)));
-  const format = ['flashcard', 'quiz', 'mixed'].includes(req.body.format) ? req.body.format : 'mixed';
+  const format = ['flashcard', 'quiz', 'mixed', 'slides'].includes(req.body.format) ? req.body.format : 'mixed';
   const content = compactText(req.body.content || '', 50000);
   if (content.length < 20) return res.status(400).json({ error: 'Add more source content before generating cards.' });
 
@@ -611,7 +702,6 @@ app.post('/api/generate', requireUser, async (req, res) => {
       content,
       cardCount,
       format,
-      provider: req.body.provider,
       category: req.body.category,
       grade: req.body.grade,
       subject: req.body.subject,
@@ -619,7 +709,7 @@ app.post('/api/generate', requireUser, async (req, res) => {
     });
 
     const store = readStore();
-    const quizlet = {
+    const studySet = {
       id: id('set'),
       ownerId: req.user.id,
       ownerEmail: req.user.email,
@@ -634,59 +724,66 @@ app.post('/api/generate', requireUser, async (req, res) => {
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
-    store.quizlets.push(quizlet);
+    store.quizlets.push(studySet); // store key kept as "quizlets" for backward compatibility with existing data
     writeStore(store);
-    res.json({ quizlet, usage: canCreateSet(req.user) });
+    res.json({ set: studySet, quizlet: studySet, usage: canCreateSet(req.user) });
   } catch (error) {
     console.error('Generation error:', error);
-    res.status(500).json({ error: error.message || 'Could not generate flashcards.' });
+    res.status(500).json({ error: error.message || 'Could not generate the study set.' });
   }
 });
 
-app.get('/api/quizlets', requireUser, (req, res) => {
+// Study set routes. Canonical paths are /api/sets; /api/quizlets is kept as a
+// compatibility alias for older cached clients.
+const listSets = (req, res) => {
   const store = readStore();
   const my = store.quizlets
-    .filter((quizlet) => quizlet.ownerId === req.user.id)
+    .filter((set) => set.ownerId === req.user.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const shared = store.quizlets
-    .filter((quizlet) => quizlet.ownerId !== req.user.id && userCanReadQuizlet(req.user, quizlet))
+    .filter((set) => set.ownerId !== req.user.id && userCanReadQuizlet(req.user, set))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   res.json({ my, shared });
-});
+};
 
-app.get('/api/quizlets/:id', requireUser, (req, res) => {
+const getSet = (req, res) => {
   const store = readStore();
-  const quizlet = store.quizlets.find((candidate) => candidate.id === req.params.id);
-  if (!userCanReadQuizlet(req.user, quizlet)) return res.status(404).json({ error: 'Study set not found.' });
-  res.json({ quizlet });
-});
+  const set = store.quizlets.find((candidate) => candidate.id === req.params.id);
+  if (!userCanReadQuizlet(req.user, set)) return res.status(404).json({ error: 'Study set not found.' });
+  res.json({ set, quizlet: set });
+};
 
-app.delete('/api/quizlets/:id', requireUser, (req, res) => {
+const deleteSet = (req, res) => {
   const store = readStore();
-  const quizlet = store.quizlets.find((candidate) => candidate.id === req.params.id);
-  if (!quizlet || quizlet.ownerId !== req.user.id) return res.status(404).json({ error: 'Study set not found.' });
+  const set = store.quizlets.find((candidate) => candidate.id === req.params.id);
+  if (!set || set.ownerId !== req.user.id) return res.status(404).json({ error: 'Study set not found.' });
   store.quizlets = store.quizlets.filter((candidate) => candidate.id !== req.params.id);
   writeStore(store);
   res.json({ ok: true });
-});
+};
 
-app.post('/api/quizlets/:id/share', requireUser, (req, res) => {
+const shareSet = (req, res) => {
   const store = readStore();
-  const quizlet = store.quizlets.find((candidate) => candidate.id === req.params.id);
-  if (!quizlet || quizlet.ownerId !== req.user.id) return res.status(404).json({ error: 'Study set not found.' });
+  const set = store.quizlets.find((candidate) => candidate.id === req.params.id);
+  if (!set || set.ownerId !== req.user.id) return res.status(404).json({ error: 'Study set not found.' });
   const plan = req.user.plan || 'free';
   const seatLimit = PLAN_LIMITS[plan]?.shareSeats || 0;
-  if (seatLimit < 1) return res.status(403).json({ error: 'Sharing requires the Team plan.' });
+  if (seatLimit < 1) return res.status(403).json({ error: 'Sharing requires the Teams plan.' });
 
   const incoming = Array.isArray(req.body.emails) ? req.body.emails : String(req.body.emails || '').split(/[\s,;]+/);
   const emails = incoming.map(normalizeEmail).filter((email) => email && email.includes('@'));
-  const unique = Array.from(new Set([...(quizlet.invitedEmails || []).map(normalizeEmail), ...emails]));
+  const unique = Array.from(new Set([...(set.invitedEmails || []).map(normalizeEmail), ...emails]));
   if (unique.length > seatLimit) return res.status(400).json({ error: `Team sharing is limited to ${seatLimit} invited users.` });
-  quizlet.invitedEmails = unique;
-  quizlet.updatedAt = nowIso();
+  set.invitedEmails = unique;
+  set.updatedAt = nowIso();
   writeStore(store);
-  res.json({ quizlet });
-});
+  res.json({ set, quizlet: set });
+};
+
+app.get(['/api/sets', '/api/quizlets'], requireUser, listSets);
+app.get(['/api/sets/:id', '/api/quizlets/:id'], requireUser, getSet);
+app.delete(['/api/sets/:id', '/api/quizlets/:id'], requireUser, deleteSet);
+app.post(['/api/sets/:id/share', '/api/quizlets/:id/share'], requireUser, shareSet);
 
 app.post('/api/billing/checkout', requireUser, async (req, res) => {
   if (!stripe) return res.status(400).json({ error: 'Stripe is not configured yet.' });
@@ -702,13 +799,26 @@ app.post('/api/billing/checkout', requireUser, async (req, res) => {
     mode: 'subscription',
     customer_email: req.user.email,
     line_items: [{ price, quantity: 1 }],
-    success_url: `${APP_BASE_URL}/?billing=success`,
-    cancel_url: `${APP_BASE_URL}/?billing=cancelled`,
+    success_url: `${APP_BASE_URL}/app?billing=success`,
+    cancel_url: `${APP_BASE_URL}/app?billing=cancelled`,
     metadata: { userId: req.user.id, plan },
     subscription_data: { metadata: { userId: req.user.id, plan } },
     allow_promotion_codes: true
   });
   res.json({ url: session.url });
+});
+
+function requirePageUser(req, res, next) {
+  if (!getCurrentUser(req)) return res.redirect('/?login=1');
+  next();
+}
+
+app.get('/app', requirePageUser, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'app.html'));
+});
+
+app.get('/library', requirePageUser, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'library.html'));
 });
 
 app.get('*', (req, res) => {

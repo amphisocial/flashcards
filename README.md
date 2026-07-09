@@ -1,6 +1,6 @@
 # Athena Flashcards
 
-AI-driven flashcards and quizlet-style study sets for `flashcards.athenabot.ai`.
+AI-driven flashcards, quizzes, and slide study sets for `flashcards.athenabot.ai`.
 
 This app lets users:
 
@@ -9,7 +9,7 @@ This app lets users:
 - choose OpenAI or Gemini as the generation provider;
 - choose how many flashcards / quiz questions to create;
 - study with a polished flip-card panel, next/previous navigation, shuffle, and card list;
-- store generated Quizlet-style sets per user;
+- store generated study sets (flashcards, quizzes, slides) per user;
 - use 5 free study-set generations per day;
 - upgrade with Stripe subscriptions:
   - `$2/mo` Starter: 10 sets/day
@@ -26,7 +26,7 @@ Invited users can study anything shared with them for free after signing up. The
 athena-flashcards/
 ├── public/
 │   ├── index.html       # professional single-page product + app UI
-│   ├── styles.css       # Quizlet-like visual design
+│   ├── styles.css       # Visual design
 │   └── app.js           # browser interactions, auth, cards, library, Stripe checkout
 ├── server/
 │   └── server.js        # Express API, auth, upload extraction, AI generation, billing
@@ -191,4 +191,4 @@ If Google OAuth is not configured, email/password auth works normally.
 
 ## Notes before scaling
 
-This starter intentionally keeps storage simple with `data/store.json` to get the product live quickly. Before heavy traffic or paid production scale, move users, sessions, quizlets, sharing, and usage counters to Postgres or MongoDB.
+This starter intentionally keeps storage simple with `data/store.json` to get the product live quickly. Before heavy traffic or paid production scale, move users, sessions, study sets, sharing, and usage counters to Postgres or MongoDB.

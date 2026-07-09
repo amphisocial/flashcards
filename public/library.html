@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your Library | Athena Flashcards</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260709-multipage" />
+</head>
+<body data-page="library">
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Athena Flashcards home">
+        <span class="brand-mark">A</span>
+        <span><strong>Athena</strong> Flashcards</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/app">Create</a>
+        <a href="/library" class="active">Your Library</a>
+        <a href="/#pricing">Pricing</a>
+      </nav>
+      <div class="auth-area" id="authArea"></div>
+    </header>
+
+    <main class="app-page">
+      <section class="panel library-panel">
+        <div class="panel-header">
+          <div>
+            <span class="section-kicker">Library</span>
+            <h2>Your Library</h2>
+          </div>
+          <button class="btn soft" id="refreshLibrary">Refresh</button>
+        </div>
+        <div class="library-columns">
+          <div>
+            <h3>Created by you</h3>
+            <div class="set-list" id="mySets"></div>
+          </div>
+          <div>
+            <h3>Shared with you</h3>
+            <div class="set-list" id="sharedSets"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="shareDialog" class="modal">
+    <form method="dialog" class="modal-card">
+      <button class="modal-close" value="cancel" aria-label="Close">×</button>
+      <h2>Share study set</h2>
+
+      <div id="shareTeamGate" class="upgrade-gate" style="display:none">
+        <p><strong>Sharing is available on the Teams plan.</strong></p>
+        <p>Upgrade to Teams for $9.99/mo to share study sets with up to 30 invited users.</p>
+        <button type="button" class="btn primary large checkout" data-plan="team">Upgrade to Teams</button>
+      </div>
+
+      <div id="shareFormArea">
+        <p>Teams users can invite up to 30 people by email. Invited users can study shared sets for free.</p>
+        <label>Email addresses
+          <textarea id="shareEmails" placeholder="student1@example.com, student2@example.com"></textarea>
+        </label>
+        <button type="button" class="btn primary large" id="shareSubmit" value="default">Share</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/common.js?v=20260709-multipage"></script>
+  <script src="/library.js?v=20260709-multipage"></script>
+</body>
+</html>

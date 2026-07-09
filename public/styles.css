@@ -313,3 +313,107 @@ textarea { min-height: 180px; line-height: 1.55; }
 .upgrade-gate p {
   margin: 0 0 10px;
 }
+
+/* ---------- Multi-page, maximize, quiz, slides (2026-07 upgrade) ---------- */
+
+.nav-links a.active { color: var(--text); }
+.header-tools { display: flex; align-items: center; gap: 10px; }
+.max-btn { font-size: 1.05rem; line-height: 1; padding: 9px 12px; }
+.app-page { padding: 26px 0 60px; }
+
+/* Maximized panel takes over the viewport */
+.panel.maximized {
+  position: fixed;
+  inset: 14px;
+  z-index: 80;
+  overflow: auto;
+  background: linear-gradient(160deg, #0c1730, #0a1426);
+  box-shadow: 0 30px 120px rgba(0,0,0,0.6);
+}
+body.no-scroll { overflow: hidden; }
+.study-panel.maximized { position: fixed; }
+.study-panel.maximized .flashcard { height: min(58vh, 560px); }
+.study-panel.maximized .card-list { max-height: none; }
+.study-panel.maximized .card-face p { font-size: clamp(1.4rem, 2.4vw, 2.2rem); }
+
+/* Quiz choices */
+.choice.selectable {
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.choice.selectable:hover { border-color: rgba(124,92,255,0.7); }
+.choice.selected { border-color: var(--brand); background: rgba(124,92,255,0.18); }
+.choice.correct { border-color: rgba(20,217,196,0.85); background: rgba(20,217,196,0.14); color: var(--text); }
+.choice.incorrect { border-color: rgba(255,107,122,0.85); background: rgba(255,107,122,0.13); }
+
+.verdict { min-height: 0; }
+.verdict-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 900;
+  font-size: 0.92rem;
+  margin-bottom: 6px;
+}
+.verdict-pill.correct { background: rgba(20,217,196,0.16); color: var(--brand-2); border: 1px solid rgba(20,217,196,0.55); }
+.verdict-pill.incorrect { background: rgba(255,107,122,0.14); color: var(--danger); border: 1px solid rgba(255,107,122,0.55); }
+.verdict-pill.neutral { background: rgba(255,255,255,0.08); color: var(--muted); border: 1px solid var(--line); }
+
+/* Slide view */
+.slide-view {
+  min-height: 330px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  padding: 30px 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  background:
+    radial-gradient(circle at top right, rgba(124,92,255,0.16), transparent 18rem),
+    linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
+}
+.slide-view h3 { margin: 4px 0 8px; font-size: clamp(1.5rem, 3vw, 2.3rem); letter-spacing: -0.04em; line-height: 1.1; }
+.slide-view ul { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+.slide-view li { font-size: clamp(1rem, 1.8vw, 1.25rem); line-height: 1.5; }
+.slide-view small { color: var(--muted); margin-top: 12px; line-height: 1.5; }
+.study-panel.maximized .slide-view { min-height: 62vh; padding: 44px 54px; }
+.study-panel.maximized .slide-view li { font-size: clamp(1.15rem, 2vw, 1.6rem); }
+
+/* Landing features */
+.features { margin-top: 10px; }
+.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.feature-card h3 { margin: 10px 0 8px; font-size: 1.4rem; letter-spacing: -0.03em; }
+.feature-card p { color: var(--muted); line-height: 1.6; margin: 0; }
+.pricing-grid.three { grid-template-columns: repeat(3, 1fr); }
+
+/* Toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translate(-50%, 20px);
+  z-index: 120;
+  background: #101d36;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 13px 18px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  max-width: min(560px, calc(100vw - 30px));
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.error { border-color: rgba(255,107,122,0.6); color: var(--danger); }
+.toast.success { border-color: rgba(20,217,196,0.6); color: var(--brand-2); }
+
+@media (max-width: 980px) {
+  .feature-grid, .pricing-grid.three { grid-template-columns: 1fr; }
+  .panel.maximized { inset: 8px; }
+}

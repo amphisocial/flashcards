@@ -2,7 +2,7 @@
   "name": "athena-flashcards",
   "version": "0.1.0",
   "private": true,
-  "description": "AI-driven flashcards and quizlet-style study sets for AthenaBot.",
+  "description": "AI-driven flashcards, quizzes, and slide study sets for AthenaBot.",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
