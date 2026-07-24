@@ -1706,7 +1706,11 @@ attachBoardRoutes(app, {
   canViewTeachersContent,
   userHasWhiteboardAccess,
   notifyTeamOfShare,
-  APP_BASE_URL
+  APP_BASE_URL,
+  askVisionAI: ({ instructions, imageDataUrl }) => askVisionAI({ instructions, imageDataUrl }),
+  generateWithProvider,
+  saveGeneratedSet,
+  canCreateSet
 });
 
 // Board picker: teachers see their saved boards + New/Go Live controls;

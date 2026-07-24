@@ -8,44 +8,52 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260724-student" />
-  <link rel="stylesheet" href="/board.css?v=20260724-student" />
+  <link rel="stylesheet" href="/styles.css?v=20260724-v2" />
+  <link rel="stylesheet" href="/board.css?v=20260724-v2" />
 </head>
 <body data-page="board">
   <div class="board-shell" id="boardShell">
     <header class="board-topbar">
       <a class="brand" href="/boards" aria-label="Back to your boards">
         <span class="brand-mark">A</span>
-        <span><strong>Athena</strong> Whiteboard</span>
+        <span><strong>Athena</strong></span>
       </a>
-
       <div class="board-title" id="boardTitle">Loading…</div>
       <span class="board-badge" id="boardBadge" style="display:none"></span>
 
       <div class="board-topbar-actions" id="ownerActions" style="display:none">
-        <button class="btn ghost small" id="saveBtn">Save</button>
+        <button class="btn ghost small" id="undoBtn" title="Undo (Ctrl+Z)">↶</button>
+        <button class="btn ghost small" id="redoBtn" title="Redo (Ctrl+Shift+Z)">↷</button>
+        <button class="btn ghost small" id="studySetBtn" title="Turn this board into flashcards">→ Study set</button>
+        <button class="btn ghost small" id="exportBtn" title="Export as PDF">PDF</button>
         <button class="btn ghost small" id="shareToggleBtn">Share</button>
         <button class="btn primary small" id="liveToggleBtn">Go live</button>
         <button class="btn ghost small" id="viewersBtn">Viewers (<span id="viewerCount">0</span>)</button>
+        <span class="lost-pill" id="lostPill" style="display:none">🤔 <span id="lostCount">0</span> lost</span>
       </div>
 
       <div class="board-topbar-actions">
         <span class="board-status" id="boardStatus">Connecting…</span>
-        <button class="btn ghost" id="fullscreenBtn" title="Full screen">⤢ Full screen</button>
-        <a class="btn ghost" href="/boards">Exit</a>
+        <button class="btn ghost small" id="panelToggle" title="Toggle info panel">☰ Info</button>
+        <button class="btn ghost small" id="fullscreenBtn" title="Full screen">⤢</button>
+        <a class="btn ghost small" href="/boards">Exit</a>
       </div>
     </header>
 
     <div class="board-body">
       <aside class="board-toolbar" id="boardToolbar">
-        <div class="tool-group" role="group" aria-label="Drawing tools">
+        <div class="tool-group" role="group" aria-label="Tools">
           <button class="tool-btn active" data-tool="pen" title="Pen">✏️</button>
           <button class="tool-btn" data-tool="shape" title="Draw &amp; snap shape">◻︎</button>
-          <button class="tool-btn" data-tool="select" title="Select an equation to plot">⬚</button>
+          <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
           <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
+          <button class="tool-btn" data-tool="pan" title="Pan (or hold Space)">✋</button>
+          <button class="tool-btn" data-tool="laser" title="Laser pointer (live only)">🔴</button>
+          <button class="tool-btn" data-tool="note" title="Sticky note">🗒️</button>
+          <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
         </div>
 
-        <div class="tool-group colors" id="colorSwatches" role="group" aria-label="Color">
+        <div class="tool-group colors" role="group" aria-label="Color">
           <button class="swatch active" data-color="#eef6ff" style="--sw:#eef6ff"></button>
           <button class="swatch" data-color="#7c5cff" style="--sw:#7c5cff"></button>
           <button class="swatch" data-color="#14d9c4" style="--sw:#14d9c4"></button>
@@ -54,53 +62,97 @@
         </div>
 
         <div class="tool-group">
-          <label class="size-label">Size
-            <input type="range" id="sizeRange" min="1" max="18" value="3" />
-          </label>
+          <label class="size-label">Size<input type="range" id="sizeRange" min="1" max="18" value="3" /></label>
         </div>
 
-        <div class="tool-group">
-          <button class="btn ghost small" id="clearBoardBtn">Clear board</button>
+        <div class="tool-group stacked">
+          <label class="size-label">Page template
+            <select id="templateSelect">
+              <option value="blank">Blank</option>
+              <option value="grid">Graph paper</option>
+              <option value="lined">Lined</option>
+              <option value="coordinate">Coordinate grid</option>
+            </select>
+          </label>
+          <button class="btn ghost small" id="bgImportBtn">Import image</button>
+          <input type="file" id="bgFile" accept="image/*" style="display:none" />
+          <button class="btn ghost small" id="bgClearBtn">Remove image</button>
+        </div>
+
+        <div class="tool-group stacked">
+          <button class="btn ghost small" id="zoomResetBtn">Reset zoom</button>
+          <button class="btn ghost small" id="clearBoardBtn">Clear page</button>
         </div>
 
         <div class="tool-group ai-group">
           <span class="section-kicker">Smart AI</span>
-          <button class="btn primary small" id="explainBtn">Explain what's on the board</button>
-          <p class="tool-hint">Or pick the <strong>select</strong> tool, draw a box around an equation, and hit Plot.</p>
+          <button class="btn primary small" id="analyzeBtn">Analyze board</button>
+          <p class="tool-hint">Select a region and plot, or type a function to graph it on the board.</p>
           <button class="btn soft small" id="plotSelectionBtn" style="display:none">Plot selection</button>
           <form id="plotForm" class="plot-form">
-            <input type="text" id="plotInput" placeholder="Plot a function, e.g. y = 4x + 3" />
+            <input type="text" id="plotInput" placeholder="y = 4x + 3" />
             <button type="submit" class="btn soft small">Plot</button>
           </form>
         </div>
       </aside>
 
-      <main class="board-canvas-wrap">
+      <main class="board-canvas-wrap" id="canvasWrap">
         <canvas id="boardCanvas"></canvas>
+        <div class="objects-layer" id="objectsLayer"></div>
+        <canvas id="laserCanvas" class="laser-canvas"></canvas>
+        <div class="reactions-layer" id="reactionsLayer"></div>
+
         <div class="board-readonly-banner" id="readonlyBanner" style="display:none">
-          You're viewing this teacher's whiteboard live. Only the teacher can draw.
+          Viewing live. Only the teacher can draw.
         </div>
-        <div class="ai-panel" id="aiPanel" style="display:none">
-          <div class="ai-panel-header">
-            <span>AI notes</span>
-            <button class="ai-panel-close" id="aiPanelClose" aria-label="Close">×</button>
-          </div>
-          <div class="ai-panel-body" id="aiPanelBody"></div>
+
+        <div class="student-bar" id="studentBar" style="display:none">
+          <button class="react-btn" data-emoji="👍">👍</button>
+          <button class="react-btn" data-emoji="😮">😮</button>
+          <button class="react-btn" data-emoji="🎉">🎉</button>
+          <button class="react-btn" data-emoji="🙏">🙏</button>
+          <button class="react-btn" data-emoji="❤️">❤️</button>
+          <button class="btn soft small" id="lostBtn">🤔 I'm lost</button>
         </div>
+
+        <div class="page-bar" id="pageBar">
+          <button class="btn ghost small" id="prevPageBtn">‹</button>
+          <span id="pageLabel">Page 1 / 1</span>
+          <button class="btn ghost small" id="nextPageBtn">›</button>
+          <button class="btn ghost small owner-only" id="addPageBtn" title="Add page">+</button>
+          <button class="btn ghost small owner-only" id="delPageBtn" title="Delete page">🗑</button>
+          <span class="zoom-label" id="zoomLabel">100%</span>
+        </div>
+
+        <div class="replay-bar" id="replayBar" style="display:none">
+          <button class="btn ghost small" id="replayPlayBtn">▶</button>
+          <input type="range" id="replayRange" min="0" max="100" value="100" />
+          <span id="replayLabel">0 / 0</span>
+          <button class="btn ghost small" id="replayCloseBtn">✕</button>
+        </div>
+        <button class="btn ghost small replay-open owner-only" id="replayOpenBtn" title="Replay how this was built">⏱ Replay</button>
+
         <div class="viewers-panel" id="viewersPanel" style="display:none">
-          <div class="ai-panel-header">
-            <span>Currently watching</span>
-            <button class="ai-panel-close" id="viewersPanelClose" aria-label="Close">×</button>
-          </div>
+          <div class="ai-panel-header"><span>Currently watching</span><button class="ai-panel-close" id="viewersPanelClose">×</button></div>
           <div class="ai-panel-body" id="viewersPanelBody"></div>
         </div>
       </main>
+
+      <aside class="info-panel" id="infoPanel">
+        <div class="info-panel-header">
+          <span id="infoTitle">Info</span>
+          <button class="ai-panel-close" id="infoClose" title="Collapse">›</button>
+        </div>
+        <div class="info-panel-body" id="infoBody">
+          <p class="info-empty">Draw or write something, then hit <strong>Analyze board</strong> and the explanation appears here.</p>
+        </div>
+      </aside>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
-
-  <script src="/common.js?v=20260724-student"></script>
-  <script src="/board.js?v=20260724-student"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/common.js?v=20260724-v2"></script>
+  <script src="/board.js?v=20260724-v2"></script>
 </body>
 </html>

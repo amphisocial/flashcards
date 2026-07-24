@@ -13,7 +13,7 @@
       $('#teacherBoardList').innerHTML = data.boards.map((b) => `
         <div class="set-item" data-id="${b.id}">
           <span class="set-title">${escapeHtml(b.title)} ${b.isLive ? '<span style="color:#14d9c4; font-size:0.75rem; font-weight:700;">● LIVE</span>' : ''}</span>
-          <span class="set-meta">${b.strokeCount} strokes • ${b.shared ? 'Shared with team' : 'Private'} • updated ${fmtTime(b.updatedAt)}</span>
+          <span class="set-meta">${b.pageCount || 1} page(s) • ${b.strokeCount} strokes • ${b.shared ? 'Shared with team' : 'Private'} • updated ${fmtTime(b.updatedAt)}</span>
           <div class="set-actions">
             <a class="btn primary" href="/board/${b.id}">Open</a>
             <button class="btn soft live-toggle" data-id="${b.id}" data-live="${b.isLive}">${b.isLive ? 'Stop live' : 'Go live'}</button>

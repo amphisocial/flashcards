@@ -301,3 +301,73 @@ them. The data was correct the whole time; the UI hid it.
    share never fails because SMTP is slow or down, and per-recipient
    failures are logged. Emails only go out on the off→on transition, so
    re-toggling doesn't spam the roster.
+
+---
+
+# Whiteboard v2
+
+## Data model change (migrates automatically)
+
+A board went from one flat surface to `pages[]`. Any existing board's
+`board.strokes` is moved into `pages[0].strokes` on first read — no manual
+migration, nothing lost. Each page carries `{ id, template, background,
+strokes[], objects[] }`.
+
+Strokes and objects are stored in **world coordinates**, with pan/zoom applied
+only at render time, so zooming never rewrites stored data and exports are
+independent of what's currently on screen.
+
+## Features
+
+1. **Board → study set.** `POST /api/board/:id/to-study-set` reads every page
+   with the vision model, then feeds the transcript into the same generator
+   the rest of the app uses. Pages are read sequentially on purpose —
+   20 parallel vision calls is a fast way to get rate-limited everywhere.
+   Counts against the normal daily set limit.
+2. **Multi-page boards** (up to 20). Add/delete/switch pages; the teacher
+   paging through pulls live viewers along via `page:goto`.
+3. **Undo/redo** (Ctrl+Z / Ctrl+Shift+Z, or toolbar). Expressed over the wire
+   as remove/re-add of a specific stroke id so every client converges on the
+   same page contents rather than diverging.
+4. **Import image as background**, capped at ~2MB (returns 413 above that, so
+   one imported photo can't bloat board-data.json). **Export to PDF** — one
+   landscape page per board page, rendered offscreen at fixed size.
+5. **Live classroom:** push an insight to students, anonymous "I'm lost"
+   signal (teacher sees only a count), and flying emoji reactions
+   (👍 😮 🎉 🙏 ❤️). Reactions and the lost flag are the only messages
+   viewers may send — everything else stays owner-only, enforced server-side.
+6. **Laser pointer** — broadcast during live sessions, never persisted.
+7. **Replay scrubber** — play back how a page was built, stroke by stroke.
+8. **Plot on the canvas**, not just in the panel. Type `y = 4x + 3`, or select
+   a handwritten equation and hit Plot; the graph is placed as an object next
+   to the selection. Expressions still go through the hand-rolled safe parser
+   (never `eval`/`Function`), since they're broadcast to other browsers.
+9. **Pan/zoom** (wheel, space-drag, or the pan tool), **sticky notes**,
+   **text boxes**, and **graph paper / lined / coordinate-grid** templates.
+10. **Manual Analyze button** — analysis only runs when asked, so there's no
+    per-stroke vision billing.
+11. **Collapsible right Info panel**, remembered per browser.
+
+## The Info panel
+
+One vision call classifies the page and returns typed JSON, so the panel can
+render the right *shape* of answer instead of prose. Handled kinds: algebra,
+arithmetic, calculus, systems of equations, word, geometry, chemistry,
+physics, diagram, sketch. The schema carries `steps[] (step + why)`, `method`,
+`answer`, `facts[]`, `formulas[]`, `plots[]`, and `warnings[]`; physics
+answers are asked to put dimensional inconsistencies into `warnings`.
+Anything the model omits simply isn't rendered.
+
+Model output is parsed defensively — fenced blocks and prose around the JSON
+are tolerated, and unparseable output returns a clean error rather than a
+crash.
+
+## Known limits
+
+- Sticky-note and text content is entered via a browser prompt; inline
+  editing on the canvas is a refinement worth doing next.
+- Backgrounds are stored inline as data URLs. Fine at current scale; if
+  boards get image-heavy, move these to file storage.
+- The Analyze result is only as good as the vision model. Worked steps are
+  **not** independently verified — check anything before presenting it to a
+  class.
