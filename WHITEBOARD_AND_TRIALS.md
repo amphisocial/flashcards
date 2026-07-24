@@ -371,3 +371,57 @@ crash.
 - The Analyze result is only as good as the vision model. Worked steps are
   **not** independently verified — check anything before presenting it to a
   class.
+
+---
+
+# v2.1 — touch, circles, and flowcharts
+
+## Circle recognition fixed (real bug)
+
+Squares worked, circles didn't. The classifier keyed off a "roundness"
+ratio, and I'd tightened its threshold to 0.05 while fixing an earlier
+square-detected-as-circle bug. That threshold was calibrated against
+synthetic strokes with **per-point jitter**, which averages out. Real
+hand-drawn circles wobble at **low frequency**, which pushes roundness to
+0.05–0.12 — just past the cutoff — so every realistic circle fell through
+to the rectangle branch. The test data was wrong, not the idea.
+
+Replaced with two scale- and rotation-invariant signals that don't care how
+steady the hand was:
+- **corner count** from a convex hull simplified across a sweep of
+  tolerances (a wobbly circle only collapses to few corners at coarse
+  epsilon; a square holds 4 across the range)
+- **circularity** `4πA/P²` (1.0 circle, ~0.79 square, ~0.6 triangle)
+
+Verified on simulated hand-drawn strokes across wobble 0.03–0.16.
+
+## Touch / iPad / iPhone
+
+- **Two fingers pinch-zoom and pan**, anchored on the pinch midpoint, and
+  cancel any stroke in flight so a second finger never leaves a stray mark.
+- **Apple Pencil**: once a stylus is used on a board, fingers pan and only
+  the pencil draws — the standard tablet convention, which also gives
+  palm rejection almost for free. Without a stylus, one finger draws.
+- iOS `gesturestart/change/end` and double-tap are suppressed so Safari
+  can't zoom the UI out from under the canvas.
+- `user-scalable=no`, `viewport-fit=cover`, safe-area insets, `100dvh`,
+  and `overscroll-behavior: none` to stop rubber-banding.
+- Bigger hit targets under `@media (pointer: coarse)`.
+- Phone layout: toolbar becomes a horizontal scrolling strip, and the Info
+  panel docks as a bottom sheet instead of eating canvas width.
+
+## Flowcharts
+
+New **Flowchart** page template (dot grid for alignment) with a shape
+palette in the left pane: Start/End, Process, Decision, Input/Output,
+Document, and Connector.
+
+- **✥ Move** tool drags shapes; connectors re-route automatically because
+  they store shape *ids*, not coordinates.
+- **⇢ Connect** tool: tap one shape, then another. Arrows clip to the box
+  edge rather than burying themselves in the shape.
+- **Y/N gates**: the first branch leaving a Decision auto-labels **Y**, the
+  second **N**, drawn as a coloured pill on the line. No prompt per branch.
+
+Connectors render beneath shapes so arrowheads aren't covered, and are
+included in PNG snapshots and PDF export.

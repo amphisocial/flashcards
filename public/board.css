@@ -131,3 +131,90 @@ body[data-page="board"] { overflow: hidden; }
   .board-body { flex-direction: column; }
   .info-panel { flex: 0 0 240px; border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* ---------- Flowchart palette ---------- */
+.flow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.flow-shape-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 4px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); font-size: 0.68rem; cursor: pointer;
+}
+.flow-shape-btn:active { background: rgba(124,92,255,0.28); }
+.fs { width: 30px; height: 20px; border: 2px solid var(--brand-2); background: rgba(124,92,255,0.18); display: block; }
+.fs.proc { border-radius: 4px; }
+.fs.term { border-radius: 10px; }
+.fs.dec { transform: rotate(45deg) scale(0.72); border-radius: 3px; }
+.fs.data { transform: skewX(-18deg); border-radius: 3px; }
+.fs.doc { border-radius: 4px 4px 10px 4px; }
+.fs.dot { border-radius: 999px; width: 20px; }
+
+/* ---------- Touch / iOS ---------- */
+html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+body[data-page="board"] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  position: fixed; inset: 0; width: 100%; height: 100%;
+}
+.board-shell { height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+#boardCanvas, .laser-canvas { touch-action: none; }
+.board-toolbar, .info-panel-body, .ai-panel-body { -webkit-overflow-scrolling: touch; }
+
+/* Coarse pointers (finger) need bigger targets than a mouse does. */
+@media (pointer: coarse) {
+  .tool-btn { width: 46px; height: 46px; font-size: 1.15rem; }
+  .swatch { width: 30px; height: 30px; }
+  .btn.small { padding: 10px 14px; font-size: 0.88rem; }
+  .react-btn { width: 46px; height: 46px; font-size: 1.25rem; }
+  #sizeRange { height: 30px; }
+  .flow-shape-btn { padding: 11px 4px; font-size: 0.72rem; }
+  .page-bar { padding: 9px 14px; gap: 11px; }
+}
+
+/* ---------- Tablet (iPad portrait / split view) ---------- */
+@media (max-width: 1024px) {
+  .info-panel { flex-basis: 290px; }
+  .board-toolbar { flex-basis: 168px; }
+}
+
+/* ---------- Phone ---------- */
+@media (max-width: 760px) {
+  .board-topbar { padding: 6px 10px; gap: 8px; }
+  .board-title { font-size: 0.9rem; flex-basis: 100%; order: -1; }
+  .board-topbar-actions { gap: 6px; }
+
+  .board-body { flex-direction: column; }
+
+  /* Toolbar becomes a horizontally scrolling strip under the header. */
+  .board-toolbar {
+    flex: 0 0 auto; flex-direction: row; align-items: center; gap: 12px;
+    overflow-x: auto; overflow-y: hidden; padding: 8px 10px;
+    border-right: 0; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  .tool-group { flex-wrap: nowrap; }
+  .tool-group.stacked, .tool-group.ai-group {
+    flex-direction: row; align-items: center; border-top: 0; border-left: 1px solid var(--line);
+    padding-top: 0; padding-left: 12px;
+  }
+  .size-label { width: 118px; }
+  .plot-form { width: 210px; }
+  .flow-grid { display: flex; gap: 6px; }
+  .flow-shape-btn { min-width: 62px; }
+  .tool-hint { display: none; }
+
+  /* Info panel docks to the bottom as a sheet. */
+  .info-panel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    flex: 0 0 auto; max-height: 55dvh; border-left: 0;
+    border-top: 1px solid var(--line); border-radius: 18px 18px 0 0;
+    box-shadow: 0 -14px 40px rgba(0,0,0,0.5);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .info-panel.collapsed { display: none; }
+
+  .page-bar { bottom: 10px; font-size: 0.78rem; }
+  .student-bar { bottom: 58px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 20px); }
+  .replay-open { bottom: 10px; right: 10px; }
+  .replay-bar { width: calc(100% - 20px); }
+  .viewers-panel { left: 10px; right: 10px; width: auto; bottom: 58px; }
+}

@@ -91,7 +91,17 @@
     const startX = Math.floor(b.x1 / step) * step;
     const startY = Math.floor(b.y1 / step) * step;
 
-    if (p.template === 'lined') {
+    if (p.template === 'flowchart') {
+      // Light dot grid: enough to align shapes to, quiet enough to not
+      // compete with the diagram itself.
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      const r = 1.2 / view.scale;
+      for (let x = startX; x < b.x2; x += step) {
+        for (let y = startY; y < b.y2; y += step) {
+          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    } else if (p.template === 'lined') {
       ctx.beginPath();
       for (let y = startY; y < b.y2; y += step) { ctx.moveTo(b.x1, y); ctx.lineTo(b.x2, y); }
       ctx.stroke();
@@ -197,6 +207,10 @@
       wrapText(ctx, obj.text, obj.x, obj.y + 20, obj.w || 360, 25);
     } else if (obj.type === 'graph') {
       drawGraphObject(obj);
+    } else if (obj.type === 'flow') {
+      drawFlowShapeOn(ctx, obj, connectFrom && connectFrom.id === obj.id);
+    } else if (obj.type === 'connector') {
+      drawConnectorOn(ctx, obj, objById);
     }
     ctx.restore();
   }
@@ -214,7 +228,10 @@
     drawTemplate(p);
     const strokes = typeof strokeLimit === 'number' ? p.strokes.slice(0, strokeLimit) : p.strokes;
     strokes.forEach(drawStroke);
-    if (typeof strokeLimit !== 'number') p.objects.forEach(drawObject);
+    if (typeof strokeLimit !== 'number') {
+      p.objects.filter((o) => o.type === 'connector').forEach(drawObject);
+      p.objects.filter((o) => o.type !== 'connector').forEach(drawObject);
+    }
 
     if (selectionRect) {
       ctx.save();
@@ -359,29 +376,47 @@
   }
 
   // ---- Shape recognition --------------------------------------------------
+  // Classify a closed freehand stroke by CORNER COUNT (primary) plus
+  // CIRCULARITY (confirmation). Both are scale- and rotation-invariant and,
+  // crucially, insensitive to how wobbly the hand was. An earlier version
+  // keyed off a "roundness" ratio tuned against per-point jitter; real
+  // hand-drawn circles wobble at low frequency, which pushed them past the
+  // threshold so every circle came out a rectangle.
   function recognizeShape(points) {
     if (points.length < 3) return null;
     const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
     const w = maxX - minX, h = maxY - minY;
     const a = points[0], b = points[points.length - 1];
     const gap = Math.hypot(b.x - a.x, b.y - a.y);
-    const closed = gap < Math.max(w, h) * 0.25 + 12;
     const diag = Math.hypot(w, h);
+    const closed = gap < Math.max(w, h) * 0.3 + 14;
+
     if (!closed) {
-      if (diag > 40 && pathLength(points) / (diag || 1) < 1.15) return { type: 'line', points: [a, b] };
+      if (diag > 40 && pathLength(points) / (diag || 1) < 1.18) return { type: 'line', points: [a, b] };
       return null;
     }
-    if (w < 20 || h < 20) return null;
-    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    const radii = points.map((p) => Math.hypot(p.x - cx, p.y - cy));
-    const avgR = radii.reduce((s, r) => s + r, 0) / radii.length;
-    const variance = radii.reduce((s, r) => s + Math.abs(r - avgR), 0) / radii.length;
-    if (variance / (avgR || 1) < 0.05 && Math.abs(w - h) / Math.max(w, h) < 0.35) return { type: 'circle', cx, cy, r: avgR };
+    if (w < 18 || h < 18) return null;
+
     const hull = convexHull(points);
     if (hull.length < 3) return { type: 'rectangle', x: minX, y: minY, w, h };
-    const simple = simplifyClosed(hull, diag * 0.06);
-    if (simple.length === 3) return { type: 'triangle', points: simple };
+
+    // 4*pi*Area / Perimeter^2 -> 1.0 for a circle, ~0.79 square, ~0.6 triangle.
+    const area = polyArea(hull), perim = polyPerim(hull);
+    const circularity = perim > 0 ? (4 * Math.PI * area) / (perim * perim) : 0;
+
+    // Sweep the simplification tolerance: a wobbly circle only collapses to
+    // few corners at coarse epsilon, while a square holds 4 across the range.
+    const corners = Math.min(...[0.04, 0.06, 0.09, 0.12].map((f) => simplifyClosed(hull, diag * f).length));
+
+    if (circularity > 0.82 && corners >= 4 && Math.abs(w - h) / Math.max(w, h) < 0.45) {
+      return { type: 'circle', cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, r: (w + h) / 4 };
+    }
+    if (corners <= 3) {
+      const tri = simplifyClosed(hull, diag * 0.06);
+      if (tri.length === 3) return { type: 'triangle', points: tri };
+    }
     return { type: 'rectangle', x: minX, y: minY, w, h };
   }
   function pathLength(pts) { let t = 0; for (let i = 1; i < pts.length; i += 1) t += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y); return t; }
@@ -407,30 +442,100 @@
     if (max > eps) return rdp(pts.slice(0, idx+1), eps).slice(0, -1).concat(rdp(pts.slice(idx), eps));
     return [pts[0], pts[pts.length-1]];
   }
-  function simplifyClosed(hull, eps) { const c = [...hull, hull[0]]; const s = rdp(c, eps); s.pop(); return s; }
+  function simplifyClosed(hull, eps) { const c = [...hull, hull[0]]; const r = rdp(c, eps); r.pop(); return r; }
+  function polyArea(p) { let a = 0; for (let i = 0; i < p.length; i += 1) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; } return Math.abs(a) / 2; }
+  function polyPerim(p) { let t = 0; for (let i = 0; i < p.length; i += 1) { const q = p[(i + 1) % p.length]; t += Math.hypot(q.x - p[i].x, q.y - p[i].y); } return t; }
 
-  // ---- Pointer input ------------------------------------------------------
+  // ---- Pointer input (mouse, touch, Apple Pencil) -------------------------
+  // Multi-touch rules, tuned for iPad/iPhone:
+  //   * Two fingers always pinch-zoom + pan, cancelling any stroke in flight.
+  //   * If a stylus has ever been used on this board, fingers pan and only
+  //     the pencil draws - the standard tablet convention, and it makes palm
+  //     rejection mostly free.
+  //   * Otherwise a single finger draws.
+  const activePointers = new Map();
+  let pencilSeen = false;
+  let pinch = null;
+
+  function isDrawingPointer(e) {
+    if (e.pointerType === 'pen') return true;
+    if (e.pointerType === 'touch') return !pencilSeen;
+    return true; // mouse / trackpad
+  }
+
+  function cancelStrokeInFlight() {
+    if (drawing && currentPoints.length) { currentPoints = []; drawing = false; redraw(); }
+    drawing = false;
+  }
+
   function bindPointer() {
     canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'pen') pencilSeen = true;
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
+      canvas.setPointerCapture(e.pointerId);
+
+      // Second finger down -> switch to pinch/pan and discard the partial stroke.
+      if (activePointers.size === 2) {
+        cancelStrokeInFlight();
+        const [p1, p2] = [...activePointers.values()];
+        pinch = {
+          dist: Math.hypot(p2.x - p1.x, p2.y - p1.y),
+          midX: (p1.x + p2.x) / 2, midY: (p1.y + p2.y) / 2,
+          scale: view.scale, vx: view.x, vy: view.y
+        };
+        return;
+      }
+      if (activePointers.size > 2) return;
+
       const w = pointerWorld(e);
-      if (tool.name === 'pan' || spaceHeld || e.button === 1) {
+
+      if (tool.name === 'pan' || spaceHeld || e.button === 1 || !isDrawingPointer(e)) {
         panning = true; panStart = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
-        canvas.setPointerCapture(e.pointerId); return;
+        return;
       }
       if (!isOwner) return;
-      if (tool.name === 'laser') { drawing = true; sendLaser(w, true); canvas.setPointerCapture(e.pointerId); return; }
+
+      if (tool.name === 'move') { beginMoveObject(w); return; }
+      if (tool.name === 'connect') { handleConnectTap(w); return; }
+      if (tool.name === 'laser') { drawing = true; sendLaser(w, true); return; }
       if (tool.name === 'note' || tool.name === 'text') { createTextObject(tool.name, w); return; }
-      if (tool.name === 'select') { selectionRect = { x1: w.x, y1: w.y, x2: w.x, y2: w.y }; drawing = true; canvas.setPointerCapture(e.pointerId); return; }
-      drawing = true; currentPoints = [w]; canvas.setPointerCapture(e.pointerId);
+      if (tool.name === 'select') { selectionRect = { x1: w.x, y1: w.y, x2: w.x, y2: w.y }; drawing = true; return; }
+      drawing = true; currentPoints = [w];
     });
 
     canvas.addEventListener('pointermove', (e) => {
+      if (activePointers.has(e.pointerId)) {
+        const p = activePointers.get(e.pointerId);
+        p.x = e.clientX; p.y = e.clientY;
+      }
+
+      if (pinch && activePointers.size >= 2) {
+        const [p1, p2] = [...activePointers.values()];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
+        const rect = canvas.getBoundingClientRect();
+        const factor = dist / (pinch.dist || 1);
+        const targetScale = Math.min(6, Math.max(0.15, pinch.scale * factor));
+
+        // Keep the point under the pinch midpoint anchored while scaling.
+        const anchorX = pinch.midX - rect.left, anchorY = pinch.midY - rect.top;
+        const worldAnchorX = (anchorX - pinch.vx) / pinch.scale;
+        const worldAnchorY = (anchorY - pinch.vy) / pinch.scale;
+        view.scale = targetScale;
+        view.x = (midX - rect.left) - worldAnchorX * targetScale;
+        view.y = (midY - rect.top) - worldAnchorY * targetScale;
+        updateZoomLabel(); redraw();
+        return;
+      }
+
       if (panning && panStart) {
         view.x = panStart.vx + (e.clientX - panStart.sx);
         view.y = panStart.vy + (e.clientY - panStart.sy);
-        redraw(); positionObjects(); return;
+        redraw(); return;
       }
+      if (movingObject) { updateMoveObject(pointerWorld(e)); return; }
       if (!drawing || !isOwner) return;
+
       const w = pointerWorld(e);
       if (tool.name === 'laser') { sendLaser(w, true); drawLaser(w); return; }
       if (tool.name === 'select') { selectionRect.x2 = w.x; selectionRect.y2 = w.y; redraw(); return; }
@@ -439,10 +544,16 @@
       drawStroke({ tool: tool.name, color: tool.color, size: tool.size, points: currentPoints });
     });
 
-    const finish = () => {
+    const release = (e) => {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) pinch = null;
+      if (activePointers.size > 0) return; // still mid-gesture
+
       if (panning) { panning = false; panStart = null; return; }
+      if (movingObject) { endMoveObject(); return; }
       if (!drawing) return;
       drawing = false;
+
       if (tool.name === 'laser') { sendLaser(null, false); clearLaser(); return; }
       if (tool.name === 'select') {
         const ok = selectionRect && Math.abs(selectionRect.x2 - selectionRect.x1) > 12 && Math.abs(selectionRect.y2 - selectionRect.y1) > 12;
@@ -466,21 +577,27 @@
       redraw();
       send({ type: shape ? 'stroke:shape' : 'stroke:add', pageId: pageId(), stroke });
     };
-    canvas.addEventListener('pointerup', finish);
-    canvas.addEventListener('pointercancel', finish);
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const r = canvas.getBoundingClientRect();
       const sx = e.clientX - r.left, sy = e.clientY - r.top;
       const before = screenToWorld(sx, sy);
-      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      view.scale = Math.min(5, Math.max(0.2, view.scale * factor));
+      view.scale = Math.min(6, Math.max(0.15, view.scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
       const after = screenToWorld(sx, sy);
       view.x += (after.x - before.x) * view.scale;
       view.y += (after.y - before.y) * view.scale;
-      updateZoomLabel(); redraw(); positionObjects();
+      updateZoomLabel(); redraw();
     }, { passive: false });
+
+    // iOS fires these for pinch on the page; suppressing them stops Safari
+    // zooming the whole UI out from under the canvas.
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach((evt) => {
+      document.addEventListener(evt, (e) => e.preventDefault());
+    });
+    document.addEventListener('dblclick', (e) => { if (e.target === canvas) e.preventDefault(); });
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !e.repeat) { spaceHeld = true; canvas.style.cursor = 'grab'; }
@@ -549,6 +666,183 @@
   // Objects render on the canvas so they survive zoom and export cleanly;
   // this hook stays for future DOM-based editing affordances.
   function positionObjects() {}
+
+
+  // ---- Flowchart shapes, moving, and connectors ---------------------------
+  // Flow shapes are objects of type 'flow' with a `kind`; connectors are
+  // objects of type 'connector' holding the ids of the shapes they join, so
+  // moving a shape re-routes its lines automatically rather than leaving
+  // orphaned geometry behind.
+  const FLOW_SHAPES = {
+    terminator: { label: 'Start / End', w: 170, h: 66 },
+    process:    { label: 'Process',     w: 180, h: 80 },
+    decision:   { label: 'Decision',    w: 180, h: 110 },
+    data:       { label: 'Input/Output',w: 180, h: 80 },
+    document:   { label: 'Document',    w: 180, h: 86 },
+    connectorDot: { label: 'Connector', w: 70,  h: 70 }
+  };
+
+  let movingObject = null;
+  let connectFrom = null;
+
+  function objectsAt(w) {
+    const list = page().objects.filter((o) => o.type !== 'connector');
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const o = list[i];
+      if (w.x >= o.x && w.x <= o.x + (o.w || 0) && w.y >= o.y && w.y <= o.y + (o.h || 0)) return o;
+    }
+    return null;
+  }
+
+  function addFlowShape(kind) {
+    const spec = FLOW_SHAPES[kind];
+    if (!spec) return;
+    const b = visibleWorldBounds();
+    const text = window.prompt(`${spec.label} text:`, spec.label) ;
+    if (text === null) return;
+    addObject({
+      id: `obj_${Math.random().toString(16).slice(2)}`,
+      type: 'flow', kind,
+      x: b.x1 + (b.x2 - b.x1) / 2 - spec.w / 2 + (Math.random() * 40 - 20),
+      y: b.y1 + (b.y2 - b.y1) / 2 - spec.h / 2 + (Math.random() * 40 - 20),
+      w: spec.w, h: spec.h, text: text || spec.label, color: tool.color
+    });
+  }
+
+  function beginMoveObject(w) {
+    const obj = objectsAt(w);
+    if (!obj) return;
+    movingObject = { obj, dx: w.x - obj.x, dy: w.y - obj.y };
+  }
+  function updateMoveObject(w) {
+    if (!movingObject) return;
+    movingObject.obj.x = w.x - movingObject.dx;
+    movingObject.obj.y = w.y - movingObject.dy;
+    redraw();
+  }
+  function endMoveObject() {
+    if (!movingObject) return;
+    send({ type: 'object:update', pageId: pageId(), object: movingObject.obj });
+    movingObject = null;
+  }
+
+  // Tap one shape then another to join them. A second connector leaving the
+  // same decision defaults to "N" (the first defaults to "Y"), which is the
+  // common case and saves a prompt on every branch.
+  function handleConnectTap(w) {
+    const obj = objectsAt(w);
+    if (!obj) { connectFrom = null; redraw(); return; }
+    if (!connectFrom) { connectFrom = obj; setStatus('Now tap the shape to connect to.', ''); redraw(); return; }
+    if (connectFrom.id === obj.id) { connectFrom = null; redraw(); return; }
+
+    let label = '';
+    if (connectFrom.type === 'flow' && connectFrom.kind === 'decision') {
+      const existing = page().objects.filter((o) => o.type === 'connector' && o.fromId === connectFrom.id).length;
+      label = existing === 0 ? 'Y' : 'N';
+    }
+    addObject({
+      id: `obj_${Math.random().toString(16).slice(2)}`,
+      type: 'connector', fromId: connectFrom.id, toId: obj.id,
+      label, color: '#9fb4d8'
+    });
+    connectFrom = null;
+    redraw();
+  }
+
+  function objById(id) { return page().objects.find((o) => o.id === id); }
+
+  // Clip the centre-to-centre line at each shape's bounding box so the arrow
+  // touches the edge rather than burying itself in the middle of the box.
+  function edgePoint(o, towards) {
+    const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+    const dx = towards.x - cx, dy = towards.y - cy;
+    if (!dx && !dy) return { x: cx, y: cy };
+    const hw = o.w / 2, hh = o.h / 2;
+    const scale = Math.min(Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : Infinity,
+                           Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : Infinity);
+    return { x: cx + dx * scale, y: cy + dy * scale };
+  }
+
+  function drawConnectorOn(c, conn, lookup) {
+    const from = lookup(conn.fromId), to = lookup(conn.toId);
+    if (!from || !to) return;
+    const fc = { x: from.x + from.w / 2, y: from.y + from.h / 2 };
+    const tc = { x: to.x + to.w / 2, y: to.y + to.h / 2 };
+    const a = edgePoint(from, tc), b = edgePoint(to, fc);
+
+    c.save();
+    c.strokeStyle = conn.color || '#9fb4d8';
+    c.fillStyle = conn.color || '#9fb4d8';
+    c.lineWidth = 2;
+    c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    const head = 12;
+    c.beginPath();
+    c.moveTo(b.x, b.y);
+    c.lineTo(b.x - head * Math.cos(ang - 0.4), b.y - head * Math.sin(ang - 0.4));
+    c.lineTo(b.x - head * Math.cos(ang + 0.4), b.y - head * Math.sin(ang + 0.4));
+    c.closePath(); c.fill();
+
+    if (conn.label) {
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      c.fillStyle = '#0a1526';
+      c.beginPath(); c.roundRect(mx - 14, my - 13, 28, 24, 7); c.fill();
+      c.strokeStyle = conn.label === 'Y' ? '#14d9c4' : '#ff9f6b';
+      c.lineWidth = 1.5; c.stroke();
+      c.fillStyle = conn.label === 'Y' ? '#14d9c4' : '#ff9f6b';
+      c.font = '800 13px Inter, sans-serif';
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(conn.label, mx, my - 1);
+      c.textAlign = 'start'; c.textBaseline = 'alphabetic';
+    }
+    c.restore();
+  }
+
+  function drawFlowShapeOn(c, o, highlight) {
+    const { x, y, w, h, kind } = o;
+    c.save();
+    c.lineWidth = 2;
+    c.strokeStyle = highlight ? '#14d9c4' : (o.color || '#eef6ff');
+    c.fillStyle = 'rgba(124,92,255,0.14)';
+    c.beginPath();
+    if (kind === 'decision') {
+      c.moveTo(x + w / 2, y); c.lineTo(x + w, y + h / 2);
+      c.lineTo(x + w / 2, y + h); c.lineTo(x, y + h / 2); c.closePath();
+    } else if (kind === 'terminator') {
+      c.roundRect(x, y, w, h, h / 2);
+    } else if (kind === 'data') {
+      const off = w * 0.16;
+      c.moveTo(x + off, y); c.lineTo(x + w, y);
+      c.lineTo(x + w - off, y + h); c.lineTo(x, y + h); c.closePath();
+    } else if (kind === 'document') {
+      c.moveTo(x, y); c.lineTo(x + w, y); c.lineTo(x + w, y + h - 14);
+      c.quadraticCurveTo(x + w * 0.75, y + h + 8, x + w / 2, y + h - 6);
+      c.quadraticCurveTo(x + w * 0.25, y + h - 20, x, y + h - 14);
+      c.closePath();
+    } else if (kind === 'connectorDot') {
+      c.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+    } else {
+      c.roundRect(x, y, w, h, 10);
+    }
+    c.fill(); c.stroke();
+
+    c.fillStyle = '#eef6ff';
+    c.font = '600 14px Inter, sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    const words = String(o.text || '').split(/\s+/);
+    const lines = []; let line = '';
+    words.forEach((word) => {
+      const test = line ? `${line} ${word}` : word;
+      if (c.measureText(test).width > w - 22 && line) { lines.push(line); line = word; }
+      else line = test;
+    });
+    if (line) lines.push(line);
+    const startY = y + h / 2 - ((lines.length - 1) * 17) / 2;
+    lines.slice(0, 4).forEach((ln, i) => c.fillText(ln, x + w / 2, startY + i * 17));
+    c.textAlign = 'start'; c.textBaseline = 'alphabetic';
+    c.restore();
+  }
 
   // ---- Laser --------------------------------------------------------------
   function drawLaser(w) {
@@ -699,8 +993,11 @@
     c.scale(scale, scale);
     c.translate(-minX, -minY);
 
+    allObjects = p.objects;
     p.strokes.forEach((s) => drawStrokeOn(c, s));
-    p.objects.forEach((o) => drawObjectOn(c, o));
+    // Connectors under shapes so arrowheads aren't hidden by fills.
+    p.objects.filter((o) => o.type === 'connector').forEach((o) => drawObjectOn(c, o));
+    p.objects.filter((o) => o.type !== 'connector').forEach((o) => drawObjectOn(c, o));
     void scale;
     return off.toDataURL('image/png');
   }
@@ -727,6 +1024,7 @@
     c.restore();
   }
 
+  let allObjects = [];
   function drawObjectOn(c, obj) {
     c.save();
     if (obj.type === 'note') {
@@ -742,6 +1040,10 @@
       c.beginPath(); c.roundRect(obj.x, obj.y, obj.w, obj.h, 10); c.fill();
       c.fillStyle = '#14d9c4'; c.font = '600 14px Inter, sans-serif';
       c.fillText(obj.expression || '', obj.x + 10, obj.y + 20);
+    } else if (obj.type === 'flow') {
+      drawFlowShapeOn(c, obj, false);
+    } else if (obj.type === 'connector') {
+      drawConnectorOn(c, obj, (id) => allObjects.find((o) => o.id === id));
     }
     c.restore();
   }
@@ -811,6 +1113,8 @@
   function updatePageBar() {
     $('#pageLabel').textContent = `Page ${pageIndex + 1} / ${board.pages.length}`;
     $('#templateSelect').value = page().template || 'blank';
+    const flowPal = $('#flowPalette');
+    if (flowPal) flowPal.style.display = page().template === 'flowchart' ? '' : 'none';
     $$('.owner-only').forEach((el) => { el.style.display = isOwner ? '' : 'none'; });
   }
   function gotoPage(i, broadcastMove = true) {
@@ -913,6 +1217,7 @@
     }));
     $('#sizeRange').addEventListener('input', (e) => { tool.size = Number(e.target.value); });
 
+    $$('.flow-shape-btn').forEach((b) => b.addEventListener('click', () => addFlowShape(b.dataset.kind)));
     $('#undoBtn').addEventListener('click', doUndo);
     $('#redoBtn').addEventListener('click', doRedo);
     $('#panelToggle').addEventListener('click', togglePanel);

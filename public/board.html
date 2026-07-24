@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Whiteboard | Athena Flashcards</title>
   <meta name="robots" content="noindex" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,6 +50,8 @@
           <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
           <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
           <button class="tool-btn" data-tool="pan" title="Pan (or hold Space)">✋</button>
+          <button class="tool-btn" data-tool="move" title="Move shapes">✥</button>
+          <button class="tool-btn" data-tool="connect" title="Connect two shapes">⇢</button>
           <button class="tool-btn" data-tool="laser" title="Laser pointer (live only)">🔴</button>
           <button class="tool-btn" data-tool="note" title="Sticky note">🗒️</button>
           <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
@@ -72,11 +76,25 @@
               <option value="grid">Graph paper</option>
               <option value="lined">Lined</option>
               <option value="coordinate">Coordinate grid</option>
+              <option value="flowchart">Flowchart</option>
             </select>
           </label>
           <button class="btn ghost small" id="bgImportBtn">Import image</button>
           <input type="file" id="bgFile" accept="image/*" style="display:none" />
           <button class="btn ghost small" id="bgClearBtn">Remove image</button>
+        </div>
+
+        <div class="tool-group stacked flow-palette" id="flowPalette" style="display:none">
+          <span class="section-kicker">Flowchart shapes</span>
+          <div class="flow-grid">
+            <button class="flow-shape-btn" data-kind="terminator" title="Start / End"><span class="fs term"></span>Start</button>
+            <button class="flow-shape-btn" data-kind="process" title="Process"><span class="fs proc"></span>Process</button>
+            <button class="flow-shape-btn" data-kind="decision" title="Decision (Y/N)"><span class="fs dec"></span>Decision</button>
+            <button class="flow-shape-btn" data-kind="data" title="Input / Output"><span class="fs data"></span>In/Out</button>
+            <button class="flow-shape-btn" data-kind="document" title="Document"><span class="fs doc"></span>Doc</button>
+            <button class="flow-shape-btn" data-kind="connectorDot" title="Connector"><span class="fs dot"></span>Link</button>
+          </div>
+          <p class="tool-hint">Add shapes, drag with <strong>✥</strong>, then tap <strong>⇢</strong> and touch two shapes to join them. Branches off a Decision auto-label <strong>Y</strong> then <strong>N</strong>.</p>
         </div>
 
         <div class="tool-group stacked">
