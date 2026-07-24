@@ -35,11 +35,26 @@ function ensureBoardStore() {
   }
 }
 
+// Boards created by the first whiteboard release predate the title/shared/
+// isLive fields. Backfill them on read so old boards don't render blank or
+// behave as though those flags were explicitly set to something.
+function normalizeBoard(board, index) {
+  if (typeof board.title !== 'string' || !board.title.trim()) {
+    board.title = `Whiteboard ${index + 1}`;
+  }
+  board.shared = Boolean(board.shared);
+  board.isLive = Boolean(board.isLive);
+  board.strokes ||= [];
+  board.aiNotes ||= [];
+  return board;
+}
+
 function readBoardStore() {
   ensureBoardStore();
   try {
     const parsed = JSON.parse(fs.readFileSync(BOARD_FILE, 'utf8'));
     parsed.boards ||= [];
+    parsed.boards.forEach(normalizeBoard);
     return parsed;
   } catch (error) {
     console.error('Failed to read board store:', error);
@@ -93,7 +108,12 @@ function isSafeExpression(text) {
 // REST routes
 // ---------------------------------------------------------------------
 function attachBoardRoutes(app, deps) {
-  const { requireUser, readStore, emailOnRoster, userHasWhiteboardAccess } = deps;
+  const { requireUser, readStore, emailOnRoster, canViewTeachersContent, userHasWhiteboardAccess } = deps;
+  // canViewTeachersContent = on the team roster OR invited under the older
+  // per-study-set model. Whiteboard access used to be granted purely by the
+  // latter, so checking only the roster silently cut off every student who
+  // already had access before the roster existed.
+  const viewerAllowed = canViewTeachersContent || ((store, teacherId, email) => emailOnRoster(store, teacherId, email));
 
   function requireWhiteboardPlan(req, res) {
     if (!userHasWhiteboardAccess(req.user)) {
@@ -181,6 +201,9 @@ function attachBoardRoutes(app, deps) {
     if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
     store.boards.forEach((b) => { if (b.teacherId === req.user.id) b.isLive = false; });
     board.isLive = true;
+    // Going live on a board nobody can see is never what's intended, so
+    // going live also shares it. Unshare/stop-live remain separate.
+    board.shared = true;
     board.updatedAt = nowIso();
     writeBoardStore(store);
     res.json({ board: boardSummary(board) });
@@ -205,10 +228,11 @@ function attachBoardRoutes(app, deps) {
     const isOwner = req.user.id === board.teacherId;
     const mainStore = readStore();
     const teacher = mainStore.users.find((u) => u.id === board.teacherId);
+    if (!teacher) return res.status(404).json({ error: 'Board owner no longer exists.' });
     const teacherInfo = { id: teacher.id, name: [teacher.firstName, teacher.lastName].filter(Boolean).join(' ') || teacher.email };
 
     if (!isOwner) {
-      const allowed = board.shared && board.isLive && emailOnRoster(mainStore, board.teacherId, req.user.email);
+      const allowed = board.shared && board.isLive && viewerAllowed(mainStore, board.teacherId, req.user.email);
       if (!allowed) return res.status(403).json({ error: 'This whiteboard is not currently live and shared with you.' });
     }
     res.json({ board, teacher: teacherInfo, isOwner });
@@ -219,7 +243,7 @@ function attachBoardRoutes(app, deps) {
     const mainStore = readStore();
     const boardStore = readBoardStore();
     const live = boardStore.boards
-      .filter((b) => b.isLive && b.shared && emailOnRoster(mainStore, b.teacherId, req.user.email))
+      .filter((b) => b.isLive && b.shared && viewerAllowed(mainStore, b.teacherId, req.user.email))
       .map((b) => {
         const teacher = mainStore.users.find((u) => u.id === b.teacherId);
         return {
@@ -255,7 +279,8 @@ function attachBoardRoutes(app, deps) {
 // Only the owning teacher may draw/clear/trigger AI actions. A non-owner
 // may only connect at all if the board is currently shared AND live.
 function attachBoardWebSocket(httpServer, deps) {
-  const { getUserFromCookieHeader, readStore, emailOnRoster, userHasWhiteboardAccess, askVisionAI } = deps;
+  const { getUserFromCookieHeader, readStore, emailOnRoster, canViewTeachersContent, userHasWhiteboardAccess, askVisionAI } = deps;
+  const viewerAllowed = canViewTeachersContent || ((store, teacherId, email) => emailOnRoster(store, teacherId, email));
 
   const wss = new WebSocketServer({ server: httpServer, path: '/ws/board' });
 
@@ -314,7 +339,7 @@ function attachBoardWebSocket(httpServer, deps) {
       if (isOwner && !userHasWhiteboardAccess(user)) return ws.close(4003, 'Teams plan required');
       if (!isOwner) {
         const mainStore = readStore();
-        const allowed = board.shared && board.isLive && emailOnRoster(mainStore, board.teacherId, user.email);
+        const allowed = board.shared && board.isLive && viewerAllowed(mainStore, board.teacherId, user.email);
         if (!allowed) return ws.close(4003, 'This whiteboard is not currently live and shared with you');
       }
 
@@ -425,4 +450,32 @@ function attachBoardWebSocket(httpServer, deps) {
   return wss;
 }
 
-module.exports = { attachBoardRoutes, attachBoardWebSocket };
+// Returns the id of the board a teacher should land on when they just click
+// "Whiteboard": their most recently updated one, creating a first board if
+// they have none. Before multi-board support, clicking Whiteboard always
+// dropped you straight onto a canvas; without this you land on an empty list
+// and have to create a board before you can draw anything.
+function getOrCreateCurrentBoardId(teacherId) {
+  const store = readBoardStore();
+  const mine = store.boards
+    .filter((b) => b.teacherId === teacherId)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  if (mine.length) return mine[0].id;
+
+  const board = {
+    id: boardId(),
+    teacherId,
+    title: 'My Whiteboard',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    shared: false,
+    isLive: false,
+    strokes: [],
+    aiNotes: []
+  };
+  store.boards.push(board);
+  writeBoardStore(store);
+  return board.id;
+}
+
+module.exports = { attachBoardRoutes, attachBoardWebSocket, getOrCreateCurrentBoardId };

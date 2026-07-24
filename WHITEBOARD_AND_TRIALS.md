@@ -236,3 +236,31 @@ environment) — the mailer's config-parsing and env-var handling were
 verified directly instead. Actual UI click-through in a real browser
 was **not** possible here (this environment can't launch a full browser)
 and should be checked before shipping to production.
+
+---
+
+# Regression fixes (post-multi-board)
+
+The multi-board/roster rewrite broke three things that worked in the first
+whiteboard release. All three are fixed:
+
+1. **Clicking "Whiteboard" landed on an empty list instead of a canvas.**
+   The nav link now goes to `/board`, which redirects to your most recently
+   updated board and creates a first one ("My Whiteboard") if you have
+   none — restoring the original click-once-and-draw behaviour. `/boards`
+   is still there for managing multiple boards.
+
+2. **Boards created before multi-board support rendered with no name.**
+   They predate the `title`/`shared`/`isLive` fields; `normalizeBoard()`
+   now backfills sensible defaults on read.
+
+3. **Students who could already see a whiteboard lost access (403).**
+   Viewer access had been switched to require the new team roster, which
+   is empty for every account created before rosters existed. Access now
+   checks the roster **or** the older per-study-set `invitedEmails` model
+   (`canViewTeachersContent` in `server/server.js`), so nobody who had
+   access before loses it. New invites should still use the roster.
+
+Also: **going live now also marks the board shared.** Going live on a board
+nobody can see was never the intent, and it made "why can't my students see
+this?" a two-step trap. Unshare and stop-live remain separate actions.

@@ -14,6 +14,17 @@ const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const Stripe = require('stripe');
 const { emailOnRoster } = require('./team');
+
+// A student can see a teacher's shared content if they're on the team roster
+// OR were invited under the older per-study-set model. Whiteboard access was
+// originally granted purely by the latter, so a roster-only check locks out
+// everyone who already had access before rosters existed.
+function canViewTeachersContent(store, teacherId, email) {
+  if (emailOnRoster(store, teacherId, email)) return true;
+  const target = String(email || '').trim().toLowerCase();
+  return store.quizlets.some((set) => set.ownerId === teacherId
+    && (set.invitedEmails || []).map((e) => String(e || '').trim().toLowerCase()).includes(target));
+}
 const { sendMail } = require('./mailer');
 
 // Load .env when present. Under systemd this is redundant (EnvironmentFile=
@@ -1624,7 +1635,7 @@ app.get('/team', requirePageUser, (req, res) => {
 // ---- Whiteboard (Phase 1+) ------------------------------------------------
 // Registered before the catch-all below so /board/:boardId and /boards
 // resolve to their pages rather than falling through to index.html.
-const { attachBoardRoutes, attachBoardWebSocket } = require('./board');
+const { attachBoardRoutes, attachBoardWebSocket, getOrCreateCurrentBoardId } = require('./board');
 
 attachBoardRoutes(app, {
   requireUser,
@@ -1634,6 +1645,7 @@ attachBoardRoutes(app, {
   id,
   nowIso,
   emailOnRoster,
+  canViewTeachersContent,
   userHasWhiteboardAccess
 });
 
@@ -1644,8 +1656,15 @@ app.get('/boards', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'board-list.html'));
 });
 
-// Convenience alias kept for old links/bookmarks.
-app.get('/board', requirePageUser, (req, res) => res.redirect('/boards'));
+// The "Whiteboard" nav link. Lands the teacher straight on a usable canvas
+// (their most recent board, creating one if they have none) rather than an
+// empty list; /boards remains available for managing several boards.
+app.get('/board', requirePageUser, (req, res) => {
+  const user = getCurrentUser(req);
+  if (!userHasWhiteboardAccess(user)) return res.redirect('/boards');
+  const currentId = getOrCreateCurrentBoardId(user.id);
+  return res.redirect(`/board/${currentId}`);
+});
 
 app.get('/board/:boardId', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'board.html'));
@@ -1666,6 +1685,7 @@ attachBoardWebSocket(httpServer, {
   readStore,
   writeStore,
   emailOnRoster,
+  canViewTeachersContent,
   userHasWhiteboardAccess,
   askVisionAI: ({ instructions, imageDataUrl }) => askVisionAI({ instructions, imageDataUrl })
 });
