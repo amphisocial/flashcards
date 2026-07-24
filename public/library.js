@@ -1,8 +1,6 @@
 /* Your Library page: lists sets you created and sets shared with you. */
 (() => {
-  const { state, $, escapeHtml, setStatus, api, initCommon, setButtonLoading, clearDialogError } = window.AppCommon;
-
-  let shareSetId = null;
+  const { state, $, escapeHtml, setStatus, api, initCommon } = window.AppCommon;
 
   const emptyText = (text) => `<p class="set-meta">${escapeHtml(text)}</p>`;
 
@@ -35,7 +33,7 @@
         <span class="set-meta">${set.cards.length} ${set.format === 'slides' ? 'slides' : 'cards'} • ${formatLabel(set)} • ${escapeHtml(set.subject || set.category || 'General')} • ${new Date(set.createdAt).toLocaleDateString()}</span>
         <div class="set-actions">
           <button class="btn primary study-mini" data-id="${set.id}">Study</button>
-          ${owned ? `<button class="btn soft share-mini" data-id="${set.id}">Share</button><button class="btn ghost delete-mini" data-id="${set.id}">Delete</button>` : `<a class="btn soft" href="/board/${set.ownerId}">View live whiteboard</a>`}
+          ${owned ? `<button class="btn soft share-toggle-mini" data-id="${set.id}" data-shared="${Boolean(set.shared)}">${set.shared ? 'Shared ✓' : 'Share'}</button><button class="btn ghost delete-mini" data-id="${set.id}">Delete</button>` : ''}
         </div>
       </div>
     `).join('');
@@ -48,7 +46,7 @@
     node.querySelectorAll('.study-mini').forEach((button) => button.addEventListener('click', () => {
       window.location.href = `/app?set=${button.dataset.id}`;
     }));
-    node.querySelectorAll('.share-mini').forEach((button) => button.addEventListener('click', () => openShare(button.dataset.id)));
+    node.querySelectorAll('.share-toggle-mini').forEach((button) => button.addEventListener('click', () => toggleShare(button.dataset.id, button.dataset.shared === 'true')));
     node.querySelectorAll('.delete-mini').forEach((button) => button.addEventListener('click', () => deleteSet(button.dataset.id)));
   }
 
@@ -63,51 +61,22 @@
     }
   }
 
-  function openShare(setId) {
-    shareSetId = setId;
-    const isTeam = state.user && state.user.plan === 'team';
-    $('#shareEmails').value = '';
-    $('#shareTeamGate').style.display = isTeam ? 'none' : 'block';
-    $('#shareFormArea').style.display = isTeam ? 'block' : 'none';
-    clearDialogError($('#shareDialog'));
-    $('#shareDialog').showModal();
-  }
-
-  async function shareSet(event) {
-    event.preventDefault();
-    if (!shareSetId) return;
-    clearDialogError($('#shareDialog'));
-    if (!state.user || state.user.plan !== 'team') {
-      $('#shareTeamGate').style.display = 'block';
-      $('#shareFormArea').style.display = 'none';
-      return;
-    }
-    const emails = $('#shareEmails').value.trim();
-    if (!emails) return setStatus('Enter at least one email address.', 'error');
-    const button = $('#shareSubmit');
-    setButtonLoading(button, true, 'Sharing…');
+  // Sharing is a single on/off toggle now — once on, it's visible to
+  // everyone on your team roster (see /team), no per-item email list to
+  // manage. If the account isn't on the Teams plan, the server rejects
+  // this with a clear message pointing at the Teams trial.
+  async function toggleShare(setId, currentlyShared) {
     try {
-      await api(`/api/sets/${shareSetId}/share`, {
-        method: 'POST',
-        body: JSON.stringify({ emails })
-      });
-      $('#shareDialog').close();
+      await api(`/api/sets/${setId}/share-toggle`, { method: 'POST', body: JSON.stringify({ shared: !currentlyShared }) });
       await loadLibrary();
-      setStatus('Study set shared.', 'success');
+      setStatus(currentlyShared ? 'No longer shared.' : 'Shared with your team.', 'success');
     } catch (error) {
-      if (String(error.message || '').toLowerCase().includes('team')) {
-        $('#shareTeamGate').style.display = 'block';
-        $('#shareFormArea').style.display = 'none';
-      }
       setStatus(error.message, 'error');
-    } finally {
-      setButtonLoading(button, false, 'Share');
     }
   }
 
   async function init() {
     $('#refreshLibrary').addEventListener('click', loadLibrary);
-    $('#shareSubmit').addEventListener('click', shareSet);
     await initCommon();
     await loadLibrary();
     const params = new URLSearchParams(window.location.search);

@@ -111,8 +111,128 @@ it isn't there yet since the original config predates this feature.)
 - No slide-recognition/3D-model generation like the iFlytek demo — that's
   a much larger lift (computer-vision geometry pipeline) and was flagged
   as a "later" phase in the original request.
-- No per-viewer cursors/presence indicators.
-- No persistent board "sessions" or replay/history scrubber — just the
-  live board + capped recent stroke history (last 4,000 strokes).
+- No per-viewer live cursors on the canvas (presence shows who's watching,
+  not where their mouse is).
 - No mobile-specific touch gesture tuning beyond basic pointer-events
   support (should work, wasn't specially optimized).
+
+---
+
+# Phase 1.5: bug fixes + Team roster + multi-board
+
+A follow-up pass fixed three real bugs found in testing and added the
+larger feature set requested afterward.
+
+## Bug fixes
+
+- **Plot parser**: `y = 4x + 3` failed to parse (`4x` wasn't understood as
+  `4*x` — implicit multiplication wasn't supported), *and* a second, more
+  serious closure self-reference bug caused infinite recursion on any
+  multi-term expression once parsing succeeded. Fixed both; verified
+  against a battery of expressions including the exact failing case.
+- **"Had to keep the cursor on screen"**: a stroke was ending the instant
+  the cursor's position left the canvas element's geometric bounds
+  (`pointerleave`), even though `setPointerCapture` was already correctly
+  tracking movement outside those bounds. Removed the `pointerleave`
+  binding; strokes now only end on release.
+- **Square → circle misclassification**: the shape recognizer's roundness
+  threshold was miscalibrated (real circles measure ~0.02, real squares
+  ~0.09-0.10 on the same metric; the old 0.13 threshold caught both), and
+  the corner-picking logic always forced exactly 3 points regardless of
+  actual shape count. Replaced with convex-hull + Ramer-Douglas-Peucker
+  polygon simplification and a threshold recalibrated against measured
+  data. Verified 37/37 on synthetic hand-drawn shapes across sizes/noise.
+
+## Team roster (Teams plan)
+
+- One persistent roster per teacher, up to 30 emails (same seat cap the
+  Teams plan always advertised — reused, not duplicated).
+- `/team` page: invite by email, see status (invited/active), remove
+  someone (immediately revokes their access to everything shared).
+- Invite emails sent via SMTP (`server/mailer.js`, configured through the
+  `SMTP_*` vars in `.env`). If SMTP isn't configured, the roster entry and
+  join link are still created — the teacher would just need to copy/send
+  the link manually.
+- **Join flow** (`/join?token=...`): a magic-link-style, single-use,
+  14-day-expiring link. If the invited email already has an account, it
+  logs them in directly (equivalent trust level to a password-reset link
+  — receiving+clicking proves mailbox control). If not, a one-field
+  "set a password" mini-signup creates the account with the email fixed
+  to the invited address.
+
+## Unified sharing model
+
+Replaced the old per-item email-invite list with: one team roster (above)
++ a simple on/off `shared` toggle per item. A flashcard set or whiteboard
+marked shared becomes visible to *everyone on the owner's roster*, not a
+hand-picked subset per item. This applies to flashcard sets, slide decks,
+and quizzes (all the same `quizlets` collection) and to whiteboards.
+
+- New endpoint: `POST /api/sets/:id/share-toggle` — replaces the old
+  `/share` email-list endpoint in the UI (that endpoint still exists,
+  unused, so any pre-existing per-set invites keep working without a
+  migration).
+- `userCanReadQuizlet()` now checks: owner, OR (`shared` + on the owner's
+  roster), OR the legacy `invitedEmails` list (backward compat only).
+
+## Multi-board whiteboard
+
+Boards moved from "one singleton per teacher" to "several saved boards
+per teacher, at most one live at a time":
+
+- `/boards` — picker page. Teachers see their saved boards with
+  New/Open/Save/Share/Go-Live/Delete. Everyone else sees which of their
+  teachers currently have a live, shared board, with a Join link.
+- **Save**: persists a title/checkpoint (strokes already autosave
+  continuously on every stroke; Save is the explicit "yes this is
+  captured" action the person asked for).
+- **Go Live / Stop Live**: going live on one board automatically takes
+  any other board this teacher owns off live — enforced server-side, not
+  just in the UI (`POST /api/board/:boardId/go-live` un-lives every other
+  board owned by the same teacher in the same request).
+- Viewer access now requires **both** `shared: true` and `isLive: true`
+  on the specific board, checked against the team roster — a saved,
+  non-live board is private editing space even if marked shared.
+- **Live viewer presence**: the WebSocket room broadcasts a `presence`
+  message (name + email of everyone currently connected, non-owner) to
+  everyone in the room whenever someone joins or leaves. The board page
+  shows a "Viewers (N)" panel for the owner.
+- **Board access is now keyed by boardId**, not teacherId — both the REST
+  routes (`/api/board/:boardId`) and the WebSocket
+  (`/ws/board?boardId=...`) changed accordingly.
+
+## "Circle an equation, hit Plot"
+
+Implemented as a **rectangle-select** tool (not freehand lasso — simpler
+and more precise for cropping a tight region around handwriting):
+
+1. Teacher picks the select tool, drags a box around an equation, hits
+   "Plot selection."
+2. The selection is cropped to its own canvas and sent as a PNG snapshot
+   over the WebSocket (`ai:read-equation`).
+3. Server asks the configured vision AI to extract *only* the equation
+   text, nothing else.
+4. The extracted text is validated against a strict character allowlist
+   server-side (`isSafeExpression()` in `server/board.js`) before it's
+   ever broadcast to other users' browsers — matching the same allowlist
+   the client's safe expression parser enforces. A bad extraction fails
+   loudly with an in-panel message rather than reaching a viewer as
+   unvalidated text.
+5. If validation passes, it's broadcast as a normal `graph` AI note and
+   rendered through the existing safe parser — same code path as typing
+   a function directly, so there's no separate less-trusted path for
+   AI-extracted expressions.
+
+## Testing notes
+
+Everything above was verified via direct HTTP/WebSocket calls against a
+running instance in this environment (registration → trial → roster
+invite → join-link completion → set share-toggle → board create/share/
+go-live → cross-user access checks → roster removal instantly revoking
+access → WS presence broadcast on join/leave → read-only draw enforcement
+post-rewrite). SMTP delivery itself couldn't be tested end-to-end here
+(no outbound network to arbitrary SMTP hosts in this sandboxed
+environment) — the mailer's config-parsing and env-var handling were
+verified directly instead. Actual UI click-through in a real browser
+was **not** possible here (this environment can't launch a full browser)
+and should be checked before shipping to production.

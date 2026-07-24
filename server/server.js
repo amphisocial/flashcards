@@ -13,6 +13,8 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const Stripe = require('stripe');
+const { emailOnRoster } = require('./team');
+const { sendMail } = require('./mailer');
 
 // Load .env when present. Under systemd this is redundant (EnvironmentFile=
 // already injects it), but pm2 and plain `node server/server.js` need this
@@ -285,21 +287,17 @@ function canCreateSet(user) {
   return { ok: used < limit, used, limit, remaining: Math.max(0, limit - used) };
 }
 
-function userCanReadQuizlet(user, quizlet) {
+// Sharing model: a study set (or whiteboard, see board.js) is visible to
+// someone other than its owner when BOTH are true — the item is marked
+// `shared: true`, and the requester's email is on the owner's team roster
+// (server/team.js). This replaced the original per-item invitedEmails list;
+// `invitedEmails` is still checked as a fallback so study sets shared under
+// the old model before this change keep working without a data migration.
+function userCanReadQuizlet(user, quizlet, store) {
   if (!user || !quizlet) return false;
   if (quizlet.ownerId === user.id) return true;
+  if (quizlet.shared && store && emailOnRoster(store, quizlet.ownerId, user.email)) return true;
   return (quizlet.invitedEmails || []).map(normalizeEmail).includes(normalizeEmail(user.email));
-}
-
-// Whiteboard viewer access reuses the *same* invite list a teacher already
-// maintains for study-set sharing (Teams plan, up to 30 invited emails) —
-// there is intentionally no separate whiteboard invite system. Anyone the
-// teacher has invited to any of their study sets can view their board.
-function userCanViewBoard(user, teacherId, store) {
-  if (!user) return false;
-  if (user.id === teacherId) return true;
-  const invitedEmail = normalizeEmail(user.email);
-  return store.quizlets.some((set) => set.ownerId === teacherId && (set.invitedEmails || []).map(normalizeEmail).includes(invitedEmail));
 }
 
 function userHasWhiteboardAccess(user) {
@@ -1060,6 +1058,7 @@ function buildStudySetObject(user, { title, cards, category, subject, grade, for
     grade: String(grade || '').trim(),
     format,
     invitedEmails: [],
+    shared: false,
     cards,
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -1457,7 +1456,7 @@ const listSets = (req, res) => {
     .filter((set) => set.ownerId === req.user.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const shared = store.quizlets
-    .filter((set) => set.ownerId !== req.user.id && userCanReadQuizlet(req.user, set))
+    .filter((set) => set.ownerId !== req.user.id && userCanReadQuizlet(req.user, set, store))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   res.json({ my, shared });
 };
@@ -1465,7 +1464,7 @@ const listSets = (req, res) => {
 const getSet = (req, res) => {
   const store = readStore();
   const set = store.quizlets.find((candidate) => candidate.id === req.params.id);
-  if (!userCanReadQuizlet(req.user, set)) return res.status(404).json({ error: 'Study set not found.' });
+  if (!userCanReadQuizlet(req.user, set, store)) return res.status(404).json({ error: 'Study set not found.' });
   res.json({ set, quizlet: set });
 };
 
@@ -1478,6 +1477,26 @@ const deleteSet = (req, res) => {
   res.json({ ok: true });
 };
 
+// Sharing is now a single on/off toggle per item — visible to everyone on
+// the owner's team roster once flipped on, rather than picking individual
+// emails per set. (The old per-set email-invite endpoint below is kept
+// only so any already-shared old data keeps working; new sharing should
+// use this toggle.)
+const shareToggleSet = (req, res) => {
+  const store = readStore();
+  const set = store.quizlets.find((candidate) => candidate.id === req.params.id);
+  if (!set || set.ownerId !== req.user.id) return res.status(404).json({ error: 'Study set not found.' });
+  const plan = req.user.plan || 'free';
+  const seatLimit = PLAN_LIMITS[plan]?.shareSeats || 0;
+  if (seatLimit < 1) return res.status(403).json({ error: 'Sharing requires the Teams plan.' });
+  set.shared = Boolean(req.body.shared);
+  set.updatedAt = nowIso();
+  writeStore(store);
+  res.json({ set, quizlet: set });
+};
+
+// Legacy per-set email-invite endpoint, kept only for backward compatibility
+// with any older client code that still calls it; new UI uses share-toggle.
 const shareSet = (req, res) => {
   const store = readStore();
   const set = store.quizlets.find((candidate) => candidate.id === req.params.id);
@@ -1499,7 +1518,9 @@ const shareSet = (req, res) => {
 app.get(['/api/sets', '/api/quizlets'], requireUser, listSets);
 app.get(['/api/sets/:id', '/api/quizlets/:id'], requireUser, getSet);
 app.delete(['/api/sets/:id', '/api/quizlets/:id'], requireUser, deleteSet);
+app.post(['/api/sets/:id/share-toggle', '/api/quizlets/:id/share-toggle'], requireUser, shareToggleSet);
 app.post(['/api/sets/:id/share', '/api/quizlets/:id/share'], requireUser, shareSet);
+
 
 app.post('/api/billing/checkout', requireUser, async (req, res) => {
   if (!stripe) return res.status(400).json({ error: 'Stripe is not configured yet.' });
@@ -1567,29 +1588,58 @@ app.get('/library', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'library.html'));
 });
 
-// ---- Whiteboard (Phase 1) ------------------------------------------------
-// Registered before the catch-all below so /board/:teacherId resolves to
-// the whiteboard page rather than falling through to index.html.
+// ---- Team roster (Teams plan) --------------------------------------------
+const { attachTeamRoutes } = require('./team');
+
+attachTeamRoutes(app, {
+  requireUser,
+  readStore,
+  writeStore,
+  id,
+  nowIso,
+  normalizeEmail,
+  hashPassword,
+  createSession,
+  publicUser,
+  PLAN_LIMITS,
+  sendMail,
+  APP_BASE_URL
+});
+
+// Public join-link landing page (no session required to view it — the page
+// itself decides whether to log the person in or walk them through a quick
+// one-field signup, based on what /api/team/join returns).
+app.get('/join', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'join.html'));
+});
+
+// ---- Whiteboard (Phase 1+) ------------------------------------------------
+// Registered before the catch-all below so /board/:boardId and /boards
+// resolve to their pages rather than falling through to index.html.
 const { attachBoardRoutes, attachBoardWebSocket } = require('./board');
 
 attachBoardRoutes(app, {
   requireUser,
   publicUser,
   readStore,
-  userCanViewBoard,
+  writeStore,
+  id,
+  nowIso,
+  emailOnRoster,
   userHasWhiteboardAccess
 });
 
-// Convenience entry point for the nav link: teachers land on their own
-// board, everyone else on Your Library (where shared-board links live next
-// to whatever a teacher has shared with them).
-app.get('/board', requirePageUser, (req, res) => {
-  const user = getCurrentUser(req);
-  if (userHasWhiteboardAccess(user)) return res.redirect(`/board/${user.id}`);
-  return res.redirect('/library?whiteboard=upgrade');
+// Board picker: teachers see their saved boards + New/Go Live controls;
+// everyone else sees which of their teachers currently have a live, shared
+// board they can join. One page, branches client-side on plan/role.
+app.get('/boards', requirePageUser, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'board-list.html'));
 });
 
-app.get('/board/:teacherId', requirePageUser, (req, res) => {
+// Convenience alias kept for old links/bookmarks.
+app.get('/board', requirePageUser, (req, res) => res.redirect('/boards'));
+
+app.get('/board/:boardId', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'board.html'));
 });
 
@@ -1606,7 +1656,8 @@ const httpServer = http.createServer(app);
 attachBoardWebSocket(httpServer, {
   getUserFromCookieHeader,
   readStore,
-  userCanViewBoard,
+  writeStore,
+  emailOnRoster,
   userHasWhiteboardAccess,
   askVisionAI: ({ instructions, imageDataUrl }) => askVisionAI({ instructions, imageDataUrl })
 });

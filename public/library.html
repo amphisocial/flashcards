@@ -20,7 +20,8 @@
       <nav class="nav-links">
         <a href="/app">Create</a>
         <a href="/library" class="active">Your Library</a>
-        <a href="/board" id="whiteboardNavLink" style="display:none">Whiteboard</a>
+        <a href="/boards" id="whiteboardNavLink" style="display:none">Whiteboard</a>
+        <a href="/team" id="teamNavLink" style="display:none">Team</a>
         <a href="/#pricing">Pricing</a>
       </nav>
       <div class="auth-area" id="authArea"></div>
@@ -48,28 +49,6 @@
       </section>
     </main>
   </div>
-
-  <dialog id="shareDialog" class="modal">
-    <form method="dialog" class="modal-card">
-      <button class="modal-close" value="cancel" aria-label="Close">×</button>
-      <h2>Share study set</h2>
-
-      <div id="shareTeamGate" class="upgrade-gate" style="display:none">
-        <p><strong>Sharing is available on the Teams plan.</strong></p>
-        <p>Upgrade to Teams for $9.99/mo to share study sets with up to 30 invited users.</p>
-        <button type="button" class="btn primary large checkout" data-plan="team">Upgrade to Teams</button>
-      </div>
-
-      <div id="shareFormArea">
-        <p>Teams users can invite up to 30 people by email. Invited users can study shared sets for free.</p>
-        <label>Email addresses
-          <textarea id="shareEmails" placeholder="student1@example.com, student2@example.com"></textarea>
-        </label>
-        <div class="modal-error" id="shareError" role="alert"></div>
-        <button type="button" class="btn primary large" id="shareSubmit" value="default">Share</button>
-      </div>
-    </form>
-  </dialog>
 
   <div class="toast" id="toast"></div>
 

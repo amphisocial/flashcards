@@ -1,19 +1,20 @@
 /*
- * Athena Whiteboard (Phase 1)
+ * Athena Whiteboard (Phase 1+)
  * -----------------------------------------------------------------------
- * One board per teacher. Reuses the Teams-plan invite list already
- * maintained for study-set sharing — there is no separate whiteboard
- * invite flow. Board strokes/state live in their own file
- * (data/board-data.json) so frequent drawing writes never contend with
- * the main store.json (users/sessions/study sets).
+ * A teacher can have several SAVED boards (like documents), but only ever
+ * one LIVE board at a time — going live on one automatically takes any
+ * other board off live. Viewers (people on the teacher's team roster, see
+ * server/team.js) can only join a board that is both `shared: true` and
+ * currently live; saved-but-not-live boards are private editing space for
+ * the teacher only.
+ *
+ * Board data lives in its own file, data/board-data.json, kept separate
+ * from data/store.json (users/sessions/study sets) so frequent drawing
+ * writes never contend with the file everything else depends on.
  *
  * Exposes:
  *   attachBoardRoutes(app, deps)         - REST endpoints
- *   attachBoardWebSocket(server, deps)   - live sync + AI actions over WS
- *
- * `deps` is a small set of things board.js needs from server.js rather
- * than reimplementing: readStore/writeStore-equivalents are local to this
- * file (separate JSON file), but auth/plan/user helpers are shared.
+ *   attachBoardWebSocket(server, deps)   - live sync + presence + AI actions
  */
 
 const fs = require('fs');
@@ -24,9 +25,8 @@ const { WebSocketServer } = require('ws');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const BOARD_FILE = path.join(DATA_DIR, 'board-data.json');
 
-// Cap how much stroke history we keep per board so the JSON file and the
-// initial sync payload for new viewers stay bounded. A "clear" resets this.
 const MAX_STROKES_PER_BOARD = 4000;
+const MAX_BOARDS_PER_TEACHER = 20;
 
 function ensureBoardStore() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -62,115 +62,213 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-// One board per teacherId, created lazily on first access.
-function getOrCreateBoard(teacherId) {
-  const store = readBoardStore();
-  let board = store.boards.find((b) => b.teacherId === teacherId);
-  if (!board) {
-    board = {
-      id: boardId(),
-      teacherId,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      strokes: [],       // { id, tool, color, size, points:[{x,y}], shape? }
-      aiNotes: []        // { id, kind: 'explain'|'graph', prompt, result, createdAt }
-    };
-    store.boards.push(board);
-    writeBoardStore(store);
-  }
-  return board;
+function boardSummary(board) {
+  return {
+    id: board.id,
+    teacherId: board.teacherId,
+    title: board.title,
+    createdAt: board.createdAt,
+    updatedAt: board.updatedAt,
+    shared: Boolean(board.shared),
+    isLive: Boolean(board.isLive),
+    strokeCount: board.strokes.length
+  };
 }
 
-function saveBoard(board) {
-  const store = readBoardStore();
-  const idx = store.boards.findIndex((b) => b.id === board.id);
-  board.updatedAt = nowIso();
-  if (idx >= 0) store.boards[idx] = board;
-  else store.boards.push(board);
-  writeBoardStore(store);
+// Only an allowlisted character set is ever compiled/rendered client-side
+// for a plotted expression (see public/board.js compileExpression) — this
+// mirrors that allowlist so a bad AI extraction from "read the equation on
+// this selection" fails loudly server-side rather than reaching a viewer's
+// browser as unvalidated text.
+const SAFE_EXPRESSION_RE = /^[a-zA-Z0-9\s.+\-*/^()=]+$/;
+
+function isSafeExpression(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed || trimmed.length > 200) return false;
+  if (!SAFE_EXPRESSION_RE.test(trimmed)) return false;
+  return true;
 }
 
 // ---------------------------------------------------------------------
 // REST routes
 // ---------------------------------------------------------------------
 function attachBoardRoutes(app, deps) {
-  const { requireUser, publicUser, readStore, userCanViewBoard, userHasWhiteboardAccess } = deps;
+  const { requireUser, readStore, emailOnRoster, userHasWhiteboardAccess } = deps;
 
-  // Metadata for "my board" (teacher) — creates it if it doesn't exist yet.
-  // Requires Teams plan (or an active Teams trial, already reflected in
-  // req.user.plan by the time requireUser attaches it).
-  app.get('/api/board/mine', requireUser, (req, res) => {
+  function requireWhiteboardPlan(req, res) {
     if (!userHasWhiteboardAccess(req.user)) {
-      return res.status(403).json({ error: 'The whiteboard is available on the Teams plan. Start a free 7-day Teams trial to try it.' });
+      res.status(403).json({ error: 'The whiteboard is available on the Teams plan. Start a free 7-day Teams trial to try it.' });
+      return false;
     }
-    const board = getOrCreateBoard(req.user.id);
-    res.json({ board: { id: board.id, teacherId: board.teacherId, strokeCount: board.strokes.length, updatedAt: board.updatedAt } });
+    return true;
+  }
+
+  function findBoard(store, boardIdParam) {
+    return store.boards.find((b) => b.id === boardIdParam);
+  }
+
+  // ---- Teacher: manage saved boards --------------------------------------
+  app.get('/api/board/mine/list', requireUser, (req, res) => {
+    if (!requireWhiteboardPlan(req, res)) return;
+    const store = readBoardStore();
+    const boards = store.boards
+      .filter((b) => b.teacherId === req.user.id)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map(boardSummary);
+    res.json({ boards });
   });
 
-  // Fetch a specific teacher's board (owner or invited viewer only).
-  app.get('/api/board/:teacherId', requireUser, (req, res) => {
-    const store = readStore();
-    const teacher = store.users.find((u) => u.id === req.params.teacherId);
-    if (!teacher) return res.status(404).json({ error: 'Board not found.' });
-    if (!userCanViewBoard(req.user, req.params.teacherId, store)) {
-      return res.status(403).json({ error: 'You have not been invited to this teacher\'s whiteboard.' });
+  app.post('/api/board/mine/new', requireUser, (req, res) => {
+    if (!requireWhiteboardPlan(req, res)) return;
+    const store = readBoardStore();
+    const existing = store.boards.filter((b) => b.teacherId === req.user.id);
+    if (existing.length >= MAX_BOARDS_PER_TEACHER) {
+      return res.status(400).json({ error: `You've reached the ${MAX_BOARDS_PER_TEACHER}-board limit. Delete an old board to make room.` });
     }
-    const board = getOrCreateBoard(req.params.teacherId);
-    res.json({
-      board,
-      teacher: { id: teacher.id, name: [teacher.firstName, teacher.lastName].filter(Boolean).join(' ') || teacher.email },
-      isOwner: req.user.id === req.params.teacherId
-    });
+    const title = String(req.body.title || '').trim().slice(0, 80) || `Untitled board ${existing.length + 1}`;
+    const board = {
+      id: boardId(),
+      teacherId: req.user.id,
+      title,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      shared: false,
+      isLive: false,
+      strokes: [],
+      aiNotes: []
+    };
+    store.boards.push(board);
+    writeBoardStore(store);
+    res.json({ board: boardSummary(board) });
   });
 
-  // List which of a teacher's students/viewers currently have board access
-  // (mirrors whatever emails have been invited to any of the teacher's
-  // study sets, deduplicated) — lets the teacher see who can see their board.
-  app.get('/api/board/mine/viewers', requireUser, (req, res) => {
-    if (!userHasWhiteboardAccess(req.user)) return res.status(403).json({ error: 'Teams plan required.' });
-    const store = readStore();
-    const emails = new Set();
-    store.quizlets.filter((s) => s.ownerId === req.user.id).forEach((s) => (s.invitedEmails || []).forEach((e) => emails.add(e)));
-    res.json({ viewers: Array.from(emails) });
+  app.post('/api/board/:boardId/save', requireUser, (req, res) => {
+    const store = readBoardStore();
+    const board = findBoard(store, req.params.boardId);
+    if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
+    if (req.body.title !== undefined) board.title = String(req.body.title).trim().slice(0, 80) || board.title;
+    board.updatedAt = nowIso();
+    writeBoardStore(store);
+    res.json({ board: boardSummary(board) });
+  });
+
+  app.delete('/api/board/:boardId', requireUser, (req, res) => {
+    const store = readBoardStore();
+    const board = findBoard(store, req.params.boardId);
+    if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
+    store.boards = store.boards.filter((b) => b.id !== req.params.boardId);
+    writeBoardStore(store);
+    res.json({ ok: true });
+  });
+
+  app.post('/api/board/:boardId/share-toggle', requireUser, (req, res) => {
+    if (!requireWhiteboardPlan(req, res)) return;
+    const store = readBoardStore();
+    const board = findBoard(store, req.params.boardId);
+    if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
+    board.shared = Boolean(req.body.shared);
+    board.updatedAt = nowIso();
+    writeBoardStore(store);
+    res.json({ board: boardSummary(board) });
+  });
+
+  // Going live on one board automatically takes any other board this
+  // teacher owns off live — a teacher can only ever broadcast one board.
+  app.post('/api/board/:boardId/go-live', requireUser, (req, res) => {
+    if (!requireWhiteboardPlan(req, res)) return;
+    const store = readBoardStore();
+    const board = findBoard(store, req.params.boardId);
+    if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
+    store.boards.forEach((b) => { if (b.teacherId === req.user.id) b.isLive = false; });
+    board.isLive = true;
+    board.updatedAt = nowIso();
+    writeBoardStore(store);
+    res.json({ board: boardSummary(board) });
+  });
+
+  app.post('/api/board/:boardId/stop-live', requireUser, (req, res) => {
+    const store = readBoardStore();
+    const board = findBoard(store, req.params.boardId);
+    if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
+    board.isLive = false;
+    board.updatedAt = nowIso();
+    writeBoardStore(store);
+    res.json({ board: boardSummary(board) });
+  });
+
+  // ---- Fetch a specific board (owner, or invited viewer of a live+shared board) ----
+  app.get('/api/board/:boardId', requireUser, (req, res) => {
+    const boardStore = readBoardStore();
+    const board = findBoard(boardStore, req.params.boardId);
+    if (!board) return res.status(404).json({ error: 'Board not found.' });
+
+    const isOwner = req.user.id === board.teacherId;
+    const mainStore = readStore();
+    const teacher = mainStore.users.find((u) => u.id === board.teacherId);
+    const teacherInfo = { id: teacher.id, name: [teacher.firstName, teacher.lastName].filter(Boolean).join(' ') || teacher.email };
+
+    if (!isOwner) {
+      const allowed = board.shared && board.isLive && emailOnRoster(mainStore, board.teacherId, req.user.email);
+      if (!allowed) return res.status(403).json({ error: 'This whiteboard is not currently live and shared with you.' });
+    }
+    res.json({ board, teacher: teacherInfo, isOwner });
+  });
+
+  // ---- Viewer discovery: which of MY teachers are live right now? -------
+  app.get('/api/board/live/mine', requireUser, (req, res) => {
+    const mainStore = readStore();
+    const boardStore = readBoardStore();
+    const live = boardStore.boards
+      .filter((b) => b.isLive && b.shared && emailOnRoster(mainStore, b.teacherId, req.user.email))
+      .map((b) => {
+        const teacher = mainStore.users.find((u) => u.id === b.teacherId);
+        return {
+          boardId: b.id,
+          teacherId: b.teacherId,
+          teacherName: teacher ? ([teacher.firstName, teacher.lastName].filter(Boolean).join(' ') || teacher.email) : 'Unknown teacher',
+          title: b.title,
+          updatedAt: b.updatedAt
+        };
+      });
+    res.json({ live });
   });
 }
 
 // ---------------------------------------------------------------------
-// WebSocket: live drawing sync + "Ask AI" actions
+// WebSocket: live drawing sync, presence, and AI actions
 // ---------------------------------------------------------------------
 // Protocol (JSON messages both directions):
 //   client -> server:
-//     { type: 'stroke:add', stroke }
-//     { type: 'stroke:shape', stroke }        // recognized/snapped shape
+//     { type: 'stroke:add' | 'stroke:shape', stroke }
 //     { type: 'board:clear' }
-//     { type: 'ai:explain', snapshot }        // snapshot = base64 PNG data URL
-//     { type: 'ai:plot', expression }         // e.g. "y = x^2 - 3"
+//     { type: 'ai:explain', snapshot }             // full-board PNG data URL
+//     { type: 'ai:plot', expression }               // pure client-side math
+//     { type: 'ai:read-equation', snapshot }        // cropped selection PNG
 //   server -> client:
-//     { type: 'sync', board }                 // sent once on connect
-//     { type: 'stroke:add', stroke }          // rebroadcast
-//     { type: 'stroke:shape', stroke }
+//     { type: 'sync', board, isOwner }
+//     { type: 'stroke:add' | 'stroke:shape', stroke }
 //     { type: 'board:clear' }
 //     { type: 'ai:result', note }
+//     { type: 'presence', viewers: [{ name, email }] }
 //     { type: 'error', message }
 //
-// Only the teacher (owner) may draw, clear, or trigger AI actions. Viewers
-// receive a read-only connection; any mutating message from a non-owner is
-// rejected. This is enforced per-connection at auth time, not just in the UI.
+// Only the owning teacher may draw/clear/trigger AI actions. A non-owner
+// may only connect at all if the board is currently shared AND live.
 function attachBoardWebSocket(httpServer, deps) {
-  const { getUserFromCookieHeader, readStore, userCanViewBoard, userHasWhiteboardAccess, askVisionAI } = deps;
+  const { getUserFromCookieHeader, readStore, emailOnRoster, userHasWhiteboardAccess, askVisionAI } = deps;
 
   const wss = new WebSocketServer({ server: httpServer, path: '/ws/board' });
 
-  // teacherId -> Set of { ws, user, isOwner }
+  // boardId -> Set of { ws, user, isOwner }
   const rooms = new Map();
 
-  function roomFor(teacherId) {
-    if (!rooms.has(teacherId)) rooms.set(teacherId, new Set());
-    return rooms.get(teacherId);
+  function roomFor(id) {
+    if (!rooms.has(id)) rooms.set(id, new Set());
+    return rooms.get(id);
   }
 
-  function broadcast(teacherId, payload, exceptWs) {
-    const room = rooms.get(teacherId);
+  function broadcast(id, payload, exceptWs) {
+    const room = rooms.get(id);
     if (!room) return;
     const data = JSON.stringify(payload);
     for (const client of room) {
@@ -178,71 +276,93 @@ function attachBoardWebSocket(httpServer, deps) {
     }
   }
 
+  function broadcastPresence(id) {
+    const room = rooms.get(id);
+    if (!room) return;
+    const viewers = Array.from(room)
+      .filter((c) => !c.isOwner)
+      .map((c) => ({ name: [c.user.firstName, c.user.lastName].filter(Boolean).join(' ') || c.user.email, email: c.user.email }));
+    broadcast(id, { type: 'presence', viewers }, null);
+  }
+
+  function getBoard(boardIdValue) {
+    const store = readBoardStore();
+    return store.boards.find((b) => b.id === boardIdValue);
+  }
+
+  function saveBoard(board) {
+    const store = readBoardStore();
+    const idx = store.boards.findIndex((b) => b.id === board.id);
+    board.updatedAt = nowIso();
+    if (idx >= 0) store.boards[idx] = board;
+    writeBoardStore(store);
+  }
+
   wss.on('connection', (ws, req) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      const teacherId = url.searchParams.get('teacherId');
-      if (!teacherId) return ws.close(4001, 'Missing teacherId');
+      const targetBoardId = url.searchParams.get('boardId');
+      if (!targetBoardId) return ws.close(4001, 'Missing boardId');
 
-      // The browser sends the session cookie automatically on this upgrade
-      // request since it's same-origin — no token in the URL needed.
       const user = getUserFromCookieHeader(req.headers.cookie);
       if (!user) return ws.close(4001, 'Not signed in');
 
-      const store = readStore();
-      const teacher = store.users.find((u) => u.id === teacherId);
-      if (!teacher) return ws.close(4004, 'Board not found');
-      if (!userCanViewBoard(user, teacherId, store)) return ws.close(4003, 'Not invited to this board');
+      const board = getBoard(targetBoardId);
+      if (!board) return ws.close(4004, 'Board not found');
 
-      const isOwner = user.id === teacherId;
+      const isOwner = user.id === board.teacherId;
       if (isOwner && !userHasWhiteboardAccess(user)) return ws.close(4003, 'Teams plan required');
+      if (!isOwner) {
+        const mainStore = readStore();
+        const allowed = board.shared && board.isLive && emailOnRoster(mainStore, board.teacherId, user.email);
+        if (!allowed) return ws.close(4003, 'This whiteboard is not currently live and shared with you');
+      }
 
       const client = { ws, user, isOwner };
-      roomFor(teacherId).add(client);
+      roomFor(targetBoardId).add(client);
 
-      const board = getOrCreateBoard(teacherId);
-      ws.send(JSON.stringify({ type: 'sync', board }));
+      ws.send(JSON.stringify({ type: 'sync', board, isOwner }));
+      if (!isOwner) broadcastPresence(targetBoardId);
 
       ws.on('message', async (raw) => {
         let msg;
         try { msg = JSON.parse(raw.toString()); } catch { return; }
 
-        // Read-only guard: only the owning teacher may mutate the board.
-        const mutating = ['stroke:add', 'stroke:shape', 'board:clear', 'ai:explain', 'ai:plot'];
+        const mutating = ['stroke:add', 'stroke:shape', 'board:clear', 'ai:explain', 'ai:plot', 'ai:read-equation'];
         if (mutating.includes(msg.type) && !isOwner) {
           return ws.send(JSON.stringify({ type: 'error', message: 'Only the teacher can draw on this board.' }));
         }
 
         if (msg.type === 'stroke:add' || msg.type === 'stroke:shape') {
           const stroke = { ...msg.stroke, id: msg.stroke?.id || boardId('str'), createdAt: nowIso() };
-          const b = getOrCreateBoard(teacherId);
+          const b = getBoard(targetBoardId);
+          if (!b) return;
           b.strokes.push(stroke);
           if (b.strokes.length > MAX_STROKES_PER_BOARD) b.strokes = b.strokes.slice(-MAX_STROKES_PER_BOARD);
           saveBoard(b);
-          broadcast(teacherId, { type: msg.type, stroke }, ws);
+          broadcast(targetBoardId, { type: msg.type, stroke }, ws);
           return;
         }
 
         if (msg.type === 'board:clear') {
-          const b = getOrCreateBoard(teacherId);
+          const b = getBoard(targetBoardId);
+          if (!b) return;
           b.strokes = [];
           saveBoard(b);
-          broadcast(teacherId, { type: 'board:clear' }, null);
+          broadcast(targetBoardId, { type: 'board:clear' }, null);
           return;
         }
 
         if (msg.type === 'ai:explain') {
           try {
             const result = await askVisionAI({
-              kind: 'explain',
               instructions: 'You are looking at a classroom whiteboard. Briefly explain, in plain language a student could follow, what is written or drawn (equation, diagram, concept). If it is a math expression, also state the result or key property. Keep it under 120 words.',
               imageDataUrl: msg.snapshot
             });
             const note = { id: boardId('note'), kind: 'explain', result, createdAt: nowIso() };
-            const b = getOrCreateBoard(teacherId);
-            b.aiNotes.push(note);
-            saveBoard(b);
-            broadcast(teacherId, { type: 'ai:result', note }, null);
+            const b = getBoard(targetBoardId);
+            if (b) { b.aiNotes.push(note); saveBoard(b); }
+            broadcast(targetBoardId, { type: 'ai:result', note }, null);
           } catch (error) {
             ws.send(JSON.stringify({ type: 'error', message: error.message || 'AI explain failed.' }));
           }
@@ -250,23 +370,50 @@ function attachBoardWebSocket(httpServer, deps) {
         }
 
         if (msg.type === 'ai:plot') {
-          // Pure client-side math plotting (no AI call needed) — the server
-          // just records the request in aiNotes so it shows in board history
-          // and broadcasts it so viewers' clients render the same graph.
           const note = { id: boardId('note'), kind: 'graph', expression: String(msg.expression || '').slice(0, 200), createdAt: nowIso() };
-          const b = getOrCreateBoard(teacherId);
-          b.aiNotes.push(note);
-          saveBoard(b);
-          broadcast(teacherId, { type: 'ai:result', note }, null);
+          const b = getBoard(targetBoardId);
+          if (b) { b.aiNotes.push(note); saveBoard(b); }
+          broadcast(targetBoardId, { type: 'ai:result', note }, null);
+          return;
+        }
+
+        // "Circle an equation, hit Plot": crop is sent up as a snapshot, a
+        // vision call extracts ONLY the equation text, and it's validated
+        // against a strict character allowlist before ever being broadcast
+        // to other users' browsers — the same allowlist the client's safe
+        // expression parser enforces, so a bad extraction fails loudly here
+        // rather than reaching a viewer as unvalidated text.
+        if (msg.type === 'ai:read-equation') {
+          try {
+            const raw = await askVisionAI({
+              instructions: 'Extract ONLY the mathematical equation or expression shown in this image selection. Respond with just the equation (e.g. "y = 2x + 3" or "x^2 - 4"), no words, no markdown, no explanation. If no clear equation is visible, respond with exactly: NONE',
+              imageDataUrl: msg.snapshot
+            });
+            const cleaned = String(raw || '').trim();
+            if (!cleaned || cleaned.toUpperCase() === 'NONE' || !isSafeExpression(cleaned)) {
+              const note = { id: boardId('note'), kind: 'explain', result: "Couldn't find a clear equation in that selection — try selecting a tighter box around just the equation.", createdAt: nowIso() };
+              const b = getBoard(targetBoardId);
+              if (b) { b.aiNotes.push(note); saveBoard(b); }
+              broadcast(targetBoardId, { type: 'ai:result', note }, null);
+              return;
+            }
+            const note = { id: boardId('note'), kind: 'graph', expression: cleaned, createdAt: nowIso() };
+            const b = getBoard(targetBoardId);
+            if (b) { b.aiNotes.push(note); saveBoard(b); }
+            broadcast(targetBoardId, { type: 'ai:result', note }, null);
+          } catch (error) {
+            ws.send(JSON.stringify({ type: 'error', message: error.message || 'Could not read the selection.' }));
+          }
           return;
         }
       });
 
       ws.on('close', () => {
-        const room = rooms.get(teacherId);
+        const room = rooms.get(targetBoardId);
         if (room) {
           room.delete(client);
-          if (room.size === 0) rooms.delete(teacherId);
+          if (room.size === 0) rooms.delete(targetBoardId);
+          else if (!isOwner) broadcastPresence(targetBoardId);
         }
       });
     } catch (error) {
@@ -278,4 +425,4 @@ function attachBoardWebSocket(httpServer, deps) {
   return wss;
 }
 
-module.exports = { attachBoardRoutes, attachBoardWebSocket, getOrCreateBoard };
+module.exports = { attachBoardRoutes, attachBoardWebSocket };

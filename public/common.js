@@ -117,14 +117,16 @@ window.AppCommon = (() => {
     updateUsagePill();
   }
 
-  // Shows/hides the "Whiteboard" nav link based on whether the signed-in
-  // user currently has Teams-level access (paid or trialing). Runs on every
-  // auth refresh so it reacts immediately to a trial starting or expiring.
+  // Shows/hides the "Whiteboard"/"Team" nav links based on whether the
+  // signed-in user currently has Teams-level access (paid or trialing).
+  // Runs on every auth refresh so it reacts immediately to a trial
+  // starting or expiring.
   function updateWhiteboardNav() {
-    const link = $('#whiteboardNavLink');
-    if (!link) return;
     const hasAccess = Boolean(state.user && state.user.limits && state.user.limits.whiteboard);
-    link.style.display = hasAccess ? '' : 'none';
+    const boardLink = $('#whiteboardNavLink');
+    if (boardLink) boardLink.style.display = hasAccess ? '' : 'none';
+    const teamLink = $('#teamNavLink');
+    if (teamLink) teamLink.style.display = hasAccess ? '' : 'none';
   }
 
   function openAuth(mode) {

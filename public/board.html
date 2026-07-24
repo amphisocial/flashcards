@@ -9,22 +9,30 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20260709-multipage" />
-  <link rel="stylesheet" href="/board.css?v=1" />
+  <link rel="stylesheet" href="/board.css?v=2" />
 </head>
 <body data-page="board">
   <div class="board-shell" id="boardShell">
     <header class="board-topbar">
-      <a class="brand" href="/app" aria-label="Athena Flashcards home">
+      <a class="brand" href="/boards" aria-label="Back to your boards">
         <span class="brand-mark">A</span>
         <span><strong>Athena</strong> Whiteboard</span>
       </a>
 
       <div class="board-title" id="boardTitle">Loading…</div>
+      <span class="board-badge" id="boardBadge" style="display:none"></span>
+
+      <div class="board-topbar-actions" id="ownerActions" style="display:none">
+        <button class="btn ghost small" id="saveBtn">Save</button>
+        <button class="btn ghost small" id="shareToggleBtn">Share</button>
+        <button class="btn primary small" id="liveToggleBtn">Go live</button>
+        <button class="btn ghost small" id="viewersBtn">Viewers (<span id="viewerCount">0</span>)</button>
+      </div>
 
       <div class="board-topbar-actions">
         <span class="board-status" id="boardStatus">Connecting…</span>
         <button class="btn ghost" id="fullscreenBtn" title="Full screen">⤢ Full screen</button>
-        <a class="btn ghost" href="/app">Exit</a>
+        <a class="btn ghost" href="/boards">Exit</a>
       </div>
     </header>
 
@@ -33,6 +41,7 @@
         <div class="tool-group" role="group" aria-label="Drawing tools">
           <button class="tool-btn active" data-tool="pen" title="Pen">✏️</button>
           <button class="tool-btn" data-tool="shape" title="Draw &amp; snap shape">◻︎</button>
+          <button class="tool-btn" data-tool="select" title="Select an equation to plot">⬚</button>
           <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
         </div>
 
@@ -57,8 +66,10 @@
         <div class="tool-group ai-group">
           <span class="section-kicker">Smart AI</span>
           <button class="btn primary small" id="explainBtn">Explain what's on the board</button>
+          <p class="tool-hint">Or pick the <strong>select</strong> tool, draw a box around an equation, and hit Plot.</p>
+          <button class="btn soft small" id="plotSelectionBtn" style="display:none">Plot selection</button>
           <form id="plotForm" class="plot-form">
-            <input type="text" id="plotInput" placeholder="Plot a function, e.g. y = x^2 - 3" />
+            <input type="text" id="plotInput" placeholder="Plot a function, e.g. y = 4x + 3" />
             <button type="submit" class="btn soft small">Plot</button>
           </form>
         </div>
@@ -76,6 +87,13 @@
           </div>
           <div class="ai-panel-body" id="aiPanelBody"></div>
         </div>
+        <div class="viewers-panel" id="viewersPanel" style="display:none">
+          <div class="ai-panel-header">
+            <span>Currently watching</span>
+            <button class="ai-panel-close" id="viewersPanelClose" aria-label="Close">×</button>
+          </div>
+          <div class="ai-panel-body" id="viewersPanelBody"></div>
+        </div>
       </main>
     </div>
   </div>
@@ -83,6 +101,6 @@
   <div class="toast" id="toast"></div>
 
   <script src="/common.js?v=20260709-multipage"></script>
-  <script src="/board.js?v=1"></script>
+  <script src="/board.js?v=2"></script>
 </body>
 </html>

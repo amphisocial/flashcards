@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Whiteboard | Athena Flashcards</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260709-multipage" />
+</head>
+<body data-page="board-list">
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Athena Flashcards home">
+        <span class="brand-mark">A</span>
+        <span><strong>Athena</strong> Flashcards</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/app">Create</a>
+        <a href="/library">Your Library</a>
+        <a href="/boards" class="active" id="whiteboardNavLink" style="display:none">Whiteboard</a>
+        <a href="/team" id="teamNavLink" style="display:none">Team</a>
+        <a href="/#pricing">Pricing</a>
+      </nav>
+      <div class="auth-area" id="authArea"></div>
+    </header>
+
+    <main class="app-page">
+      <!-- Teacher view: saved boards + New -->
+      <section class="panel" id="teacherView" style="display:none;">
+        <div class="panel-header">
+          <div>
+            <span class="section-kicker">Whiteboard</span>
+            <h2>Your boards</h2>
+          </div>
+          <button class="btn primary" id="newBoardBtn">+ New board</button>
+        </div>
+        <p style="color:var(--muted); margin-bottom:16px;">
+          You can save several boards but only broadcast one at a time — going live on a board
+          automatically takes any other board off live.
+        </p>
+        <div id="teacherBoardList"></div>
+      </section>
+
+      <!-- Non-teacher view: find a currently-live shared board -->
+      <section class="panel" id="viewerView" style="display:none;">
+        <div class="panel-header">
+          <div>
+            <span class="section-kicker">Whiteboard</span>
+            <h2>Live boards</h2>
+          </div>
+          <button class="btn ghost" id="refreshLive">Refresh</button>
+        </div>
+        <div id="liveBoardList"></div>
+      </section>
+
+      <!-- Neither teacher nor invited: upgrade prompt -->
+      <section class="panel" id="upgradeView" style="display:none;">
+        <div class="panel-header">
+          <div>
+            <span class="section-kicker">Whiteboard</span>
+            <h2>Not available yet</h2>
+          </div>
+        </div>
+        <p style="color:var(--muted);">The whiteboard is a Teams-plan feature. Start a free 7-day Teams trial to try it, or ask a teacher to invite you to their team.</p>
+        <a class="btn primary" href="/#pricing">See plans</a>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/common.js?v=20260709-multipage"></script>
+  <script src="/board-list.js?v=1"></script>
+</body>
+</html>

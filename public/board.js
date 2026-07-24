@@ -1,19 +1,22 @@
 /*
- * Athena Whiteboard client (Phase 1)
- * One board per teacher; viewers are read-only and get the teacher's
- * strokes live over WebSocket. Two "smart" AI actions: explain what's on
- * the board (vision call to the server) and plot a typed math function
- * (pure client-side, no AI call, evaluated with a small safe parser —
- * never eval()/Function() on text that came from another user).
+ * Athena Whiteboard client (Phase 1+)
+ * One teacher, several saved boards, only one live at a time. Viewers are
+ * read-only and only ever see a board that is both shared and live. Smart
+ * AI features: explain what's on the board (vision call), plot a typed
+ * function (pure client-side math, safe parser, never eval/Function on
+ * text from another user), and "select an equation, hit Plot" (crops the
+ * selection, a vision call extracts just the equation text, which is then
+ * re-validated by the same safe parser before it's ever rendered).
  */
 (() => {
   const { $, $$, escapeHtml, setStatus, api, refreshMe } = window.AppCommon;
 
-  const teacherId = window.location.pathname.split('/').pop();
+  const boardIdValue = window.location.pathname.split('/').pop();
   const canvas = $('#boardCanvas');
   const ctx = canvas.getContext('2d');
 
   let isOwner = false;
+  let boardMeta = { title: '', shared: false, isLive: false };
   let strokes = [];
   let ws = null;
   let reconnectTimer = null;
@@ -21,6 +24,7 @@
   const tool = { name: 'pen', color: '#eef6ff', size: 3 };
   let drawing = false;
   let currentPoints = [];
+  let selectionRect = null; // {x1,y1,x2,y2} in canvas CSS pixels, for the 'select' tool
 
   // ---- Canvas sizing (HiDPI-aware, fills remaining viewport) -------------
   function resizeCanvas() {
@@ -93,14 +97,25 @@
     const rect = wrap.getBoundingClientRect();
     ctx.clearRect(0, 0, rect.width, rect.height);
     strokes.forEach(drawStroke);
+    if (selectionRect) drawSelectionOverlay();
+  }
+
+  function drawSelectionOverlay() {
+    const { x1, y1, x2, y2 } = selectionRect;
+    ctx.save();
+    ctx.strokeStyle = '#14d9c4';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+    ctx.restore();
   }
 
   // ---- Shape recognition ---------------------------------------------------
-  // Rough heuristic classifier for a single freehand stroke: fits the stroke
-  // to a bounding box + endpoint-closure test, then picks the simplest shape
-  // that reasonably matches. This is intentionally simple for Phase 1 (no ML
-  // model) — good enough for "draw a wobbly circle/box/triangle, get a clean
-  // one", matching the basic version of the iFlytek-style demo.
+  // Classifies a single freehand stroke as line / circle / triangle /
+  // rectangle. No ML model for Phase 1 — instead: build the stroke's convex
+  // hull (throws out inward jitter/noise entirely), simplify that hull with
+  // Ramer-Douglas-Peucker to collapse near-straight runs into single edges,
+  // then classify by how many corners survive simplification.
   function recognizeShape(points) {
     if (points.length < 3) return null;
     const xs = points.map((p) => p.x);
@@ -112,35 +127,31 @@
     const end = points[points.length - 1];
     const closeGap = Math.hypot(end.x - start.x, end.y - start.y);
     const isClosed = closeGap < Math.max(w, h) * 0.25 + 12;
-
-    // Straight line: low bounding-box "fill" relative to its diagonal.
     const diag = Math.hypot(w, h);
-    if (!isClosed && diag > 40) {
-      const straightness = pathLength(points) / (diag || 1);
-      if (straightness < 1.15) {
-        return { type: 'line', points: [start, end] };
+
+    if (!isClosed) {
+      if (diag > 40) {
+        const straightness = pathLength(points) / (diag || 1);
+        if (straightness < 1.15) return { type: 'line', points: [start, end] };
       }
+      return null;
     }
+    if (w < 20 || h < 20) return null;
 
-    if (!isClosed || w < 20 || h < 20) return null;
-
-    // Circle-ish: compare distances from centroid to a constant radius.
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    const r = (w + h) / 4;
     const radii = points.map((p) => Math.hypot(p.x - cx, p.y - cy));
     const avgR = radii.reduce((a, b) => a + b, 0) / radii.length;
     const variance = radii.reduce((a, b) => a + Math.abs(b - avgR), 0) / radii.length;
     const roundness = variance / (avgR || 1);
-    if (roundness < 0.22 && Math.abs(w - h) / Math.max(w, h) < 0.4) {
+    if (roundness < 0.05 && Math.abs(w - h) / Math.max(w, h) < 0.35) {
       return { type: 'circle', cx, cy, r: avgR };
     }
 
-    // Triangle-ish: approximate with 3 dominant corners via a simple convex
-    // hull corner pick (cheap heuristic, not a full polygon-fit algorithm).
-    const corners = threeDominantCorners(points);
-    if (corners) return { type: 'triangle', points: corners };
+    const hull = convexHull(points);
+    if (hull.length < 3) return { type: 'rectangle', x: minX, y: minY, w, h };
+    const simplified = simplifyClosedPolygon(hull, diag * 0.06);
 
-    // Default: rectangle from the bounding box.
+    if (simplified.length === 3) return { type: 'triangle', points: simplified };
     return { type: 'rectangle', x: minX, y: minY, w, h };
   }
 
@@ -150,35 +161,84 @@
     return total;
   }
 
-  function threeDominantCorners(points) {
-    // Pick the 3 points farthest from the stroke's centroid and spread
-    // roughly 120° apart — a cheap stand-in for real corner detection.
-    const cx = points.reduce((a, p) => a + p.x, 0) / points.length;
-    const cy = points.reduce((a, p) => a + p.y, 0) / points.length;
-    const withAngle = points.map((p) => ({ ...p, angle: Math.atan2(p.y - cy, p.x - cx), dist: Math.hypot(p.x - cx, p.y - cy) }));
-    const buckets = [[], [], []];
-    withAngle.forEach((p) => {
-      const idx = Math.floor(((p.angle + Math.PI) / (2 * Math.PI)) * 3) % 3;
-      buckets[idx].push(p);
-    });
-    if (buckets.some((b) => b.length === 0)) return null;
-    return buckets.map((bucket) => bucket.reduce((best, p) => (p.dist > best.dist ? p : best), bucket[0]));
+  function convexHull(points) {
+    const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [];
+    for (const p of pts) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper = [];
+    for (let i = pts.length - 1; i >= 0; i -= 1) {
+      const p = pts[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    upper.pop();
+    lower.pop();
+    return lower.concat(upper);
+  }
+
+  function perpendicularDistance(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const magSq = dx * dx + dy * dy;
+    if (magSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+    const u = ((p.x - a.x) * dx + (p.y - a.y) * dy) / magSq;
+    const closestX = a.x + u * dx, closestY = a.y + u * dy;
+    return Math.hypot(p.x - closestX, p.y - closestY);
+  }
+
+  function rdp(pts, eps) {
+    if (pts.length < 3) return pts;
+    let maxD = 0, idx = 0;
+    const first = pts[0], last = pts[pts.length - 1];
+    for (let i = 1; i < pts.length - 1; i += 1) {
+      const d = perpendicularDistance(pts[i], first, last);
+      if (d > maxD) { maxD = d; idx = i; }
+    }
+    if (maxD > eps) {
+      const left = rdp(pts.slice(0, idx + 1), eps);
+      const right = rdp(pts.slice(idx), eps);
+      return left.slice(0, -1).concat(right);
+    }
+    return [first, last];
+  }
+
+  function simplifyClosedPolygon(hull, eps) {
+    if (hull.length < 3) return hull;
+    const closed = [...hull, hull[0]];
+    const simplified = rdp(closed, eps);
+    simplified.pop();
+    return simplified;
   }
 
   // ---- Pointer handling (owner only) ---------------------------------------
   function bindDrawing() {
     canvas.addEventListener('pointerdown', (event) => {
       if (!isOwner) return;
+      const point = pointerPos(event);
+      if (tool.name === 'select') {
+        selectionRect = { x1: point.x, y1: point.y, x2: point.x, y2: point.y };
+        drawing = true;
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
       drawing = true;
-      currentPoints = [pointerPos(event)];
+      currentPoints = [point];
       canvas.setPointerCapture(event.pointerId);
     });
 
     canvas.addEventListener('pointermove', (event) => {
       if (!isOwner || !drawing) return;
       const point = pointerPos(event);
+      if (tool.name === 'select') {
+        selectionRect.x2 = point.x;
+        selectionRect.y2 = point.y;
+        redrawAll();
+        return;
+      }
       currentPoints.push(point);
-      // Live-preview the in-progress stroke locally without persisting yet.
       redrawAll();
       drawStroke({ tool: tool.name, color: tool.color, size: tool.size, points: currentPoints });
     });
@@ -186,8 +246,16 @@
     const finish = () => {
       if (!isOwner || !drawing) return;
       drawing = false;
-      if (currentPoints.length < 2) { currentPoints = []; return; }
 
+      if (tool.name === 'select') {
+        const hasArea = selectionRect && Math.abs(selectionRect.x2 - selectionRect.x1) > 15 && Math.abs(selectionRect.y2 - selectionRect.y1) > 15;
+        $('#plotSelectionBtn').style.display = hasArea ? '' : 'none';
+        if (!hasArea) selectionRect = null;
+        redrawAll();
+        return;
+      }
+
+      if (currentPoints.length < 2) { currentPoints = []; return; }
       if (tool.name === 'shape') {
         const shape = recognizeShape(currentPoints);
         const stroke = { tool: 'pen', color: tool.color, size: tool.size, points: currentPoints, shape: shape || undefined };
@@ -198,8 +266,12 @@
       }
       currentPoints = [];
     };
+    // Deliberately NOT bound to 'pointerleave': setPointerCapture (above)
+    // already keeps pointermove events routed to the canvas even once the
+    // cursor moves past its edge, so a stroke can freely leave and re-enter
+    // the canvas mid-draw.
     canvas.addEventListener('pointerup', finish);
-    canvas.addEventListener('pointerleave', finish);
+    canvas.addEventListener('pointercancel', finish);
   }
 
   function commitStroke(stroke, isShape) {
@@ -214,6 +286,7 @@
       button.addEventListener('click', () => {
         tool.name = button.dataset.tool;
         $$('.tool-btn').forEach((b) => b.classList.toggle('active', b === button));
+        if (tool.name !== 'select') { selectionRect = null; $('#plotSelectionBtn').style.display = 'none'; redrawAll(); }
       });
     });
     $$('.swatch').forEach((button) => {
@@ -228,8 +301,11 @@
       if (!isOwner) return;
       if (!confirm('Clear the whole board for everyone viewing it?')) return;
       strokes = [];
+      selectionRect = null;
       redrawAll();
       sendWs({ type: 'board:clear' });
+      $('#aiPanelBody').innerHTML = '';
+      $('#aiPanel').style.display = 'none';
     });
 
     $('#fullscreenBtn').addEventListener('click', () => {
@@ -239,8 +315,14 @@
     });
 
     $('#aiPanelClose').addEventListener('click', () => { $('#aiPanel').style.display = 'none'; });
+    $('#viewersPanelClose')?.addEventListener('click', () => { $('#viewersPanel').style.display = 'none'; });
+    $('#viewersBtn')?.addEventListener('click', () => {
+      const panel = $('#viewersPanel');
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    });
 
     $('#explainBtn').addEventListener('click', explainBoard);
+    $('#plotSelectionBtn').addEventListener('click', plotSelection);
     $('#plotForm').addEventListener('submit', (event) => {
       event.preventDefault();
       const expression = $('#plotInput').value.trim();
@@ -248,12 +330,70 @@
       plotExpression(expression, true);
       $('#plotInput').value = '';
     });
+
+    $('#saveBtn')?.addEventListener('click', saveBoard);
+    $('#shareToggleBtn')?.addEventListener('click', toggleShare);
+    $('#liveToggleBtn')?.addEventListener('click', toggleLive);
   }
 
   function applyOwnerUI() {
     $('#boardToolbar').style.display = isOwner ? '' : 'none';
     $('#readonlyBanner').style.display = isOwner ? 'none' : '';
+    $('#ownerActions').style.display = isOwner ? 'flex' : 'none';
     canvas.style.cursor = isOwner ? 'crosshair' : 'default';
+    updateBadge();
+  }
+
+  function updateBadge() {
+    const badge = $('#boardBadge');
+    if (!isOwner) { badge.style.display = 'none'; return; }
+    badge.style.display = '';
+    if (boardMeta.isLive) { badge.textContent = 'Live'; badge.className = 'board-badge is-live'; }
+    else if (boardMeta.shared) { badge.textContent = 'Shared'; badge.className = 'board-badge is-shared'; }
+    else { badge.textContent = 'Private'; badge.className = 'board-badge'; }
+    $('#shareToggleBtn').textContent = boardMeta.shared ? 'Unshare' : 'Share';
+    $('#liveToggleBtn').textContent = boardMeta.isLive ? 'Stop live' : 'Go live';
+  }
+
+  async function saveBoard() {
+    try {
+      await api(`/api/board/${boardIdValue}/save`, { method: 'POST', body: JSON.stringify({}) });
+      setStatus('Board saved.', 'success');
+    } catch (error) {
+      setStatus(error.message, 'error');
+    }
+  }
+
+  async function toggleShare() {
+    try {
+      const data = await api(`/api/board/${boardIdValue}/share-toggle`, { method: 'POST', body: JSON.stringify({ shared: !boardMeta.shared }) });
+      boardMeta.shared = data.board.shared;
+      updateBadge();
+      setStatus(boardMeta.shared ? 'Shared with your team.' : 'No longer shared.', 'success');
+    } catch (error) {
+      setStatus(error.message, 'error');
+    }
+  }
+
+  async function toggleLive() {
+    try {
+      const endpoint = boardMeta.isLive ? 'stop-live' : 'go-live';
+      const data = await api(`/api/board/${boardIdValue}/${endpoint}`, { method: 'POST', body: JSON.stringify({}) });
+      boardMeta.isLive = data.board.isLive;
+      updateBadge();
+      setStatus(boardMeta.isLive ? 'You are live. Only one of your boards can be live at a time.' : 'Stopped broadcasting.', 'success');
+    } catch (error) {
+      setStatus(error.message, 'error');
+    }
+  }
+
+  function updateViewers(viewers) {
+    $('#viewerCount').textContent = viewers.length;
+    const body = $('#viewersPanelBody');
+    if (!viewers.length) { body.innerHTML = '<p class="ai-note">No one is watching right now.</p>'; return; }
+    body.innerHTML = viewers.map((v) => `
+      <div class="viewer-row"><span class="viewer-dot"></span>${escapeHtml(v.name)}</div>
+    `).join('');
   }
 
   // ---- AI: explain what's on the board (vision call via server) -----------
@@ -273,13 +413,40 @@
     }
   }
 
+  // ---- AI: circle an equation, hit Plot ------------------------------------
+  function plotSelection() {
+    if (!isOwner || !selectionRect) return;
+    const x = Math.min(selectionRect.x1, selectionRect.x2);
+    const y = Math.min(selectionRect.y1, selectionRect.y2);
+    const w = Math.abs(selectionRect.x2 - selectionRect.x1);
+    const h = Math.abs(selectionRect.y2 - selectionRect.y1);
+
+    const crop = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    crop.width = Math.round(w * dpr);
+    crop.height = Math.round(h * dpr);
+    const cctx = crop.getContext('2d');
+    // White background so handwriting in a dark-on-transparent stroke color
+    // is still legible to the vision model (canvas strokes have no fill).
+    cctx.fillStyle = '#0a1526';
+    cctx.fillRect(0, 0, crop.width, crop.height);
+    cctx.drawImage(canvas, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, crop.width, crop.height);
+
+    const snapshot = crop.toDataURL('image/png');
+    sendWs({ type: 'ai:read-equation', snapshot });
+    setStatus('Reading the selected equation…', '');
+    selectionRect = null;
+    $('#plotSelectionBtn').style.display = 'none';
+    redrawAll();
+  }
+
   // ---- AI: plot a typed function (client-side math, no AI call) -----------
   // Safe hand-rolled recursive-descent parser/evaluator — deliberately NOT
   // eval()/Function(), because plotted expressions are broadcast to other
-  // users' browsers (viewers), and a teacher's typed text must never be
+  // users' browsers (viewers), and text from another user must never be
   // treated as executable code in someone else's session.
   function compileExpression(raw) {
-    const source = String(raw).split('=').pop().trim(); // allow "y = x^2 - 3" or just "x^2 - 3"
+    const source = String(raw).split('=').pop().trim();
     let pos = 0;
     const CONSTANTS = { pi: Math.PI, e: Math.E };
     const FUNCS = {
@@ -291,13 +458,20 @@
     function peek() { return source[pos]; }
     function skipWs() { while (pos < source.length && /\s/.test(source[pos])) pos += 1; }
 
+    function canStartFactor() {
+      skipWs();
+      const c = peek();
+      return c === '(' || (c !== undefined && /[a-zA-Z0-9]/.test(c));
+    }
+
     function parseExpr() {
       let value = parseTerm();
       skipWs();
       while (peek() === '+' || peek() === '-') {
         const op = source[pos]; pos += 1;
         const rhs = parseTerm();
-        value = op === '+' ? (x) => value(x) + rhs(x) : (x) => value(x) - rhs(x);
+        const prev = value;
+        value = op === '+' ? (x) => prev(x) + rhs(x) : (x) => prev(x) - rhs(x);
         skipWs();
       }
       return value;
@@ -306,10 +480,17 @@
     function parseTerm() {
       let value = parseFactor();
       skipWs();
-      while (peek() === '*' || peek() === '/') {
-        const op = source[pos]; pos += 1;
-        const rhs = parseFactor();
-        value = op === '*' ? (x) => value(x) * rhs(x) : (x) => value(x) / rhs(x);
+      while (peek() === '*' || peek() === '/' || canStartFactor()) {
+        if (peek() === '*' || peek() === '/') {
+          const op = source[pos]; pos += 1;
+          const rhs = parseFactor();
+          const prev = value;
+          value = op === '*' ? (x) => prev(x) * rhs(x) : (x) => prev(x) / rhs(x);
+        } else {
+          const rhs = parseFactor();
+          const prev = value;
+          value = (x) => prev(x) * rhs(x);
+        }
         skipWs();
       }
       return value;
@@ -320,7 +501,7 @@
       skipWs();
       if (peek() === '^') {
         pos += 1;
-        const exponent = parseFactor(); // right-associative
+        const exponent = parseFactor();
         return (x) => Math.pow(base(x), exponent(x));
       }
       return base;
@@ -418,7 +599,6 @@
       py: h - ((y - yMin) / (yMax - yMin)) * h
     });
 
-    // Axes
     gctx.strokeStyle = 'rgba(255,255,255,0.18)';
     gctx.lineWidth = 1;
     const zeroX = toPx(0, 0).px, zeroY = toPx(0, 0).py;
@@ -427,7 +607,6 @@
     if (zeroY >= 0 && zeroY <= h) { gctx.moveTo(0, zeroY); gctx.lineTo(w, zeroY); }
     gctx.stroke();
 
-    // Curve
     gctx.strokeStyle = '#14d9c4';
     gctx.lineWidth = 2;
     gctx.beginPath();
@@ -474,7 +653,7 @@
 
   function connectWs() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws/board?teacherId=${encodeURIComponent(teacherId)}`);
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/board?boardId=${encodeURIComponent(boardIdValue)}`);
 
     ws.addEventListener('open', () => setStatusPill('Live', 'live'));
 
@@ -484,6 +663,8 @@
 
       if (msg.type === 'sync') {
         strokes = msg.board.strokes || [];
+        boardMeta = { title: msg.board.title, shared: msg.board.shared, isLive: msg.board.isLive };
+        updateBadge();
         redrawAll();
         (msg.board.aiNotes || []).slice(-10).forEach(addAiNote);
         return;
@@ -500,6 +681,10 @@
       }
       if (msg.type === 'ai:result') {
         addAiNote(msg.note);
+        return;
+      }
+      if (msg.type === 'presence') {
+        updateViewers(msg.viewers || []);
         return;
       }
       if (msg.type === 'error') {
@@ -520,10 +705,11 @@
   async function init() {
     await refreshMe();
     try {
-      const data = await api(`/api/board/${teacherId}`);
+      const data = await api(`/api/board/${boardIdValue}`);
       isOwner = Boolean(data.isOwner);
       strokes = data.board.strokes || [];
-      $('#boardTitle').textContent = isOwner ? 'Your whiteboard' : `${data.teacher.name}'s whiteboard`;
+      boardMeta = { title: data.board.title, shared: data.board.shared, isLive: data.board.isLive };
+      $('#boardTitle').textContent = isOwner ? data.board.title : `${data.teacher.name}'s whiteboard`;
     } catch (error) {
       setStatus(error.message, 'error');
       $('#boardTitle').textContent = 'Whiteboard unavailable';

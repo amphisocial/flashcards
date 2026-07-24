@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your Team | Athena Flashcards</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260709-multipage" />
+</head>
+<body data-page="team">
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Athena Flashcards home">
+        <span class="brand-mark">A</span>
+        <span><strong>Athena</strong> Flashcards</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/app">Create</a>
+        <a href="/library">Your Library</a>
+        <a href="/boards" id="whiteboardNavLink" style="display:none">Whiteboard</a>
+        <a href="/team" class="active" id="teamNavLink" style="display:none">Team</a>
+        <a href="/#pricing">Pricing</a>
+      </nav>
+      <div class="auth-area" id="authArea"></div>
+    </header>
+
+    <main class="app-page">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <span class="section-kicker">Teams plan</span>
+            <h2>Your team roster</h2>
+          </div>
+          <span class="usage-pill" id="rosterPill">Loading…</span>
+        </div>
+
+        <div id="teamGate" style="display:none; padding:20px 0;">
+          <p style="color:var(--muted);">The team roster is a Teams-plan feature. Start a free 7-day Teams trial from Pricing to try it.</p>
+          <a class="btn primary" href="/#pricing">See plans</a>
+        </div>
+
+        <div id="teamBody" style="display:none;">
+          <p style="color:var(--muted); margin-bottom:16px;">
+            Invite up to 30 people by email. Once someone's on your roster, anything you mark
+            <strong>Shared</strong> — flashcard sets, slide decks, quizzes, or a live whiteboard — becomes visible to them
+            automatically when they log in. No need to invite them separately for each item.
+          </p>
+
+          <form id="inviteForm" style="display:flex; gap:10px; margin-bottom:20px;">
+            <input id="inviteEmails" placeholder="Add emails, separated by commas" style="flex:1; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,0.06); color:var(--text); padding:10px 14px;" />
+            <button type="submit" class="btn primary" id="inviteSubmit">Send invites</button>
+          </form>
+
+          <div id="rosterList"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/common.js?v=20260709-multipage"></script>
+  <script src="/team.js?v=1"></script>
+</body>
+</html>
