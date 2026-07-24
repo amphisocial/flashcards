@@ -38,6 +38,10 @@
 
   let replay = { active: false, index: 0, timer: null };
   let lastAnalysis = null;
+  const analyses = [];
+  const questions = [];
+  let liveAnalyze = false;
+  let liveAnalyzeTimer = null;
 
   const page = () => board.pages[pageIndex];
   const pageId = () => (page() ? page().id : null);
@@ -166,10 +170,10 @@
     ctx.beginPath();
     if (shape.type === 'circle') ctx.arc(shape.cx, shape.cy, shape.r, 0, Math.PI * 2);
     else if (shape.type === 'rectangle') ctx.rect(shape.x, shape.y, shape.w, shape.h);
-    else if (shape.type === 'triangle') {
-      ctx.moveTo(shape.points[0].x, shape.points[0].y);
-      ctx.lineTo(shape.points[1].x, shape.points[1].y);
-      ctx.lineTo(shape.points[2].x, shape.points[2].y);
+    else if (shape.type === 'triangle' || shape.type === 'polygon') {
+      const pts = shape.points;
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.closePath();
     } else if (shape.type === 'line') {
       ctx.moveTo(shape.points[0].x, shape.points[0].y);
@@ -246,69 +250,95 @@
   function redraw() { render(replay.active ? replay.index : undefined); }
 
   // ---- Graph objects (plotted on the board itself) ------------------------
+  // A graph object holds `curves` (each an expression + colour) and a shared
+  // `params` map ({A, B, ...}). Curves plot in the same coordinate frame so
+  // multiple functions overlay; params let sliders move a curve live. An
+  // older single-`expression` graph is upgraded on the fly.
+  const CURVE_COLORS = ['#14d9c4', '#ff6b7a', '#7c5cff', '#ffcc66', '#5bd0ff'];
+
+  function graphCurves(obj) {
+    if (obj.curves && obj.curves.length) return obj.curves;
+    return [{ expression: obj.expression || 'y = x', color: CURVE_COLORS[0] }];
+  }
+
   function drawGraphObject(obj) {
-    const { x, y, w, h, expression } = obj;
+    const { x, y, w, h } = obj;
+    const params = obj.params || {};
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 1 / view.scale;
-    ctx.stroke();
+    ctx.lineWidth = 1 / view.scale; ctx.stroke();
 
-    let fn;
-    try { fn = compileExpression(expression); }
-    catch (err) {
-      ctx.fillStyle = '#ff6b7a';
-      ctx.font = '13px Inter, sans-serif';
-      ctx.fillText(`Cannot plot: ${err.message}`, x + 10, y + 24);
-      ctx.restore();
-      return;
-    }
+    const xMin = obj.xMin ?? -10, xMax = obj.xMax ?? 10;
+    const curves = graphCurves(obj);
+    const compiled = curves.map((c) => {
+      try { return { fn: compileExpression(c.expression, params), color: c.color, expr: c.expression }; }
+      catch { return null; }
+    });
 
-    const xMin = -10, xMax = 10;
-    const samples = [];
-    for (let i = 0; i <= 220; i += 1) {
-      const wx = xMin + ((xMax - xMin) * i) / 220;
-      let wy; try { wy = fn(wx); } catch { wy = NaN; }
-      samples.push({ x: wx, y: wy });
-    }
-    const ys = samples.map((s) => s.y).filter(Number.isFinite);
-    if (!ys.length) { ctx.restore(); return; }
-    let yMin = Math.min(...ys), yMax = Math.max(...ys);
+    // Shared y-range across all curves so overlaid graphs align.
+    let yMin = Infinity, yMax = -Infinity;
+    const per = [];
+    compiled.forEach((cc) => {
+      if (!cc) { per.push(null); return; }
+      const samples = [];
+      for (let i = 0; i <= 200; i += 1) {
+        const wx = xMin + ((xMax - xMin) * i) / 200;
+        let wy; try { wy = cc.fn(wx); } catch { wy = NaN; }
+        if (Number.isFinite(wy)) { yMin = Math.min(yMin, wy); yMax = Math.max(yMax, wy); }
+        samples.push({ x: wx, y: wy });
+      }
+      per.push({ samples, color: cc.color });
+    });
+    if (!Number.isFinite(yMin)) { yMin = -5; yMax = 5; }
     if (yMin === yMax) { yMin -= 1; yMax += 1; }
     const padY = (yMax - yMin) * 0.12; yMin -= padY; yMax += padY;
 
     const px = (vx) => x + ((vx - xMin) / (xMax - xMin)) * w;
     const py = (vy) => y + h - ((vy - yMin) / (yMax - yMin)) * h;
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    // Axes
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1 / view.scale;
     ctx.beginPath();
     if (0 >= xMin && 0 <= xMax) { ctx.moveTo(px(0), y); ctx.lineTo(px(0), y + h); }
     if (0 >= yMin && 0 <= yMax) { ctx.moveTo(x, py(0)); ctx.lineTo(x + w, py(0)); }
     ctx.stroke();
 
-    ctx.strokeStyle = '#14d9c4';
-    ctx.lineWidth = 2 / view.scale;
-    ctx.beginPath();
-    let started = false;
-    samples.forEach((s) => {
-      if (!Number.isFinite(s.y)) { started = false; return; }
-      const sx = px(s.x), sy = py(s.y);
-      if (sy < y - h || sy > y + 2 * h) { started = false; return; }
-      if (!started) { ctx.moveTo(sx, sy); started = true; } else ctx.lineTo(sx, sy);
+    per.forEach((cv) => {
+      if (!cv) return;
+      ctx.strokeStyle = cv.color;
+      ctx.lineWidth = 2 / view.scale;
+      ctx.beginPath();
+      let started = false;
+      cv.samples.forEach((sm) => {
+        if (!Number.isFinite(sm.y)) { started = false; return; }
+        const sx = px(sm.x), sy = py(sm.y);
+        if (sy < y - h || sy > y + 2 * h) { started = false; return; }
+        if (!started) { ctx.moveTo(sx, sy); started = true; } else ctx.lineTo(sx, sy);
+      });
+      ctx.stroke();
     });
-    ctx.stroke();
 
-    ctx.fillStyle = 'rgba(238,246,255,0.85)';
-    ctx.font = '600 13px Inter, sans-serif';
-    ctx.fillText(expression, x + 10, y + 18);
+    // Labels (expression per curve, plus current param values)
+    ctx.font = '600 12px Inter, sans-serif';
+    curves.forEach((c, i) => {
+      ctx.fillStyle = compiled[i] ? c.color : '#ff6b7a';
+      ctx.fillText(c.expression, x + 10, y + 16 + i * 15);
+    });
+    const paramKeys = Object.keys(params);
+    if (paramKeys.length) {
+      ctx.fillStyle = 'rgba(238,246,255,0.7)';
+      ctx.fillText(paramKeys.map((k) => `${k}=${(+params[k]).toFixed(2)}`).join('  '), x + 10, y + h - 8);
+    }
     ctx.restore();
   }
 
   // ---- Safe expression parser --------------------------------------------
   // Hand-rolled on purpose: plotted expressions are broadcast to other
   // people's browsers, so they must never reach eval()/Function().
-  function compileExpression(raw) {
+  function compileExpression(raw, params = {}) {
     const source = String(raw).split('=').pop().trim();
     let pos = 0;
     const CONSTANTS = { pi: Math.PI, e: Math.E };
@@ -360,6 +390,12 @@
         const name = ident[0].toLowerCase(); pos += ident[0].length;
         if (name === 'x') return (x) => x;
         if (CONSTANTS[name] !== undefined) return () => CONSTANTS[name];
+        // Single-letter (or short) parameters like A, B, k are read live from
+        // the params map, so a slider can change them without recompiling.
+        if (params && Object.prototype.hasOwnProperty.call(params, ident[0])) {
+          const key = ident[0];
+          return () => Number(params[key]) || 0;
+        }
         if (FUNCS[name]) {
           skipWs(); if (peek() !== '(') throw new Error(`Expected "(" after ${name}`);
           pos += 1; const arg = parseExpr(); skipWs();
@@ -410,14 +446,92 @@
     // few corners at coarse epsilon, while a square holds 4 across the range.
     const corners = Math.min(...[0.04, 0.06, 0.09, 0.12].map((f) => simplifyClosed(hull, diag * f).length));
 
-    if (circularity > 0.82 && corners >= 4 && Math.abs(w - h) / Math.max(w, h) < 0.45) {
+    // Simplify the hull to a stable vertex set, then count REAL corners by
+    // interior turn angle. Corner count is the reliable side-count signal;
+    // circularity only decides the genuinely-ambiguous circle-vs-many-sided
+    // case. This replaced a version that had no branch above 3 sides, so
+    // pentagons/hexagons/rhombi all collapsed to "rectangle".
+    let poly = simplifyClosed(hull, diag * 0.035);
+    if (poly.length < 3) return { type: 'rectangle', x: minX, y: minY, w, h };
+    const sides = countCorners(poly);
+
+    if (circularity > 0.93 && sides >= 7) {
       return { type: 'circle', cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, r: (w + h) / 4 };
     }
-    if (corners <= 3) {
-      const tri = simplifyClosed(hull, diag * 0.06);
-      if (tri.length === 3) return { type: 'triangle', points: tri };
+    if (sides === 3) { const tri = collapseToCorners(poly, 3); return { type: 'triangle', points: tri }; }
+    if (sides === 4) {
+      const quad = collapseToCorners(poly, 4);
+      if (isRhombus(quad, minX, minY, w, h)) return { type: 'polygon', points: quad, sides: 4, name: 'rhombus' };
+      return { type: 'rectangle', x: minX, y: minY, w, h };
     }
+    if (sides >= 5 && sides <= 12) {
+      return { type: 'polygon', points: regularizePolygon(collapseToCorners(poly, sides)), sides, name: POLY_NAMES[sides] || `${sides}-gon` };
+    }
+    // Fallback: rounded blob that isn't clearly circular.
+    if (circularity > 0.85) return { type: 'circle', cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, r: (w + h) / 4 };
     return { type: 'rectangle', x: minX, y: minY, w, h };
+  }
+
+  // Count vertices whose direction change exceeds ~20deg (a real corner).
+  function countCorners(poly) {
+    const n = poly.length; let corners = 0;
+    for (let i = 0; i < n; i += 1) {
+      const a = poly[(i - 1 + n) % n], b = poly[i], c = poly[(i + 1) % n];
+      const v1x = b.x - a.x, v1y = b.y - a.y, v2x = c.x - b.x, v2y = c.y - b.y;
+      const m1 = Math.hypot(v1x, v1y), m2 = Math.hypot(v2x, v2y);
+      if (m1 < 1e-6 || m2 < 1e-6) continue;
+      const turn = Math.acos(Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (m1 * m2))));
+      if (turn > 0.35) corners += 1;
+    }
+    return corners;
+  }
+
+  // Keep only the `target` sharpest vertices, preserving order, so a hull
+  // with a spurious near-collinear point still yields a clean polygon.
+  function collapseToCorners(poly, target) {
+    if (poly.length <= target) return poly;
+    const n = poly.length;
+    const scored = poly.map((b, i) => {
+      const a = poly[(i - 1 + n) % n], c = poly[(i + 1) % n];
+      const v1x = b.x - a.x, v1y = b.y - a.y, v2x = c.x - b.x, v2y = c.y - b.y;
+      const m1 = Math.hypot(v1x, v1y), m2 = Math.hypot(v2x, v2y);
+      const turn = (m1 < 1e-6 || m2 < 1e-6) ? 0 : Math.acos(Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (m1 * m2))));
+      return { i, turn };
+    }).sort((p, q) => q.turn - p.turn).slice(0, target).sort((p, q) => p.i - q.i);
+    return scored.map((x) => poly[x.i]);
+  }
+
+  const POLY_NAMES = { 5: 'pentagon', 6: 'hexagon', 7: 'heptagon', 8: 'octagon', 9: 'nonagon', 10: 'decagon' };
+
+
+  function isRhombus(quad, minX, minY, w, h) {
+    // Rhombus/diamond: vertices sit near the midpoints of the bounding box
+    // edges rather than its corners.
+    const mids = [
+      { x: minX + w / 2, y: minY }, { x: minX + w, y: minY + h / 2 },
+      { x: minX + w / 2, y: minY + h }, { x: minX, y: minY + h / 2 }
+    ];
+    let nearMid = 0;
+    quad.forEach((p) => {
+      const closest = Math.min(...mids.map((m) => Math.hypot(p.x - m.x, p.y - m.y)));
+      if (closest < Math.max(w, h) * 0.22) nearMid += 1;
+    });
+    return nearMid >= 3;
+  }
+
+  function regularizePolygon(poly) {
+    const cx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+    const cy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
+    const avgR = poly.reduce((s, p) => s + Math.hypot(p.x - cx, p.y - cy), 0) / poly.length;
+    // Preserve the drawn orientation by anchoring on the first vertex's angle.
+    const a0 = Math.atan2(poly[0].y - cy, poly[0].x - cx);
+    const n = poly.length;
+    const out = [];
+    for (let i = 0; i < n; i += 1) {
+      const a = a0 + (i * 2 * Math.PI) / n;
+      out.push({ x: cx + avgR * Math.cos(a), y: cy + avgR * Math.sin(a) });
+    }
+    return out;
   }
   function pathLength(pts) { let t = 0; for (let i = 1; i < pts.length; i += 1) t += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y); return t; }
   function convexHull(points) {
@@ -576,6 +690,7 @@
       currentPoints = [];
       redraw();
       send({ type: shape ? 'stroke:shape' : 'stroke:add', pageId: pageId(), stroke });
+      scheduleLiveAnalyze();
     };
     canvas.addEventListener('pointerup', release);
     canvas.addEventListener('pointercancel', release);
@@ -712,7 +827,9 @@
   function beginMoveObject(w) {
     const obj = objectsAt(w);
     if (!obj) return;
-    movingObject = { obj, dx: w.x - obj.x, dy: w.y - obj.y };
+    movingObject = { obj, dx: w.x - obj.x, dy: w.y - obj.y, moved: false };
+    // Tapping a graph with the move tool opens its live sliders.
+    if (obj.type === 'graph') { activeGraph = obj; openGraphControls(obj); }
   }
   function updateMoveObject(w) {
     if (!movingObject) return;
@@ -934,6 +1051,16 @@
     const empty = body.querySelector('.info-empty');
     if (empty) empty.remove();
     body.prepend(card);
+    analyses.push(a);
+    // Force the panel open for BOTH teacher and students. Students never open
+    // it themselves, so a pushed analysis has to reveal it or it looks like
+    // nothing happened - which is exactly the "attendees don't see Analyze
+    // results" bug. On phones the panel is a bottom sheet, so this also
+    // un-hides it there.
+    openInfoPanel();
+  }
+
+  function openInfoPanel() {
     $('#infoPanel').classList.remove('collapsed');
     localStorage.setItem(PANEL_KEY, '0');
     setTimeout(resizeCanvas, 200);
@@ -956,15 +1083,48 @@
   }
 
   // ---- Plot on the board --------------------------------------------------
-  function plotOnBoard(expression, atRect) {
-    try { compileExpression(expression); }
+  // Pull single-letter constants (A, B, k...) out of an expression so the
+  // graph gets sliders for them. x and known funcs/constants are excluded.
+  function detectParams(expression) {
+    const reserved = new Set(['x', 'e', 'pi', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'exp', 'log', 'ln']);
+    const params = {};
+    const idents = String(expression).match(/[a-zA-Z]+/g) || [];
+    idents.forEach((id) => { if (id.length === 1 && !reserved.has(id.toLowerCase())) params[id] = 1; });
+    return params;
+  }
+
+  function plotOnBoard(expression, atRect, opts = {}) {
+    const params = detectParams(expression);
+    try { compileExpression(expression, params); }
     catch (error) { setStatus(`Cannot plot: ${error.message}`, 'error'); return; }
+
+    // If a graph is currently selected and the user asks to overlay, add the
+    // curve to it instead of making a new graph.
+    if (opts.overlay && activeGraph) {
+      const curves = graphCurves(activeGraph);
+      curves.push({ expression, color: CURVE_COLORS[curves.length % CURVE_COLORS.length] });
+      activeGraph.curves = curves;
+      Object.assign(activeGraph.params = activeGraph.params || {}, params);
+      redraw();
+      send({ type: 'object:update', pageId: pageId(), object: activeGraph });
+      openGraphControls(activeGraph);
+      return;
+    }
+
     const b = visibleWorldBounds();
-    const w = 320, h = 200;
+    const w = 340, h = 220;
     const pos = atRect
       ? { x: Math.max(atRect.x1, atRect.x2) + 20, y: Math.min(atRect.y1, atRect.y2) }
       : { x: b.x1 + (b.x2 - b.x1) / 2 - w / 2, y: b.y1 + (b.y2 - b.y1) / 2 - h / 2 };
-    addObject({ id: `obj_${Math.random().toString(16).slice(2)}`, type: 'graph', x: pos.x, y: pos.y, w, h, expression });
+    const obj = {
+      id: `obj_${Math.random().toString(16).slice(2)}`, type: 'graph',
+      x: pos.x, y: pos.y, w, h,
+      curves: [{ expression, color: CURVE_COLORS[0] }],
+      params
+    };
+    addObject(obj);
+    activeGraph = obj;
+    if (Object.keys(params).length) openGraphControls(obj);
   }
 
   // ---- Snapshots / export -------------------------------------------------
@@ -1013,7 +1173,7 @@
       c.beginPath();
       if (sh.type === 'circle') c.arc(sh.cx, sh.cy, sh.r, 0, Math.PI * 2);
       else if (sh.type === 'rectangle') c.rect(sh.x, sh.y, sh.w, sh.h);
-      else if (sh.type === 'triangle') { c.moveTo(sh.points[0].x, sh.points[0].y); c.lineTo(sh.points[1].x, sh.points[1].y); c.lineTo(sh.points[2].x, sh.points[2].y); c.closePath(); }
+      else if (sh.type === 'triangle' || sh.type === 'polygon') { const pts = sh.points; c.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i += 1) c.lineTo(pts[i].x, pts[i].y); c.closePath(); }
       else if (sh.type === 'line') { c.moveTo(sh.points[0].x, sh.points[0].y); c.lineTo(sh.points[1].x, sh.points[1].y); }
       c.stroke();
     } else {
@@ -1025,6 +1185,38 @@
   }
 
   let allObjects = [];
+  function drawGraphOnExport(c, obj) {
+    const { x, y, w, h } = obj;
+    const params = obj.params || {};
+    c.save();
+    c.fillStyle = 'rgba(0,0,0,0.4)';
+    c.beginPath(); c.roundRect(x, y, w, h, 10); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 1; c.stroke();
+    const xMin = obj.xMin ?? -10, xMax = obj.xMax ?? 10;
+    const curves = (obj.curves && obj.curves.length) ? obj.curves : [{ expression: obj.expression || 'y=x', color: '#14d9c4' }];
+    const compiled = curves.map((cu) => { try { return { fn: compileExpression(cu.expression, params), color: cu.color, expr: cu.expression }; } catch { return null; } });
+    let yMin = Infinity, yMax = -Infinity; const per = [];
+    compiled.forEach((cc) => {
+      if (!cc) { per.push(null); return; }
+      const s2 = [];
+      for (let i = 0; i <= 200; i += 1) { const wx = xMin + ((xMax - xMin) * i) / 200; let wy; try { wy = cc.fn(wx); } catch { wy = NaN; } if (Number.isFinite(wy)) { yMin = Math.min(yMin, wy); yMax = Math.max(yMax, wy); } s2.push({ x: wx, y: wy }); }
+      per.push({ samples: s2, color: cc.color });
+    });
+    if (!Number.isFinite(yMin)) { yMin = -5; yMax = 5; }
+    if (yMin === yMax) { yMin -= 1; yMax += 1; }
+    const padY = (yMax - yMin) * 0.12; yMin -= padY; yMax += padY;
+    const px = (vx) => x + ((vx - xMin) / (xMax - xMin)) * w;
+    const py = (vy) => y + h - ((vy - yMin) / (yMax - yMin)) * h;
+    c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 1; c.beginPath();
+    if (0 >= xMin && 0 <= xMax) { c.moveTo(px(0), y); c.lineTo(px(0), y + h); }
+    if (0 >= yMin && 0 <= yMax) { c.moveTo(x, py(0)); c.lineTo(x + w, py(0)); }
+    c.stroke();
+    per.forEach((cv) => { if (!cv) return; c.strokeStyle = cv.color; c.lineWidth = 2; c.beginPath(); let st = false; cv.samples.forEach((sm) => { if (!Number.isFinite(sm.y)) { st = false; return; } const sx = px(sm.x), sy = py(sm.y); if (sy < y - h || sy > y + 2 * h) { st = false; return; } if (!st) { c.moveTo(sx, sy); st = true; } else c.lineTo(sx, sy); }); c.stroke(); });
+    c.font = '600 12px Inter, sans-serif';
+    curves.forEach((cu, i) => { c.fillStyle = compiled[i] ? cu.color : '#ff6b7a'; c.fillText(cu.expression, x + 10, y + 16 + i * 15); });
+    c.restore();
+  }
+
   function drawObjectOn(c, obj) {
     c.save();
     if (obj.type === 'note') {
@@ -1036,10 +1228,7 @@
       c.fillStyle = obj.color || '#eef6ff'; c.font = '700 20px Inter, sans-serif';
       wrapText(c, obj.text, obj.x, obj.y + 20, obj.w || 360, 25);
     } else if (obj.type === 'graph') {
-      c.fillStyle = 'rgba(255,255,255,0.06)';
-      c.beginPath(); c.roundRect(obj.x, obj.y, obj.w, obj.h, 10); c.fill();
-      c.fillStyle = '#14d9c4'; c.font = '600 14px Inter, sans-serif';
-      c.fillText(obj.expression || '', obj.x + 10, obj.y + 20);
+      drawGraphOnExport(c, obj);
     } else if (obj.type === 'flow') {
       drawFlowShapeOn(c, obj, false);
     } else if (obj.type === 'connector') {
@@ -1048,18 +1237,75 @@
     c.restore();
   }
 
+  function pageIsEmpty(p) {
+    return (!p.strokes || !p.strokes.length) && (!p.objects || !p.objects.length) && !p.background;
+  }
+
   async function exportPdf() {
     const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
     if (!jsPDFCtor) { setStatus('PDF library did not load — check your connection.', 'error'); return; }
     setStatus('Building PDF…', '');
     const pdf = new jsPDFCtor({ orientation: 'landscape', unit: 'pt', format: [1600, 1000] });
-    board.pages.forEach((p, i) => {
-      const img = snapshotPage(i);
-      if (i) pdf.addPage([1600, 1000], 'landscape');
+
+    // Only export pages that actually have something on them - empty pages 2
+    // and 3 should not become blank sheets in the PDF.
+    const filled = board.pages.filter((p) => !pageIsEmpty(p));
+    let added = 0;
+    filled.forEach((p) => {
+      const realIndex = board.pages.indexOf(p);
+      const img = snapshotPage(realIndex);
+      if (added) pdf.addPage([1600, 1000], 'landscape');
       pdf.addImage(img, 'PNG', 0, 0, 1600, 1000);
+      added += 1;
     });
+
+    // Append the AI notes / Info panel as a final page so the export carries
+    // the analysis, not just the drawing.
+    const notesImg = renderNotesPage();
+    if (notesImg) {
+      if (added) pdf.addPage([1600, 1000], 'landscape');
+      pdf.addImage(notesImg, 'PNG', 0, 0, 1600, 1000);
+      added += 1;
+    }
+
+    if (!added) { setStatus('Nothing to export yet — the board is empty.', 'error'); return; }
     pdf.save(`${(board.title || 'whiteboard').replace(/[^\w\-]+/g, '-')}.pdf`);
-    setStatus('PDF downloaded.', 'success');
+    setStatus(`PDF downloaded (${added} page${added > 1 ? 's' : ''}).`, 'success');
+  }
+
+  // Renders the accumulated Info-panel insights to a page-sized canvas so the
+  // export includes the AI Notes, which the screenshot flagged as missing.
+  function renderNotesPage() {
+    if (!analyses.length) return null;
+    const W = 1600, H = 1000;
+    const off = document.createElement('canvas');
+    off.width = W; off.height = H;
+    const c = off.getContext('2d');
+    c.fillStyle = '#0a1526'; c.fillRect(0, 0, W, H);
+    c.fillStyle = '#eef6ff';
+    c.font = '800 34px Inter, sans-serif';
+    c.fillText('AI Notes', 60, 70);
+    let y = 120;
+    c.textBaseline = 'top';
+    analyses.slice().reverse().forEach((a) => {
+      if (y > H - 80) return;
+      c.fillStyle = '#14d9c4'; c.font = '700 22px Inter, sans-serif';
+      c.fillText(`${(a.kind || 'info').toUpperCase()}${a.title ? ' — ' + a.title : ''}`, 60, y);
+      y += 32;
+      c.fillStyle = '#c8d6ee'; c.font = '400 18px Inter, sans-serif';
+      if (a.summary) { y = wrapText(c, a.summary, 60, y, W - 120, 24) + 26; }
+      if (a.method) { c.fillStyle = '#9d7bff'; c.fillText(`Method: ${a.method}`, 60, y); y += 26; c.fillStyle = '#c8d6ee'; }
+      (a.steps || []).forEach((st, i) => {
+        if (y > H - 60) return;
+        y = wrapText(c, `${i + 1}. ${st.step || ''}`, 70, y, W - 140, 23) + 6;
+        if (st.why) { c.fillStyle = '#8ea3c4'; y = wrapText(c, st.why, 92, y, W - 160, 21) + 8; c.fillStyle = '#c8d6ee'; }
+      });
+      if (a.answer) { c.fillStyle = '#14d9c4'; c.font = '700 19px Inter, sans-serif'; y = wrapText(c, `Answer: ${a.answer}`, 60, y, W - 120, 24) + 30; c.fillStyle = '#c8d6ee'; c.font = '400 18px Inter, sans-serif'; }
+      (a.warnings || []).forEach((wn) => { c.fillStyle = '#ff9f6b'; y = wrapText(c, `\u26a0 ${wn}`, 60, y, W - 120, 22) + 8; c.fillStyle = '#c8d6ee'; });
+      y += 26;
+    });
+    c.textBaseline = 'alphabetic';
+    return off.toDataURL('image/png');
   }
 
   async function toStudySet() {
@@ -1169,6 +1415,14 @@
       if (m.type === 'lost:self') { $('#lostBtn').classList.toggle('active', m.lost); return; }
       if (m.type === 'insight') { renderInsight(m.analysis, { fromTeacher: true }); return; }
       if (m.type === 'presence') { updateViewers(m.viewers || []); return; }
+      if (m.type === 'question') { addQuestion(m.question); return; }
+      if (m.type === 'question:cleared') { removeQuestion(m.id); return; }
+      if (m.type === 'graph:live') {
+        const p = pageFor(m.pageId);
+        const obj = p.objects.find((o) => o.id === m.objectId);
+        if (obj) { obj.params = m.params; if (m.expression) obj.expression = m.expression; redraw(); }
+        return;
+      }
       if (m.type === 'equation:read') { if (isOwner) plotOnBoard(m.expression, m.rect); return; }
       if (m.type === 'ai:result') { if (m.note && m.note.result) renderInsight({ kind: 'explain', summary: m.note.result }); return; }
       if (m.type === 'error') setStatus(m.message, 'error');
@@ -1205,6 +1459,111 @@
   }
 
   // ---- Bindings -----------------------------------------------------------
+  // ---- Questions / raise hand --------------------------------------------
+  function addQuestion(q) {
+    if (questions.find((x) => x.id === q.id)) return;
+    questions.push(q);
+    renderQuestions();
+  }
+  function removeQuestion(id) {
+    const i = questions.findIndex((x) => x.id === id);
+    if (i >= 0) questions.splice(i, 1);
+    renderQuestions();
+  }
+  function renderQuestions() {
+    const n = questions.length;
+    const qc = $('#qCount'); if (qc) qc.textContent = n;
+    const qb = $('#qBtnCount'); if (qb) qb.textContent = n;
+    const body = $('#questionsBody');
+    if (!body) return;
+    body.innerHTML = n
+      ? questions.map((q) => `
+          <div class="question-row" data-id="${q.id}">
+            <div>${q.raisedHand ? '✋ <em>raised a hand</em>' : escapeHtml(q.text)}<span class="q-from">${escapeHtml(q.from)}</span></div>
+            ${isOwner ? `<button class="q-clear" data-id="${q.id}" title="Mark done">✓</button>` : ''}
+          </div>`).join('')
+      : '<p class="info-empty">No questions yet.</p>';
+    if (isOwner) {
+      body.querySelectorAll('.q-clear').forEach((btn) => btn.addEventListener('click', () => {
+        send({ type: 'question:clear', id: btn.dataset.id });
+        removeQuestion(btn.dataset.id);
+      }));
+    }
+    // A new question should get the teacher's attention.
+    if (isOwner && n) $('#questionsBtn')?.classList.add('has-items');
+  }
+
+  function askQuestion() {
+    const text = window.prompt('Ask the teacher a question (leave blank to just raise your hand):', '');
+    if (text === null) return;
+    send({ type: 'question:ask', text: text.trim() });
+    setStatus(text.trim() ? 'Question sent.' : 'Hand raised.', 'success');
+  }
+
+  // ---- Live analyze -------------------------------------------------------
+  // When on, a short debounce after the teacher stops drawing runs Analyze
+  // automatically. Cheap guardrails: only when owner, only if the page has
+  // content, and never overlapping an in-flight call.
+  let liveAnalyzeBusy = false;
+  function toggleLiveAnalyze() {
+    liveAnalyze = !liveAnalyze;
+    $('#liveAnalyzeBtn').textContent = `⚡ Live analyze: ${liveAnalyze ? 'on' : 'off'}`;
+    $('#liveAnalyzeBtn').classList.toggle('active', liveAnalyze);
+    if (liveAnalyze) { openInfoPanel(); scheduleLiveAnalyze(); }
+  }
+  function scheduleLiveAnalyze() {
+    if (!liveAnalyze || !isOwner) return;
+    clearTimeout(liveAnalyzeTimer);
+    liveAnalyzeTimer = setTimeout(async () => {
+      if (liveAnalyzeBusy) return;
+      const p = page();
+      if (!p.strokes.length && !p.objects.length) return;
+      liveAnalyzeBusy = true;
+      try {
+        const snapshot = snapshotPage(pageIndex);
+        const data = await api(`/api/board/${boardIdValue}/analyze`, { method: 'POST', body: JSON.stringify({ snapshot }) });
+        lastAnalysis = data.analysis;
+        renderInsight(data.analysis);
+        // Auto-plot any functions the analysis surfaced, next to the work.
+        (data.analysis.plots || []).forEach((expr) => plotOnBoard(expr));
+      } catch (e) { /* stay quiet on the auto path */ }
+      finally { liveAnalyzeBusy = false; }
+    }, 2200);
+  }
+
+  // ---- Interactive graph sliders -----------------------------------------
+  let activeGraph = null;
+  function openGraphControls(obj) {
+    activeGraph = obj;
+    const params = obj.params || {};
+    const keys = Object.keys(params);
+    $('#graphCtrlLabel').textContent = graphCurves(obj).map((c) => c.expression).join(', ') || 'Graph';
+    const wrap = $('#graphSliders');
+    if (!keys.length) {
+      wrap.innerHTML = '<p class="info-empty">This graph has no adjustable constants. Plot something like y = A*x + B to get sliders.</p>';
+    } else {
+      wrap.innerHTML = keys.map((k) => `
+        <label class="graph-slider">${k} = <span id="gv-${k}">${(+params[k]).toFixed(2)}</span>
+          <input type="range" min="-10" max="10" step="0.1" value="${params[k]}" data-key="${k}" />
+        </label>`).join('');
+      wrap.querySelectorAll('input[type=range]').forEach((inp) => {
+        inp.addEventListener('input', () => {
+          const key = inp.dataset.key;
+          activeGraph.params[key] = Number(inp.value);
+          $(`#gv-${key}`).textContent = Number(inp.value).toFixed(2);
+          redraw();
+          // Broadcast live so students watch the curve move.
+          send({ type: 'graph:live', objectId: activeGraph.id, pageId: pageId(), params: activeGraph.params, expression: activeGraph.expression });
+        });
+        inp.addEventListener('change', () => {
+          // Commit the final value to the saved board.
+          send({ type: 'object:update', pageId: pageId(), object: activeGraph });
+        });
+      });
+    }
+    $('#graphControls').style.display = 'block';
+  }
+
   function bindUI() {
     $$('.tool-btn').forEach((b) => b.addEventListener('click', () => {
       tool.name = b.dataset.tool;
@@ -1321,6 +1680,26 @@
       flyEmoji(b.dataset.emoji);
     }));
     $('#lostBtn').addEventListener('click', () => send({ type: 'lost:toggle' }));
+    $('#askBtn')?.addEventListener('click', askQuestion);
+
+    // Collapsible toolbar sections
+    $$('.tool-section-head').forEach((head) => head.addEventListener('click', () => {
+      const body = document.getElementById(head.dataset.target);
+      const sect = head.closest('.tool-section');
+      const collapsed = sect.classList.toggle('collapsed');
+      if (body) body.style.display = collapsed ? 'none' : '';
+    }));
+
+    $('#liveAnalyzeBtn')?.addEventListener('click', toggleLiveAnalyze);
+
+    $('#questionsBtn')?.addEventListener('click', () => {
+      const p = $('#questionsPanel');
+      const showing = p.style.display !== 'none';
+      p.style.display = showing ? 'none' : 'flex';
+      if (!showing) { renderQuestions(); $('#questionsBtn').classList.remove('has-items'); }
+    });
+    $('#questionsClose')?.addEventListener('click', () => { $('#questionsPanel').style.display = 'none'; });
+    $('#graphCtrlClose')?.addEventListener('click', () => { $('#graphControls').style.display = 'none'; activeGraph = null; });
 
     $('#shareToggleBtn').addEventListener('click', async () => {
       try {

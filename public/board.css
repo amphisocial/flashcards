@@ -218,3 +218,46 @@ body[data-page="board"] {
   .replay-bar { width: calc(100% - 20px); }
   .viewers-panel { left: 10px; right: 10px; width: auto; bottom: 58px; }
 }
+
+/* ---------- Collapsible toolbar sections ---------- */
+.tool-section { border-bottom: 1px solid var(--line); }
+.tool-section-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  padding: 10px 2px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.tool-section-head .chev { transition: transform 0.15s; }
+.tool-section.collapsed .tool-section-head .chev { transform: rotate(-90deg); }
+.tool-section-body { display: flex; flex-direction: column; gap: 10px; padding: 0 2px 12px; }
+
+#liveAnalyzeBtn.active { background: rgba(20,217,196,0.22); border-color: #14d9c4; color: #14d9c4; }
+
+/* ---------- Questions panel ---------- */
+.questions-panel {
+  position: absolute; right: 14px; top: 14px; width: min(300px, calc(100% - 28px));
+  max-height: 55vh; display: flex; flex-direction: column; z-index: 30;
+  border-radius: 16px; border: 1px solid var(--line); background: rgba(8,17,31,0.96);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.q-count { background: var(--brand); color: #fff; border-radius: 999px; padding: 1px 8px; font-size: 0.72rem; margin-left: 4px; }
+.question-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 9px 4px; border-bottom: 1px solid var(--line); font-size: 0.86rem; }
+.question-row:last-child { border-bottom: none; }
+.q-from { display: block; color: var(--muted); font-size: 0.74rem; margin-top: 2px; }
+.q-clear { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: #14d9c4; cursor: pointer; }
+#questionsBtn.has-items { background: rgba(255,204,102,0.25); border-color: #ffcc66; color: #ffcc66; }
+
+/* ---------- Interactive graph sliders ---------- */
+.graph-controls {
+  position: absolute; right: 14px; bottom: 70px; width: min(300px, calc(100% - 28px));
+  z-index: 30; border-radius: 16px; border: 1px solid var(--line);
+  background: rgba(8,17,31,0.96); box-shadow: var(--shadow); padding: 12px 14px;
+}
+.graph-controls-head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 0.84rem; margin-bottom: 10px; }
+.graph-slider { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 12px; }
+.graph-slider input { width: 100%; margin-top: 5px; }
+.graph-slider span { color: #14d9c4; font-weight: 700; }
+
+@media (max-width: 760px) {
+  .questions-panel { right: 8px; left: 8px; width: auto; top: 8px; }
+  .graph-controls { right: 8px; left: 8px; width: auto; bottom: 120px; }
+}

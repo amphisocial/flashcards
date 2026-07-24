@@ -610,6 +610,40 @@ function attachBoardWebSocket(httpServer, deps) {
           return;
         }
 
+        // Students ask questions / raise a hand. Broadcast to the whole room
+        // so the teacher's queue and other students' views stay in sync;
+        // questions are ephemeral (not persisted with the board).
+        if (msg.type === 'question:ask') {
+          if (isOwner) return;
+          const text = String(msg.text || '').slice(0, 400).trim();
+          const q = {
+            id: `q_${Math.random().toString(16).slice(2)}`,
+            text: text || '(raised hand)',
+            raisedHand: !text,
+            from: [client.user.firstName, client.user.lastName].filter(Boolean).join(' ') || client.user.email,
+            createdAt: nowIso()
+          };
+          broadcast(targetBoardId, { type: 'question', question: q }, null);
+          return;
+        }
+
+        // Teacher clears a question once addressed.
+        if (msg.type === 'question:clear') {
+          if (!isOwner) return;
+          broadcast(targetBoardId, { type: 'question:cleared', id: msg.id }, null);
+          return;
+        }
+
+        // Live interactive graphs: the teacher tweaks a slider and every
+        // viewer's copy of that graph object updates in real time. These are
+        // frequent, so they're broadcast without a disk write on every tick;
+        // the object's committed state is saved via the normal object:update.
+        if (msg.type === 'graph:live') {
+          if (!isOwner) return;
+          broadcast(targetBoardId, { type: 'graph:live', objectId: msg.objectId, pageId: msg.pageId, params: msg.params, expression: msg.expression }, ws);
+          return;
+        }
+
         const mutating = ['stroke:add', 'stroke:shape', 'stroke:remove', 'page:clear', 'page:goto',
           'object:add', 'object:update', 'object:remove', 'laser', 'insight:push',
           'ai:explain', 'ai:plot', 'ai:read-equation'];

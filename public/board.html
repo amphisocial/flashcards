@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260724-v2" />
-  <link rel="stylesheet" href="/board.css?v=20260724-v2" />
+  <link rel="stylesheet" href="/styles.css?v=20260724-v4" />
+  <link rel="stylesheet" href="/board.css?v=20260724-v4" />
 </head>
 <body data-page="board">
   <div class="board-shell" id="boardShell">
@@ -31,6 +31,7 @@
         <button class="btn ghost small" id="shareToggleBtn">Share</button>
         <button class="btn primary small" id="liveToggleBtn">Go live</button>
         <button class="btn ghost small" id="viewersBtn">Viewers (<span id="viewerCount">0</span>)</button>
+        <button class="btn ghost small" id="questionsBtn">Questions (<span id="qBtnCount">0</span>)</button>
         <span class="lost-pill" id="lostPill" style="display:none">🤔 <span id="lostCount">0</span> lost</span>
       </div>
 
@@ -44,74 +45,80 @@
 
     <div class="board-body">
       <aside class="board-toolbar" id="boardToolbar">
-        <div class="tool-group" role="group" aria-label="Tools">
-          <button class="tool-btn active" data-tool="pen" title="Pen">✏️</button>
-          <button class="tool-btn" data-tool="shape" title="Draw &amp; snap shape">◻︎</button>
-          <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
-          <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
-          <button class="tool-btn" data-tool="pan" title="Pan (or hold Space)">✋</button>
-          <button class="tool-btn" data-tool="move" title="Move shapes">✥</button>
-          <button class="tool-btn" data-tool="connect" title="Connect two shapes">⇢</button>
-          <button class="tool-btn" data-tool="laser" title="Laser pointer (live only)">🔴</button>
-          <button class="tool-btn" data-tool="note" title="Sticky note">🗒️</button>
-          <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
-        </div>
-
-        <div class="tool-group colors" role="group" aria-label="Color">
-          <button class="swatch active" data-color="#eef6ff" style="--sw:#eef6ff"></button>
-          <button class="swatch" data-color="#7c5cff" style="--sw:#7c5cff"></button>
-          <button class="swatch" data-color="#14d9c4" style="--sw:#14d9c4"></button>
-          <button class="swatch" data-color="#ffcc66" style="--sw:#ffcc66"></button>
-          <button class="swatch" data-color="#ff6b7a" style="--sw:#ff6b7a"></button>
-        </div>
-
-        <div class="tool-group">
-          <label class="size-label">Size<input type="range" id="sizeRange" min="1" max="18" value="3" /></label>
-        </div>
-
-        <div class="tool-group stacked">
-          <label class="size-label">Page template
-            <select id="templateSelect">
-              <option value="blank">Blank</option>
-              <option value="grid">Graph paper</option>
-              <option value="lined">Lined</option>
-              <option value="coordinate">Coordinate grid</option>
-              <option value="flowchart">Flowchart</option>
-            </select>
-          </label>
-          <button class="btn ghost small" id="bgImportBtn">Import image</button>
-          <input type="file" id="bgFile" accept="image/*" style="display:none" />
-          <button class="btn ghost small" id="bgClearBtn">Remove image</button>
-        </div>
-
-        <div class="tool-group stacked flow-palette" id="flowPalette" style="display:none">
-          <span class="section-kicker">Flowchart shapes</span>
-          <div class="flow-grid">
-            <button class="flow-shape-btn" data-kind="terminator" title="Start / End"><span class="fs term"></span>Start</button>
-            <button class="flow-shape-btn" data-kind="process" title="Process"><span class="fs proc"></span>Process</button>
-            <button class="flow-shape-btn" data-kind="decision" title="Decision (Y/N)"><span class="fs dec"></span>Decision</button>
-            <button class="flow-shape-btn" data-kind="data" title="Input / Output"><span class="fs data"></span>In/Out</button>
-            <button class="flow-shape-btn" data-kind="document" title="Document"><span class="fs doc"></span>Doc</button>
-            <button class="flow-shape-btn" data-kind="connectorDot" title="Connector"><span class="fs dot"></span>Link</button>
+        <section class="tool-section" data-section="tools">
+          <button class="tool-section-head" data-target="sec-tools"><span>Tools</span><span class="chev">▾</span></button>
+          <div class="tool-section-body" id="sec-tools">
+            <div class="tool-group" role="group" aria-label="Tools">
+              <button class="tool-btn active" data-tool="pen" title="Pen">✏️</button>
+              <button class="tool-btn" data-tool="shape" title="Draw &amp; snap shape">◻︎</button>
+              <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
+              <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
+              <button class="tool-btn" data-tool="pan" title="Pan (or hold Space)">✋</button>
+              <button class="tool-btn" data-tool="move" title="Move shapes">✥</button>
+              <button class="tool-btn" data-tool="connect" title="Connect two shapes">⇢</button>
+              <button class="tool-btn" data-tool="laser" title="Laser pointer (live only)">🔴</button>
+              <button class="tool-btn" data-tool="note" title="Sticky note">🗒️</button>
+              <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
+            </div>
+            <div class="tool-group colors" role="group" aria-label="Color">
+              <button class="swatch active" data-color="#eef6ff" style="--sw:#eef6ff"></button>
+              <button class="swatch" data-color="#7c5cff" style="--sw:#7c5cff"></button>
+              <button class="swatch" data-color="#14d9c4" style="--sw:#14d9c4"></button>
+              <button class="swatch" data-color="#ffcc66" style="--sw:#ffcc66"></button>
+              <button class="swatch" data-color="#ff6b7a" style="--sw:#ff6b7a"></button>
+            </div>
+            <label class="size-label">Size<input type="range" id="sizeRange" min="1" max="18" value="3" /></label>
           </div>
-          <p class="tool-hint">Add shapes, drag with <strong>✥</strong>, then tap <strong>⇢</strong> and touch two shapes to join them. Branches off a Decision auto-label <strong>Y</strong> then <strong>N</strong>.</p>
-        </div>
+        </section>
 
-        <div class="tool-group stacked">
-          <button class="btn ghost small" id="zoomResetBtn">Reset zoom</button>
-          <button class="btn ghost small" id="clearBoardBtn">Clear page</button>
-        </div>
+        <section class="tool-section" data-section="page">
+          <button class="tool-section-head" data-target="sec-page"><span>Page</span><span class="chev">▾</span></button>
+          <div class="tool-section-body" id="sec-page">
+            <label class="size-label">Template
+              <select id="templateSelect">
+                <option value="blank">Blank</option>
+                <option value="grid">Graph paper</option>
+                <option value="lined">Lined</option>
+                <option value="coordinate">Coordinate grid</option>
+                <option value="flowchart">Flowchart</option>
+              </select>
+            </label>
+            <button class="btn ghost small" id="bgImportBtn">Import image</button>
+            <input type="file" id="bgFile" accept="image/*" style="display:none" />
+            <button class="btn ghost small" id="bgClearBtn">Remove image</button>
+            <button class="btn ghost small" id="zoomResetBtn">Reset zoom</button>
+            <button class="btn ghost small" id="clearBoardBtn">Clear page</button>
+          </div>
+        </section>
 
-        <div class="tool-group ai-group">
-          <span class="section-kicker">Smart AI</span>
-          <button class="btn primary small" id="analyzeBtn">Analyze board</button>
-          <p class="tool-hint">Select a region and plot, or type a function to graph it on the board.</p>
-          <button class="btn soft small" id="plotSelectionBtn" style="display:none">Plot selection</button>
-          <form id="plotForm" class="plot-form">
-            <input type="text" id="plotInput" placeholder="y = 4x + 3" />
-            <button type="submit" class="btn soft small">Plot</button>
-          </form>
-        </div>
+        <section class="tool-section flow-palette" id="flowPalette" style="display:none" data-section="flow">
+          <button class="tool-section-head" data-target="sec-flow"><span>Flowchart shapes</span><span class="chev">▾</span></button>
+          <div class="tool-section-body" id="sec-flow">
+            <div class="flow-grid">
+              <button class="flow-shape-btn" data-kind="terminator" title="Start / End"><span class="fs term"></span>Start</button>
+              <button class="flow-shape-btn" data-kind="process" title="Process"><span class="fs proc"></span>Process</button>
+              <button class="flow-shape-btn" data-kind="decision" title="Decision (Y/N)"><span class="fs dec"></span>Decision</button>
+              <button class="flow-shape-btn" data-kind="data" title="Input / Output"><span class="fs data"></span>In/Out</button>
+              <button class="flow-shape-btn" data-kind="document" title="Document"><span class="fs doc"></span>Doc</button>
+              <button class="flow-shape-btn" data-kind="connectorDot" title="Connector"><span class="fs dot"></span>Link</button>
+            </div>
+            <p class="tool-hint">Add shapes, drag with <strong>✥</strong>, then tap <strong>⇢</strong> and touch two shapes to join. Decision branches auto-label <strong>Y</strong> then <strong>N</strong>.</p>
+          </div>
+        </section>
+
+        <section class="tool-section" data-section="ai">
+          <button class="tool-section-head" data-target="sec-ai"><span>Smart AI</span><span class="chev">▾</span></button>
+          <div class="tool-section-body" id="sec-ai">
+            <button class="btn primary small" id="analyzeBtn">Analyze board</button>
+            <button class="btn soft small" id="liveAnalyzeBtn" title="Auto-plot equations as you write them">⚡ Live analyze: off</button>
+            <p class="tool-hint">Type a function to graph it on the board, or select a handwritten equation and plot it.</p>
+            <button class="btn soft small" id="plotSelectionBtn" style="display:none">Plot selection</button>
+            <form id="plotForm" class="plot-form">
+              <input type="text" id="plotInput" placeholder="y = 4x + 3" />
+              <button type="submit" class="btn soft small">Plot</button>
+            </form>
+          </div>
+        </section>
       </aside>
 
       <main class="board-canvas-wrap" id="canvasWrap">
@@ -131,6 +138,7 @@
           <button class="react-btn" data-emoji="🙏">🙏</button>
           <button class="react-btn" data-emoji="❤️">❤️</button>
           <button class="btn soft small" id="lostBtn">🤔 I'm lost</button>
+          <button class="btn soft small" id="askBtn">✋ Ask</button>
         </div>
 
         <div class="page-bar" id="pageBar">
@@ -149,6 +157,17 @@
           <button class="btn ghost small" id="replayCloseBtn">✕</button>
         </div>
         <button class="btn ghost small replay-open owner-only" id="replayOpenBtn" title="Replay how this was built">⏱ Replay</button>
+
+        <div class="questions-panel" id="questionsPanel" style="display:none">
+          <div class="ai-panel-header"><span>Questions <span id="qCount" class="q-count">0</span></span><button class="ai-panel-close" id="questionsClose">×</button></div>
+          <div class="ai-panel-body" id="questionsBody"></div>
+        </div>
+
+        <div class="graph-controls" id="graphControls" style="display:none">
+          <div class="graph-controls-head"><span id="graphCtrlLabel">Graph</span><button class="ai-panel-close" id="graphCtrlClose">×</button></div>
+          <div id="graphSliders"></div>
+          <p class="tool-hint">Drag a slider to move the curve live. Students see it update.</p>
+        </div>
 
         <div class="viewers-panel" id="viewersPanel" style="display:none">
           <div class="ai-panel-header"><span>Currently watching</span><button class="ai-panel-close" id="viewersPanelClose">×</button></div>
@@ -170,7 +189,7 @@
 
   <div class="toast" id="toast"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="/common.js?v=20260724-v2"></script>
-  <script src="/board.js?v=20260724-v2"></script>
+  <script src="/common.js?v=20260724-v4"></script>
+  <script src="/board.js?v=20260724-v4"></script>
 </body>
 </html>

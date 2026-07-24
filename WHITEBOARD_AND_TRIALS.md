@@ -425,3 +425,53 @@ Document, and Connector.
 
 Connectors render beneath shapes so arrowheads aren't covered, and are
 included in PNG snapshots and PDF export.
+
+---
+
+# v2.2 — interactive graphs, questions, and fixes from the screenshot
+
+## Bugs fixed
+1. **Export was missing the AI Notes / Info panel.** PDF export now appends
+   a final "AI Notes" page rendering every analysis (kind, title, summary,
+   method, steps, answer, warnings).
+2. **Export included empty pages.** Blank pages (no strokes, objects, or
+   background) are skipped — a 3-page board with only page 1 drawn exports
+   one sheet, not three. Verified: pages 1,4,5 filled -> only those export.
+3. **Only circle/rectangle were recognized; pentagon/hexagon/rhombus became
+   circle or rectangle.** The classifier had no branch above 3 sides.
+   Rebuilt around corner-counting by interior turn angle: triangle=3,
+   pentagon=5, hexagon=6, etc., with circularity only deciding the genuinely
+   ambiguous circle-vs-many-sided case. Rhombus is detected as a rotated
+   quad whose vertices sit at the bounding-box edge midpoints. Verified on
+   simulated hand-drawn strokes. (Regular 7-8 sided polygons are near-
+   circular and may read as circle — inherent ambiguity, rare in practice.)
+4. **Attendees couldn't see Analyze results.** The server was broadcasting
+   `insight` correctly; the client rendered it into a panel that students
+   never open. `renderInsight` now force-opens the Info panel (and un-hides
+   the bottom sheet on phones) for both roles.
+
+## New: interactive graphs
+- Graphs are now objects holding **multiple curves** and a shared **params**
+  map. Type `y = A*x + B` and sliders for A and B appear.
+- **Drag a slider and the curve moves live** — and every student watching
+  sees it move, via a `graph:live` broadcast (sent without a disk write per
+  tick; the final value commits through the normal object update).
+- Moving the constant B shifts a line up/down; A changes its slope — so a
+  class can watch the impact of each term.
+- **Overlay multiple curves** on one graph to compare them.
+- Tap a graph with the **move (✥)** tool to reopen its sliders.
+
+## New: questions / raise hand
+- Students get an **✋ Ask** button (type a question, or leave it blank to
+  just raise a hand). The teacher sees a **Questions (n)** queue and clears
+  each as it's addressed. Ephemeral — not saved with the board.
+
+## New: Live Analyze
+- A **⚡ Live analyze** toggle in the Smart AI section. When on, a ~2s
+  debounce after the teacher stops drawing runs Analyze automatically and
+  auto-plots any functions it detects, next to the work. Off by default to
+  avoid per-stroke vision cost.
+
+## New: collapsible toolbar
+- The left toolbar is now four collapsible sections — Tools, Page,
+  Flowchart shapes, Smart AI — so it stops growing unbounded.
