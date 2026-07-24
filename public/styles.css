@@ -58,6 +58,17 @@ textarea { resize: vertical; }
 .nav-links a:hover { color: var(--text); }
 .auth-area { display: flex; align-items: center; gap: 10px; }
 .user-chip { color: var(--muted); font-size: 0.92rem; }
+.trial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #08111f;
+  background: linear-gradient(135deg, var(--accent), #ffb347);
+}
 
 .btn {
   border: 0;
@@ -364,6 +375,8 @@ textarea { min-height: 180px; line-height: 1.55; }
 .price { font-size: 2.7rem; font-weight: 900; margin: 10px 0 4px; letter-spacing: -0.05em; }
 .price span { font-size: 0.95rem; color: var(--muted); }
 .price-card p:not(.price) { color: var(--muted); min-height: 48px; }
+.price-card .btn { display: block; width: 100%; text-align: center; }
+.price-card .btn + .btn { margin-top: 10px; }
 
 .modal { border: 0; border-radius: 28px; padding: 0; background: transparent; color: var(--text); }
 .modal::backdrop { background: rgba(0,0,0,0.66); backdrop-filter: blur(6px); }

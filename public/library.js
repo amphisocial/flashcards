@@ -35,7 +35,7 @@
         <span class="set-meta">${set.cards.length} ${set.format === 'slides' ? 'slides' : 'cards'} • ${formatLabel(set)} • ${escapeHtml(set.subject || set.category || 'General')} • ${new Date(set.createdAt).toLocaleDateString()}</span>
         <div class="set-actions">
           <button class="btn primary study-mini" data-id="${set.id}">Study</button>
-          ${owned ? `<button class="btn soft share-mini" data-id="${set.id}">Share</button><button class="btn ghost delete-mini" data-id="${set.id}">Delete</button>` : ''}
+          ${owned ? `<button class="btn soft share-mini" data-id="${set.id}">Share</button><button class="btn ghost delete-mini" data-id="${set.id}">Delete</button>` : `<a class="btn soft" href="/board/${set.ownerId}">View live whiteboard</a>`}
         </div>
       </div>
     `).join('');
@@ -110,6 +110,10 @@
     $('#shareSubmit').addEventListener('click', shareSet);
     await initCommon();
     await loadLibrary();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('whiteboard') === 'upgrade') {
+      setStatus('The whiteboard is a Teams plan feature — start a free 7-day trial from Pricing to try it.', '');
+    }
   }
 
   init().catch((error) => setStatus(error.message, 'error'));

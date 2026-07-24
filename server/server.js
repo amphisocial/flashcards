@@ -31,10 +31,16 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 const PLAN_LIMITS = {
-  free: { label: 'Free', setsPerDay: 5, shareSeats: 0 },
-  starter: { label: 'Starter', setsPerDay: 10, shareSeats: 0 },
-  team: { label: 'Teams', setsPerDay: 20, shareSeats: 30 }
+  free: { label: 'Free', setsPerDay: 5, shareSeats: 0, whiteboard: false },
+  starter: { label: 'Starter', setsPerDay: 10, shareSeats: 0, whiteboard: false },
+  team: { label: 'Teams', setsPerDay: 20, shareSeats: 30, whiteboard: true }
 };
+
+// Plans a user may self-serve trial without paying. 7 days each, one trial
+// per plan per account (tracked via user.trialsUsed so it can't be restarted
+// by re-selecting the same plan).
+const TRIAL_LENGTH_DAYS = 7;
+const TRIALABLE_PLANS = ['starter', 'team'];
 
 const STRIPE_PRICE_TO_PLAN = Object.fromEntries(
   [
@@ -142,9 +148,54 @@ function clearCookie(res, name) {
   res.setHeader('Set-Cookie', `${name}=; Max-Age=0; HttpOnly; SameSite=Lax; Path=/`);
 }
 
+// ---- Free trial helpers -------------------------------------------------
+// A trial is stored directly on the user record:
+//   trialPlan       - 'starter' | 'team' | null
+//   trialStartedAt  - ISO date the trial began
+//   trialEndsAt     - ISO date the trial expires (start + 7 days)
+//   trialsUsed      - array of plan ids already trialed, e.g. ['starter']
+// Trial status is derived on read rather than by a background job, so it's
+// always correct even if the server was offline when a trial should have
+// expired. If a user's trial has lapsed, downgradeExpiredTrial() flips them
+// back to plan:'free' and clears the active trial fields (trialsUsed keeps
+// the record so they can't restart the same trial).
+function isTrialActive(user) {
+  return Boolean(user.trialPlan && user.trialEndsAt && new Date(user.trialEndsAt) > new Date());
+}
+
+function trialDaysRemaining(user) {
+  if (!isTrialActive(user)) return 0;
+  const msLeft = new Date(user.trialEndsAt).getTime() - Date.now();
+  return Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+}
+
+// Call this before reading a user's plan anywhere that matters (billing
+// gates, whiteboard access, sharing). Mutates + persists if a trial just
+// lapsed. Returns the (possibly updated) user.
+function downgradeExpiredTrial(user) {
+  if (!user.trialPlan) return user;
+  if (isTrialActive(user)) return user;
+  const store = readStore();
+  const fresh = store.users.find((candidate) => candidate.id === user.id);
+  if (!fresh || !fresh.trialPlan) return fresh || user;
+  if (isTrialActive(fresh)) return fresh;
+  if (fresh.subscriptionStatus !== 'active' && fresh.plan === fresh.trialPlan) {
+    fresh.plan = 'free';
+    fresh.subscriptionStatus = 'free';
+  }
+  fresh.trialPlan = null;
+  fresh.trialStartedAt = null;
+  fresh.trialEndsAt = null;
+  fresh.updatedAt = nowIso();
+  writeStore(store);
+  return fresh;
+}
+
 function publicUser(user) {
   if (!user) return null;
+  user = downgradeExpiredTrial(user);
   const plan = user.plan || 'free';
+  const trialActive = isTrialActive(user);
   return {
     id: user.id,
     email: user.email,
@@ -154,8 +205,41 @@ function publicUser(user) {
     plan,
     planLabel: PLAN_LIMITS[plan]?.label || 'Free',
     subscriptionStatus: user.subscriptionStatus || 'free',
-    limits: PLAN_LIMITS[plan] || PLAN_LIMITS.free
+    limits: PLAN_LIMITS[plan] || PLAN_LIMITS.free,
+    trial: {
+      active: trialActive,
+      plan: trialActive ? user.trialPlan : null,
+      daysRemaining: trialDaysRemaining(user),
+      endsAt: trialActive ? user.trialEndsAt : null,
+      trialsUsed: user.trialsUsed || [],
+      availableTrials: TRIALABLE_PLANS.filter((p) => !(user.trialsUsed || []).includes(p) && !trialActive)
+    }
   };
+}
+
+// Same lookup as getCurrentUser but from a raw Cookie header string rather
+// than an Express req. Used by the whiteboard WebSocket: the browser sends
+// the session cookie automatically on the ws:// upgrade request (same
+// origin), so the raw HTTP upgrade request's headers.cookie is all that's
+// needed — no token ever has to touch a URL or client-side JS.
+function getUserFromCookieHeader(cookieHeader) {
+  const token = Object.fromEntries(
+    String(cookieHeader || '')
+      .split(';')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf('=');
+        if (index < 0) return [part, ''];
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      })
+  )[COOKIE_NAME];
+  if (!token) return null;
+  const store = readStore();
+  const session = store.sessions.find((item) => item.token === token && new Date(item.expiresAt) > new Date());
+  if (!session) return null;
+  const user = store.users.find((candidate) => candidate.id === session.userId) || null;
+  return user ? downgradeExpiredTrial(user) : null;
 }
 
 function getCurrentUser(req) {
@@ -164,7 +248,8 @@ function getCurrentUser(req) {
   const store = readStore();
   const session = store.sessions.find((item) => item.token === token && new Date(item.expiresAt) > new Date());
   if (!session) return null;
-  return store.users.find((user) => user.id === session.userId) || null;
+  const user = store.users.find((candidate) => candidate.id === session.userId) || null;
+  return user ? downgradeExpiredTrial(user) : null;
 }
 
 function requireUser(req, res, next) {
@@ -204,6 +289,22 @@ function userCanReadQuizlet(user, quizlet) {
   if (!user || !quizlet) return false;
   if (quizlet.ownerId === user.id) return true;
   return (quizlet.invitedEmails || []).map(normalizeEmail).includes(normalizeEmail(user.email));
+}
+
+// Whiteboard viewer access reuses the *same* invite list a teacher already
+// maintains for study-set sharing (Teams plan, up to 30 invited emails) —
+// there is intentionally no separate whiteboard invite system. Anyone the
+// teacher has invited to any of their study sets can view their board.
+function userCanViewBoard(user, teacherId, store) {
+  if (!user) return false;
+  if (user.id === teacherId) return true;
+  const invitedEmail = normalizeEmail(user.email);
+  return store.quizlets.some((set) => set.ownerId === teacherId && (set.invitedEmails || []).map(normalizeEmail).includes(invitedEmail));
+}
+
+function userHasWhiteboardAccess(user) {
+  const plan = user.plan || 'free';
+  return Boolean(PLAN_LIMITS[plan]?.whiteboard);
 }
 
 function compactText(text, maxLength = 16000) {
@@ -602,6 +703,92 @@ async function callClaude(prompt) {
   return (payload.content || []).map((part) => part.text || '').join('\n');
 }
 
+// ---- Whiteboard "Ask AI" (vision) --------------------------------------
+// Reuses the same provider/keys configured for study-set generation above,
+// just with an image attached instead of a text-only prompt. Falls back to
+// a clear error (surfaced to the teacher in the board UI) rather than a
+// silent local fallback — unlike flashcard generation, there's no sensible
+// non-AI substitute for "explain what's on the board".
+function parseDataUrl(dataUrl) {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(String(dataUrl || ''));
+  if (!match) throw new Error('Invalid image snapshot.');
+  return { mediaType: match[1], base64: match[2] };
+}
+
+async function callClaudeVision(instructions, imageDataUrl) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured.');
+  const { mediaType, base64 } = parseDataUrl(imageDataUrl);
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: instructions }
+        ]
+      }]
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message || 'Anthropic request failed.');
+  return (payload.content || []).map((part) => part.text || '').join('\n').trim();
+}
+
+async function callOpenAIVision(instructions, imageDataUrl) {
+  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured.');
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: instructions },
+          { type: 'image_url', image_url: { url: imageDataUrl } }
+        ]
+      }],
+      max_tokens: 500
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message || 'OpenAI request failed.');
+  return (payload.choices?.[0]?.message?.content || '').trim();
+}
+
+async function callGeminiVision(instructions, imageDataUrl) {
+  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not configured.');
+  const { mediaType, base64 } = parseDataUrl(imageDataUrl);
+  const model = encodeURIComponent(process.env.GEMINI_MODEL || 'gemini-1.5-flash');
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mediaType, data: base64 } }, { text: instructions }] }],
+      generationConfig: { temperature: 0.3 }
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message || 'Gemini request failed.');
+  return (payload.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n') || '').trim();
+}
+
+async function askVisionAI({ instructions, imageDataUrl }) {
+  if (!imageDataUrl) throw new Error('No snapshot provided.');
+  const provider = resolveProvider();
+  if (provider === 'gemini') return callGeminiVision(instructions, imageDataUrl);
+  if (provider === 'openai') return callOpenAIVision(instructions, imageDataUrl);
+  return callClaudeVision(instructions, imageDataUrl);
+}
+
 // The AI provider is controlled by the server operator via .env, never by the
 // browser. Set AI_PROVIDER=claude | openai | gemini (aliases: anthropic, google).
 // If AI_PROVIDER is unset, the first provider with an API key configured wins.
@@ -712,7 +899,10 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
         plan,
         subscriptionStatus: 'active',
         stripeCustomerId: session.customer,
-        stripeSubscriptionId: session.subscription
+        stripeSubscriptionId: session.subscription,
+        trialPlan: null,
+        trialStartedAt: null,
+        trialEndsAt: null
       });
     }
   }
@@ -1334,6 +1524,36 @@ app.post('/api/billing/checkout', requireUser, async (req, res) => {
   res.json({ url: session.url });
 });
 
+// Start a free 7-day trial of Starter or Team, no card required. One trial
+// per plan per account, enforced via user.trialsUsed. If the user is already
+// mid-trial (of either plan) or already paying, this is rejected rather than
+// silently extended/replaced.
+app.post('/api/billing/trial', requireUser, (req, res) => {
+  const plan = String(req.body.plan || '').toLowerCase();
+  if (!TRIALABLE_PLANS.includes(plan)) return res.status(400).json({ error: 'That plan is not eligible for a free trial.' });
+
+  const store = readStore();
+  const user = store.users.find((candidate) => candidate.id === req.user.id);
+  if (!user) return res.status(404).json({ error: 'Account not found.' });
+
+  if (isTrialActive(user)) return res.status(400).json({ error: `You already have an active ${PLAN_LIMITS[user.trialPlan]?.label || user.trialPlan} trial.` });
+  if (user.subscriptionStatus === 'active') return res.status(400).json({ error: 'You already have an active paid plan.' });
+  if ((user.trialsUsed || []).includes(plan)) return res.status(400).json({ error: `You've already used your free trial of the ${PLAN_LIMITS[plan].label} plan.` });
+
+  const startedAt = nowIso();
+  const endsAt = new Date(Date.now() + TRIAL_LENGTH_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  user.plan = plan;
+  user.subscriptionStatus = 'trialing';
+  user.trialPlan = plan;
+  user.trialStartedAt = startedAt;
+  user.trialEndsAt = endsAt;
+  user.trialsUsed = Array.from(new Set([...(user.trialsUsed || []), plan]));
+  user.updatedAt = nowIso();
+  writeStore(store);
+
+  res.json({ user: publicUser(user) });
+});
+
 function requirePageUser(req, res, next) {
   if (!getCurrentUser(req)) return res.redirect('/?login=1');
   next();
@@ -1347,11 +1567,51 @@ app.get('/library', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'library.html'));
 });
 
+// ---- Whiteboard (Phase 1) ------------------------------------------------
+// Registered before the catch-all below so /board/:teacherId resolves to
+// the whiteboard page rather than falling through to index.html.
+const { attachBoardRoutes, attachBoardWebSocket } = require('./board');
+
+attachBoardRoutes(app, {
+  requireUser,
+  publicUser,
+  readStore,
+  userCanViewBoard,
+  userHasWhiteboardAccess
+});
+
+// Convenience entry point for the nav link: teachers land on their own
+// board, everyone else on Your Library (where shared-board links live next
+// to whatever a teacher has shared with them).
+app.get('/board', requirePageUser, (req, res) => {
+  const user = getCurrentUser(req);
+  if (userHasWhiteboardAccess(user)) return res.redirect(`/board/${user.id}`);
+  return res.redirect('/library?whiteboard=upgrade');
+});
+
+app.get('/board/:teacherId', requirePageUser, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'board.html'));
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
-app.listen(PORT, () => {
+// A plain http.Server wraps the Express app so the whiteboard's WebSocket
+// endpoint (/ws/board) can share the same port via an HTTP upgrade, rather
+// than needing a second port/process.
+const http = require('http');
+const httpServer = http.createServer(app);
+
+attachBoardWebSocket(httpServer, {
+  getUserFromCookieHeader,
+  readStore,
+  userCanViewBoard,
+  userHasWhiteboardAccess,
+  askVisionAI: ({ instructions, imageDataUrl }) => askVisionAI({ instructions, imageDataUrl })
+});
+
+httpServer.listen(PORT, () => {
   ensureStore();
   console.log(`Athena Flashcards running on ${PORT}`);
 });

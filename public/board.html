@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Whiteboard | Athena Flashcards</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260709-multipage" />
+  <link rel="stylesheet" href="/board.css?v=1" />
+</head>
+<body data-page="board">
+  <div class="board-shell" id="boardShell">
+    <header class="board-topbar">
+      <a class="brand" href="/app" aria-label="Athena Flashcards home">
+        <span class="brand-mark">A</span>
+        <span><strong>Athena</strong> Whiteboard</span>
+      </a>
+
+      <div class="board-title" id="boardTitle">Loading…</div>
+
+      <div class="board-topbar-actions">
+        <span class="board-status" id="boardStatus">Connecting…</span>
+        <button class="btn ghost" id="fullscreenBtn" title="Full screen">⤢ Full screen</button>
+        <a class="btn ghost" href="/app">Exit</a>
+      </div>
+    </header>
+
+    <div class="board-body">
+      <aside class="board-toolbar" id="boardToolbar">
+        <div class="tool-group" role="group" aria-label="Drawing tools">
+          <button class="tool-btn active" data-tool="pen" title="Pen">✏️</button>
+          <button class="tool-btn" data-tool="shape" title="Draw &amp; snap shape">◻︎</button>
+          <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
+        </div>
+
+        <div class="tool-group colors" id="colorSwatches" role="group" aria-label="Color">
+          <button class="swatch active" data-color="#eef6ff" style="--sw:#eef6ff"></button>
+          <button class="swatch" data-color="#7c5cff" style="--sw:#7c5cff"></button>
+          <button class="swatch" data-color="#14d9c4" style="--sw:#14d9c4"></button>
+          <button class="swatch" data-color="#ffcc66" style="--sw:#ffcc66"></button>
+          <button class="swatch" data-color="#ff6b7a" style="--sw:#ff6b7a"></button>
+        </div>
+
+        <div class="tool-group">
+          <label class="size-label">Size
+            <input type="range" id="sizeRange" min="1" max="18" value="3" />
+          </label>
+        </div>
+
+        <div class="tool-group">
+          <button class="btn ghost small" id="clearBoardBtn">Clear board</button>
+        </div>
+
+        <div class="tool-group ai-group">
+          <span class="section-kicker">Smart AI</span>
+          <button class="btn primary small" id="explainBtn">Explain what's on the board</button>
+          <form id="plotForm" class="plot-form">
+            <input type="text" id="plotInput" placeholder="Plot a function, e.g. y = x^2 - 3" />
+            <button type="submit" class="btn soft small">Plot</button>
+          </form>
+        </div>
+      </aside>
+
+      <main class="board-canvas-wrap">
+        <canvas id="boardCanvas"></canvas>
+        <div class="board-readonly-banner" id="readonlyBanner" style="display:none">
+          You're viewing this teacher's whiteboard live. Only the teacher can draw.
+        </div>
+        <div class="ai-panel" id="aiPanel" style="display:none">
+          <div class="ai-panel-header">
+            <span>AI notes</span>
+            <button class="ai-panel-close" id="aiPanelClose" aria-label="Close">×</button>
+          </div>
+          <div class="ai-panel-body" id="aiPanelBody"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/common.js?v=20260709-multipage"></script>
+  <script src="/board.js?v=1"></script>
+</body>
+</html>

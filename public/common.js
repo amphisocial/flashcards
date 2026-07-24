@@ -89,6 +89,7 @@ window.AppCommon = (() => {
 
   function updateAuthUI() {
     const area = $('#authArea');
+    updateWhiteboardNav();
     if (!area) return;
     if (!state.user) {
       area.innerHTML = `
@@ -101,14 +102,29 @@ window.AppCommon = (() => {
       const openApp = document.body.dataset.page === 'landing'
         ? '<a class="btn primary" href="/app">Open app</a>'
         : '';
+      const trial = state.user.trial;
+      const trialBadge = trial && trial.active
+        ? `<span class="trial-chip" title="Trial ends ${new Date(trial.endsAt).toLocaleDateString()}">${trial.daysRemaining}-day trial left</span>`
+        : '';
       area.innerHTML = `
         ${openApp}
+        ${trialBadge}
         <span class="user-chip">${escapeHtml(state.user.firstName || state.user.email)} • ${escapeHtml(state.user.planLabel)}</span>
         <button class="btn ghost" id="logoutBtn">Log out</button>
       `;
       $('#logoutBtn').addEventListener('click', logout);
     }
     updateUsagePill();
+  }
+
+  // Shows/hides the "Whiteboard" nav link based on whether the signed-in
+  // user currently has Teams-level access (paid or trialing). Runs on every
+  // auth refresh so it reacts immediately to a trial starting or expiring.
+  function updateWhiteboardNav() {
+    const link = $('#whiteboardNavLink');
+    if (!link) return;
+    const hasAccess = Boolean(state.user && state.user.limits && state.user.limits.whiteboard);
+    link.style.display = hasAccess ? '' : 'none';
   }
 
   function openAuth(mode) {
@@ -242,10 +258,24 @@ window.AppCommon = (() => {
     }
   }
 
+  async function startTrial(plan) {
+    if (!requireSignedIn()) return;
+    try {
+      const data = await api('/api/billing/trial', { method: 'POST', body: JSON.stringify({ plan }) });
+      state.user = data.user;
+      updateAuthUI();
+      setStatus(`Your 7-day free trial of ${data.user.planLabel} has started. Enjoy!`, 'success');
+      return data.user;
+    } catch (error) {
+      setStatus(error.message, 'error');
+    }
+  }
+
   function bindCommon() {
     $('#authSubmit')?.addEventListener('click', submitAuth);
     $('#authPassword')?.addEventListener('input', updatePasswordHints);
     $$('.checkout').forEach((button) => button.addEventListener('click', () => checkout(button.dataset.plan)));
+    $$('.start-trial').forEach((button) => button.addEventListener('click', () => startTrial(button.dataset.plan)));
   }
 
   async function initCommon() {
@@ -260,5 +290,5 @@ window.AppCommon = (() => {
     }
   }
 
-  return { state, $, $$, escapeHtml, setStatus, api, openAuth, refreshMe, requireSignedIn, checkout, updateAuthUI, updateUsagePill, initCommon, setButtonLoading, clearDialogError };
+  return { state, $, $$, escapeHtml, setStatus, api, openAuth, refreshMe, requireSignedIn, checkout, startTrial, updateAuthUI, updateUsagePill, initCommon, setButtonLoading, clearDialogError };
 })();
