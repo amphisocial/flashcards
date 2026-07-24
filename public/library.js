@@ -11,6 +11,32 @@
     return 'mixed';
   };
 
+  // Students reach shared whiteboards from here, not the Whiteboard tab —
+  // this is where they look for "what did my teacher share with me".
+  async function loadSharedBoards() {
+    try {
+      const data = await api('/api/board/shared/mine');
+      const boards = data.boards || [];
+      const wrap = $('#sharedBoardsWrap');
+      if (!boards.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = 'block';
+      $('#sharedBoards').innerHTML = boards.map((b) => `
+        <div class="set-item">
+          <span class="set-title">${escapeHtml(b.title)} ${b.isLive ? '<span style="color:#14d9c4; font-size:0.75rem; font-weight:700;">● LIVE</span>' : ''}</span>
+          <span class="set-meta">${escapeHtml(b.teacherName)}'s whiteboard${b.isLive ? '' : ' • not live right now'}</span>
+          <div class="set-actions">
+            ${b.isLive
+              ? `<a class="btn primary" href="/board/${b.boardId}">Join</a>`
+              : '<button class="btn soft" disabled title="Your teacher needs to start this board">Offline</button>'}
+          </div>
+        </div>
+      `).join('');
+    } catch (error) {
+      // A student with no shared boards shouldn't see an error for it.
+      $('#sharedBoardsWrap').style.display = 'none';
+    }
+  }
+
   async function loadLibrary() {
     try {
       const data = await api('/api/sets');
@@ -79,6 +105,7 @@
     $('#refreshLibrary').addEventListener('click', loadLibrary);
     await initCommon();
     await loadLibrary();
+    await loadSharedBoards();
     const params = new URLSearchParams(window.location.search);
     if (params.get('whiteboard') === 'upgrade') {
       setStatus('The whiteboard is a Teams plan feature — start a free 7-day trial from Pricing to try it.', '');

@@ -108,7 +108,7 @@ function isSafeExpression(text) {
 // REST routes
 // ---------------------------------------------------------------------
 function attachBoardRoutes(app, deps) {
-  const { requireUser, readStore, emailOnRoster, canViewTeachersContent, userHasWhiteboardAccess } = deps;
+  const { requireUser, readStore, emailOnRoster, canViewTeachersContent, userHasWhiteboardAccess, notifyTeamOfShare, APP_BASE_URL } = deps;
   // canViewTeachersContent = on the team roster OR invited under the older
   // per-study-set model. Whiteboard access used to be granted purely by the
   // latter, so checking only the roster silently cut off every student who
@@ -186,9 +186,19 @@ function attachBoardRoutes(app, deps) {
     const store = readBoardStore();
     const board = findBoard(store, req.params.boardId);
     if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
+    const wasShared = Boolean(board.shared);
     board.shared = Boolean(req.body.shared);
     board.updatedAt = nowIso();
     writeBoardStore(store);
+    if (board.shared && !wasShared && notifyTeamOfShare) {
+      notifyTeamOfShare({
+        store: readStore(),
+        owner: req.user,
+        title: board.title,
+        url: `${APP_BASE_URL}/board/${board.id}`,
+        kind: 'whiteboard'
+      });
+    }
     res.json({ board: boardSummary(board) });
   });
 
@@ -200,12 +210,22 @@ function attachBoardRoutes(app, deps) {
     const board = findBoard(store, req.params.boardId);
     if (!board || board.teacherId !== req.user.id) return res.status(404).json({ error: 'Board not found.' });
     store.boards.forEach((b) => { if (b.teacherId === req.user.id) b.isLive = false; });
+    const wasShared = Boolean(board.shared);
     board.isLive = true;
     // Going live on a board nobody can see is never what's intended, so
     // going live also shares it. Unshare/stop-live remain separate.
     board.shared = true;
     board.updatedAt = nowIso();
     writeBoardStore(store);
+    if (!wasShared && notifyTeamOfShare) {
+      notifyTeamOfShare({
+        store: readStore(),
+        owner: req.user,
+        title: board.title,
+        url: `${APP_BASE_URL}/board/${board.id}`,
+        kind: 'live whiteboard'
+      });
+    }
     res.json({ board: boardSummary(board) });
   });
 
@@ -236,6 +256,28 @@ function attachBoardRoutes(app, deps) {
       if (!allowed) return res.status(403).json({ error: 'This whiteboard is not currently live and shared with you.' });
     }
     res.json({ board, teacher: teacherInfo, isOwner });
+  });
+
+  // Every board shared with me, live or not — Library lists these so a
+  // student has somewhere to see what a teacher shared even between
+  // sessions. Only live ones are joinable (enforced in the fetch route).
+  app.get('/api/board/shared/mine', requireUser, (req, res) => {
+    const mainStore = readStore();
+    const boardStore = readBoardStore();
+    const boards = boardStore.boards
+      .filter((b) => b.shared && b.teacherId !== req.user.id && viewerAllowed(mainStore, b.teacherId, req.user.email))
+      .sort((a, b) => Number(b.isLive) - Number(a.isLive) || b.updatedAt.localeCompare(a.updatedAt))
+      .map((b) => {
+        const teacher = mainStore.users.find((u) => u.id === b.teacherId);
+        return {
+          boardId: b.id,
+          title: b.title,
+          isLive: Boolean(b.isLive),
+          updatedAt: b.updatedAt,
+          teacherName: teacher ? ([teacher.firstName, teacher.lastName].filter(Boolean).join(' ') || teacher.email) : 'Unknown teacher'
+        };
+      });
+    res.json({ boards });
   });
 
   // ---- Viewer discovery: which of MY teachers are live right now? -------

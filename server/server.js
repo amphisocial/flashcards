@@ -19,6 +19,47 @@ const { emailOnRoster } = require('./team');
 // OR were invited under the older per-study-set model. Whiteboard access was
 // originally granted purely by the latter, so a roster-only check locks out
 // everyone who already had access before rosters existed.
+// True when this person is somebody's student — on a team roster, or invited
+// under the older per-study-set model. Students are on the free plan, so
+// plan alone can't tell us whether to show them shared content.
+function isSomeonesStudent(store, email) {
+  const target = String(email || '').trim().toLowerCase();
+  if (!target) return false;
+  const onRoster = store.users.some((u) => (u.teamRoster || [])
+    .some((entry) => String(entry.email || '').trim().toLowerCase() === target));
+  if (onRoster) return true;
+  return store.quizlets.some((set) => (set.invitedEmails || [])
+    .map((e) => String(e || '').trim().toLowerCase()).includes(target));
+}
+
+// Everyone on a teacher's roster, used to notify a team when something new
+// is shared with them.
+function rosterEmailsFor(store, teacherId) {
+  const teacher = store.users.find((u) => u.id === teacherId);
+  if (!teacher) return [];
+  return (teacher.teamRoster || []).map((e) => e.email).filter(Boolean);
+}
+
+function teacherDisplayName(user) {
+  return [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email;
+}
+
+// Fire-and-forget so a teacher flipping "Share" isn't left waiting on up to
+// 30 SMTP round-trips. Failures are logged, never surfaced as a failed share.
+function notifyTeamOfShare({ store, owner, title, url, kind }) {
+  const recipients = rosterEmailsFor(store, owner.id);
+  if (!recipients.length) return;
+  const who = teacherDisplayName(owner);
+  const subject = `${who} shared a ${kind} with you`;
+  const text = `${who} shared "${title}" with you on Athena Flashcards.\n\nOpen it here: ${url}`;
+  const html = `<p><strong>${who}</strong> shared "${title}" with you on Athena Flashcards.</p><p><a href="${url}">Open it here</a></p>`;
+  recipients.forEach((to) => {
+    Promise.resolve()
+      .then(() => sendMail({ to, subject, text, html }))
+      .catch((error) => console.warn('Share notification failed for', to, error.message));
+  });
+}
+
 function canViewTeachersContent(store, teacherId, email) {
   if (emailOnRoster(store, teacherId, email)) return true;
   const target = String(email || '').trim().toLowerCase();
@@ -955,7 +996,14 @@ app.get('/api/me', (req, res) => {
   const user = getCurrentUser(req);
   if (!user) return res.json({ user: null });
   const usage = canCreateSet(user);
-  return res.json({ user: publicUser(user), usage });
+  const store = readStore();
+  const student = isSomeonesStudent(store, user.email);
+  const pub = publicUser(user);
+  // canSeeWhiteboard is deliberately separate from limits.whiteboard: a
+  // student is on the free plan but still needs the Whiteboard nav link to
+  // reach boards their teacher shared with them.
+  pub.access = { isStudent: student, canSeeWhiteboard: Boolean(pub.limits.whiteboard) || student };
+  return res.json({ user: pub, usage });
 });
 
 app.post('/api/auth/register', (req, res) => {
@@ -1500,9 +1548,19 @@ const shareToggleSet = (req, res) => {
   const plan = req.user.plan || 'free';
   const seatLimit = PLAN_LIMITS[plan]?.shareSeats || 0;
   if (seatLimit < 1) return res.status(403).json({ error: 'Sharing requires the Teams plan.' });
+  const wasShared = Boolean(set.shared);
   set.shared = Boolean(req.body.shared);
   set.updatedAt = nowIso();
   writeStore(store);
+  if (set.shared && !wasShared) {
+    notifyTeamOfShare({
+      store,
+      owner: req.user,
+      title: set.title,
+      url: `${APP_BASE_URL}/app?set=${set.id}`,
+      kind: set.format === 'slides' ? 'slide deck' : 'study set'
+    });
+  }
   res.json({ set, quizlet: set });
 };
 
@@ -1646,7 +1704,9 @@ attachBoardRoutes(app, {
   nowIso,
   emailOnRoster,
   canViewTeachersContent,
-  userHasWhiteboardAccess
+  userHasWhiteboardAccess,
+  notifyTeamOfShare,
+  APP_BASE_URL
 });
 
 // Board picker: teachers see their saved boards + New/Go Live controls;

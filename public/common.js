@@ -100,7 +100,7 @@ window.AppCommon = (() => {
       $('#openSignup').addEventListener('click', () => openAuth('signup'));
     } else {
       const openApp = document.body.dataset.page === 'landing'
-        ? '<a class="btn primary" href="/app">Open app</a>'
+        ? `<a class="btn primary" href="${homePathFor(state.user)}">Open app</a>`
         : '';
       const trial = state.user.trial;
       const trialBadge = trial && trial.active
@@ -122,11 +122,29 @@ window.AppCommon = (() => {
   // Runs on every auth refresh so it reacts immediately to a trial
   // starting or expiring.
   function updateWhiteboardNav() {
-    const hasAccess = Boolean(state.user && state.user.limits && state.user.limits.whiteboard);
+    const user = state.user;
+    const owns = Boolean(user && user.limits && user.limits.whiteboard);
+    // Students are on the free plan but still need a way to reach boards a
+    // teacher shared with them, so the Whiteboard link keys off access
+    // rather than plan. Team management stays owner-only.
+    const canSeeBoards = Boolean(user && (owns || (user.access && user.access.canSeeWhiteboard)));
     const boardLink = $('#whiteboardNavLink');
-    if (boardLink) boardLink.style.display = hasAccess ? '' : 'none';
+    if (boardLink) boardLink.style.display = canSeeBoards ? '' : 'none';
     const teamLink = $('#teamNavLink');
-    if (teamLink) teamLink.style.display = hasAccess ? '' : 'none';
+    if (teamLink) teamLink.style.display = owns ? '' : 'none';
+    // Signed-in people always get Create/Library on the landing page.
+    const loggedIn = Boolean(user);
+    ['#landingLibraryLink', '#landingCreateLink'].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.style.display = loggedIn ? '' : 'none';
+    });
+  }
+
+  // Students mostly consume what's shared with them, so Library is a better
+  // landing spot than the create-a-set page.
+  function homePathFor(user) {
+    if (user && user.access && user.access.isStudent && !(user.limits && user.limits.whiteboard)) return '/library';
+    return '/app';
   }
 
   function openAuth(mode) {
@@ -209,7 +227,9 @@ window.AppCommon = (() => {
       state.user = data.user;
       dialog.close();
       if (document.body.dataset.page === 'landing') {
-        window.location.href = '/app';
+        // refreshMe so access flags are populated before choosing a landing page
+        await refreshMe();
+        window.location.href = homePathFor(state.user);
         return;
       }
       updateAuthUI();
@@ -292,5 +312,5 @@ window.AppCommon = (() => {
     }
   }
 
-  return { state, $, $$, escapeHtml, setStatus, api, openAuth, refreshMe, requireSignedIn, checkout, startTrial, updateAuthUI, updateUsagePill, initCommon, setButtonLoading, clearDialogError };
+  return { state, homePathFor, $, $$, escapeHtml, setStatus, api, openAuth, refreshMe, requireSignedIn, checkout, startTrial, updateAuthUI, updateUsagePill, initCommon, setButtonLoading, clearDialogError };
 })();

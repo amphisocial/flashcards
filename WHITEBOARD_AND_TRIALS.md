@@ -264,3 +264,40 @@ whiteboard release. All three are fixed:
 Also: **going live now also marks the board shared.** Going live on a board
 nobody can see was never the intent, and it made "why can't my students see
 this?" a two-step trap. Unshare and stop-live remain separate actions.
+
+---
+
+# Student/invitee experience fixes
+
+Invitees could join a team but had no way to reach anything shared with
+them. The data was correct the whole time; the UI hid it.
+
+1. **Shared whiteboards were invisible to students.** The Whiteboard nav
+   link only rendered for accounts with `limits.whiteboard` (Teams plan),
+   and students are on the free plan — so a student had no link to the
+   page listing their teacher's live boards. `/api/me` now returns an
+   `access` object (`isStudent`, `canSeeWhiteboard`) computed from roster
+   membership, and the nav keys off that instead of plan. Team management
+   stays owner-only.
+
+2. **Library now lists "Whiteboards shared with you."** New endpoint
+   `GET /api/board/shared/mine` returns every shared board from teachers
+   whose roster you're on, live or not. Live ones get a Join button;
+   offline ones show as Offline rather than silently disappearing, so a
+   student can tell the difference between "nothing shared" and "not
+   started yet."
+
+3. **Library is now the student's landing page.** Students mostly consume
+   what's shared rather than create, so login/landing routes them to
+   `/library` (`homePathFor()` in `common.js`); teachers still land on
+   `/app`. The landing page header also shows Create / Your Library links
+   once signed in — previously it only had Features/Pricing, leaving a
+   signed-in free user with no way back into the app from the homepage.
+
+4. **Sharing something now emails the team a direct link.** Toggling share
+   on a study set, slide deck, or whiteboard (and going live, which
+   implies sharing) emails everyone on the roster a link straight to that
+   item — `/app?set=<id>` or `/board/<id>`. Sends are fire-and-forget: a
+   share never fails because SMTP is slow or down, and per-recipient
+   failures are logged. Emails only go out on the off→on transition, so
+   re-toggling doesn't spam the roster.
