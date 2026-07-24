@@ -475,3 +475,61 @@ included in PNG snapshots and PDF export.
 ## New: collapsible toolbar
 - The left toolbar is now four collapsible sections — Tools, Page,
   Flowchart shapes, Smart AI — so it stops growing unbounded.
+
+---
+
+# v2.3 — Notes: scan a page, get notes, get quizzed
+
+A new `/notes` area (linked in the nav everywhere) for turning a photographed
+or uploaded page into organized study material.
+
+## 1. Scan or upload
+- **Take a photo** (`capture="environment"` opens the phone's rear camera) or
+  upload an image, PDF, docx, or txt.
+- Images are OCR'd by the vision model; PDFs/docx reuse the same extractor
+  the Create page already uses. Either way the text lands in an **editable
+  review box** before anything is saved, so OCR mistakes can be fixed by hand.
+
+## 2. Organized notes
+One structured generation per passage produces: a short summary, important
+facts, key terms with definitions, main ideas, dates/people/formulas/events
+(each with why it matters), and difficult ideas explained simply. Everything
+is prompted to stay grounded in the passage.
+
+## 3. Organization
+`Subject → Notebook → Chapter → Passage`, rendered as a collapsible tree,
+with free-form tags (`Important`, `Test Friday`, …) and a tag filter box.
+Previously used subjects/notebooks/chapters autocomplete when filing a new
+passage. Passages can be re-filed and re-tagged after the fact.
+
+## 4. Quizzes — five formats
+Multiple choice, true/false, short answer, fill-in-the-blank, and flashcards,
+selectable per quiz. Every generated question carries its correct answer, a
+why-it's-correct explanation, **the supporting sentence quoted from the
+passage**, and a short topic label.
+
+Grading is honest about what can be auto-graded: mc/tf/fib are checked
+automatically (normalized compare); short answers and flashcards show the
+answer and ask "I got it / I missed it", because free text has many correct
+phrasings and auto-grading against one reference marks too many right
+answers wrong.
+
+## 5. Learning tracking
+After each answer the student sees why the answer is correct plus the
+supporting sentence. Results are recorded per passage:
+- misses increment a per-topic weakness counter (and are kept in a rolling
+  missed-questions log);
+- a later correct answer on that topic *softens* the weakness rather than
+  erasing it;
+- the next quiz generation is explicitly weighted (~half the questions)
+  toward the current weakest topics, and the quiz setup screen tells the
+  student which topics it will focus on.
+
+Verified end-to-end in this environment: OCR file path, passage CRUD, the
+tree data, tag rewriting, the weakness math (2 misses -> weight 2; 1 correct
+-> weight 1), and that weak topics reach the generation prompt. Vision OCR
+and question generation themselves need a configured AI key and were
+verified only for clean error handling here.
+
+Costs: creating a passage's notes and generating a quiz each count one
+against the existing daily AI-generation limit; answering questions is free.

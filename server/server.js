@@ -123,6 +123,7 @@ function readStore() {
     parsed.users ||= [];
     parsed.sessions ||= [];
     parsed.quizlets ||= [];
+    parsed.passages ||= [];
     parsed.events ||= [];
     parsed.satSessions ||= [];
     return parsed;
@@ -842,6 +843,15 @@ async function askVisionAI({ instructions, imageDataUrl }) {
 // The AI provider is controlled by the server operator via .env, never by the
 // browser. Set AI_PROVIDER=claude | openai | gemini (aliases: anthropic, google).
 // If AI_PROVIDER is unset, the first provider with an API key configured wins.
+// Provider-agnostic raw call used by the notes/quiz module - same routing
+// as generateWithProvider but returns the raw model text for JSON parsing.
+async function callProviderRaw(prompt) {
+  const provider = resolveProvider();
+  if (provider === 'gemini') return callGemini(prompt);
+  if (provider === 'openai') return callOpenAI(prompt);
+  return callClaude(prompt);
+}
+
 function resolveProvider() {
   const raw = String(process.env.AI_PROVIDER || '').trim().toLowerCase();
   const aliases = { anthropic: 'claude', claude: 'claude', openai: 'openai', gpt: 'openai', google: 'gemini', gemini: 'gemini' };
@@ -1688,6 +1698,27 @@ app.get('/join', (req, res) => {
 // serving the homepage instead.)
 app.get('/team', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'team.html'));
+});
+
+// ---- Notes: scan/upload -> notes -> quiz -> tracking (v2.3) ---------------
+const { attachNotesRoutes } = require('./notes');
+
+attachNotesRoutes(app, {
+  requireUser,
+  readStore,
+  writeStore,
+  id,
+  nowIso,
+  upload,
+  askVisionAI: ({ instructions, imageDataUrl }) => askVisionAI({ instructions, imageDataUrl }),
+  callProviderRaw,
+  extractUploadText,
+  canCreateSet,
+  compactText
+});
+
+app.get('/notes', requirePageUser, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'notes.html'));
 });
 
 // ---- Whiteboard (Phase 1+) ------------------------------------------------

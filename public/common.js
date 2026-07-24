@@ -134,7 +134,7 @@ window.AppCommon = (() => {
     if (teamLink) teamLink.style.display = owns ? '' : 'none';
     // Signed-in people always get Create/Library on the landing page.
     const loggedIn = Boolean(user);
-    ['#landingLibraryLink', '#landingCreateLink'].forEach((sel) => {
+    ['#landingLibraryLink', '#landingCreateLink', '#landingNotesLink'].forEach((sel) => {
       const el = $(sel);
       if (el) el.style.display = loggedIn ? '' : 'none';
     });

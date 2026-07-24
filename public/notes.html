@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Notes | Athena Flashcards</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260724-v5" />
+  <link rel="stylesheet" href="/notes.css?v=20260724-v5" />
+</head>
+<body data-page="notes">
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Athena Flashcards home">
+        <span class="brand-mark">A</span>
+        <span><strong>Athena</strong> Flashcards</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/app">Create</a>
+        <a href="/notes" class="active">Notes</a>
+        <a href="/library">Your Library</a>
+        <a href="/board" id="whiteboardNavLink" style="display:none">Whiteboard</a>
+        <a href="/team" id="teamNavLink" style="display:none">Team</a>
+        <a href="/#pricing">Pricing</a>
+      </nav>
+      <div class="auth-area" id="authArea"></div>
+    </header>
+
+    <main class="app-page notes-layout">
+      <!-- Left: tree of Subject -> Notebook -> Chapter -> Passage -->
+      <aside class="panel notes-tree-panel">
+        <div class="panel-header">
+          <h2 style="font-size:1.05rem">My notes</h2>
+          <button class="btn primary small" id="newPassageBtn">+ New</button>
+        </div>
+        <input id="tagFilter" placeholder="Filter by tag…" class="tag-filter" />
+        <div id="notesTree"><p class="set-meta">Nothing here yet — scan or upload your first page.</p></div>
+      </aside>
+
+      <!-- Right: workflow area -->
+      <section class="panel notes-main">
+        <!-- STEP 1: capture -->
+        <div class="notes-step" id="stepCapture">
+          <span class="section-kicker">Step 1</span>
+          <h2>Scan or upload a page</h2>
+          <p class="notes-hint">Photograph a book page or worksheet with your phone, or upload an image, PDF, or document. Athena reads the text so you can turn it into notes and quizzes.</p>
+          <div class="capture-buttons">
+            <label class="btn primary large">
+              📷 Take a photo
+              <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" />
+            </label>
+            <label class="btn soft large">
+              📄 Upload image / PDF / doc
+              <input type="file" id="fileInput" accept="image/*,.pdf,.docx,.txt" style="display:none" />
+            </label>
+          </div>
+          <p class="notes-hint" id="ocrStatus" style="display:none"></p>
+        </div>
+
+        <!-- STEP 2: review + organize -->
+        <div class="notes-step" id="stepReview" style="display:none">
+          <span class="section-kicker">Step 2</span>
+          <h2>Check the text, then organize it</h2>
+          <p class="notes-hint">Fix any reading mistakes below — then tell Athena where this belongs.</p>
+          <textarea id="passageText" rows="9"></textarea>
+          <div class="organize-grid">
+            <label>Subject<input id="orgSubject" list="subjectList" placeholder="History" /></label>
+            <label>Notebook<input id="orgNotebook" list="notebookList" placeholder="American Revolution" /></label>
+            <label>Chapter<input id="orgChapter" list="chapterList" placeholder="Chapter 4" /></label>
+            <label>Passage title<input id="orgTitle" placeholder="Boston Tea Party" /></label>
+          </div>
+          <datalist id="subjectList"></datalist>
+          <datalist id="notebookList"></datalist>
+          <datalist id="chapterList"></datalist>
+          <label class="tags-label">Tags (comma separated)<input id="orgTags" placeholder="Important, Test Friday, Needs Review" /></label>
+          <div class="step-actions">
+            <button class="btn ghost" id="backToCapture">← Back</button>
+            <button class="btn primary large" id="makeNotesBtn">Create notes</button>
+          </div>
+        </div>
+
+        <!-- STEP 3: the passage view (notes + quiz) -->
+        <div class="notes-step" id="stepPassage" style="display:none">
+          <div class="passage-head">
+            <div>
+              <span class="breadcrumbs" id="passageCrumbs"></span>
+              <h2 id="passageTitle"></h2>
+              <div class="tag-row" id="passageTags"></div>
+            </div>
+            <div class="passage-actions">
+              <button class="btn soft small" id="quizMeBtn">🎯 Quiz me</button>
+              <button class="btn ghost small" id="editOrgBtn">Organize</button>
+              <button class="btn ghost small" id="deletePassageBtn">Delete</button>
+            </div>
+          </div>
+
+          <div class="passage-stats" id="passageStats"></div>
+
+          <div class="notes-sections" id="notesSections"></div>
+
+          <details class="passage-source">
+            <summary>Original passage</summary>
+            <p id="passageOriginal"></p>
+          </details>
+        </div>
+
+        <!-- QUIZ MODE -->
+        <div class="notes-step" id="stepQuiz" style="display:none">
+          <div class="quiz-head">
+            <h2>Quiz</h2>
+            <span id="quizProgress"></span>
+            <button class="btn ghost small" id="quizExitBtn">Exit</button>
+          </div>
+          <div id="quizSetup">
+            <p class="notes-hint">Pick question types:</p>
+            <div class="quiz-types">
+              <label><input type="checkbox" value="mc" checked /> Multiple choice</label>
+              <label><input type="checkbox" value="tf" checked /> True / False</label>
+              <label><input type="checkbox" value="short" /> Short answer</label>
+              <label><input type="checkbox" value="fib" checked /> Fill in the blank</label>
+              <label><input type="checkbox" value="flash" /> Flashcards</label>
+            </div>
+            <label class="size-label" style="max-width:220px">Questions
+              <select id="quizCount"><option>5</option><option selected>8</option><option>12</option><option>16</option></select>
+            </label>
+            <p class="notes-hint" id="weakTopicsNote" style="display:none"></p>
+            <button class="btn primary large" id="startQuizBtn">Start quiz</button>
+          </div>
+          <div id="quizRun" style="display:none">
+            <div class="quiz-card" id="quizCard"></div>
+            <div class="quiz-feedback" id="quizFeedback" style="display:none"></div>
+            <div class="step-actions">
+              <button class="btn primary" id="quizNextBtn" style="display:none">Next →</button>
+            </div>
+          </div>
+          <div id="quizDone" style="display:none"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/common.js?v=20260724-v5"></script>
+  <script src="/notes.js?v=20260724-v5"></script>
+</body>
+</html>
