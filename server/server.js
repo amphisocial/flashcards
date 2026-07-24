@@ -1613,6 +1613,14 @@ app.get('/join', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'join.html'));
 });
 
+// Team roster management page. (attachTeamRoutes above only mounts the
+// /api/team/* API endpoints — this is the actual page route that was
+// missing, which is why /team was falling through to the catch-all and
+// serving the homepage instead.)
+app.get('/team', requirePageUser, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'team.html'));
+});
+
 // ---- Whiteboard (Phase 1+) ------------------------------------------------
 // Registered before the catch-all below so /board/:boardId and /boards
 // resolve to their pages rather than falling through to index.html.
