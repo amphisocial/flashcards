@@ -584,3 +584,45 @@ empty box.
   real browser to judge — the geometry selection, molecule fallbacks, the
   dispose lifecycle, and the full push-to-student pipeline are verified
   here, but the visual result is not something this environment can see.
+
+---
+
+# v2.7 — a real Earth, not a cartoon
+
+Rebuilt the Earth viewer from the ground up in response to the "cartoonish
+green blobs" feedback.
+
+## Real map
+- Bundled a genuine 2048×1024 Blue Marble satellite texture at
+  `public/textures/earth.jpg` (served by express.static, no runtime/CORS
+  dependency, works offline). Continents and oceans render as they actually
+  look. Falls back to a plain blue sphere only if the texture fails to load.
+
+## Geography overlays (all verified mathematically)
+- **Graticule**: latitude/longitude grid every 15°.
+- **Equator** (bright teal), **Tropic of Cancer** and **Tropic of
+  Capricorn** (amber, ±23.5°), **Arctic** and **Antarctic Circles** (cyan,
+  ±66.5°) drawn as highlighted rings with floating labels. The lat/long→3D
+  math is unit-tested: equator lands at y=0 full radius, tropics at ±0.678,
+  poles collapse onto the axis — so the rings sit at the correct latitudes.
+- **Ocean labels**: Pacific, Atlantic, Indian, Arctic, Southern.
+- **Continent labels**: all seven, bold white, placed at real coordinates.
+
+## Interaction
+- **Zoom**: mouse wheel and two-finger pinch dolly the camera (clamped so
+  you can zoom in toward country level without flying through the globe).
+- **Maximize / fullscreen**: a ⛶ button on every 3D viewer (solids and
+  molecules too, not just Earth) expands it to fullscreen via the
+  Fullscreen API and resizes the renderer to fill the screen; ✕ or Esc
+  restores it.
+- Drag to rotate; gentle auto-spin until touched; an on-viewer hint says so.
+
+## Still needs your eyes
+The geometry, texture serving (byte-identical over HTTP), label placement
+math, zoom clamping, and fullscreen lifecycle are all verified here. What I
+can't see without a browser: how the map actually looks with lighting, label
+legibility against the texture, and whether zoom feels right. Write "Earth"
+in a circle and Analyze to check. If labels are hard to read over bright
+terrain, that's a quick tweak (stronger shadow or a semi-opaque pill behind
+each). A night-lights texture is also available on the same host if you want
+a day/night option later.

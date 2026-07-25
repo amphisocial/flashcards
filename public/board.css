@@ -276,3 +276,29 @@ body[data-page="board"] {
   background: rgba(8,17,31,0.7); padding: 3px 8px; border-radius: 999px;
   pointer-events: none;
 }
+
+/* ---------- 3D viewer fullscreen + controls ---------- */
+.viz3d-fs-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 5;
+  width: 30px; height: 30px; border-radius: 8px;
+  border: 1px solid var(--line); background: rgba(8,17,31,0.72);
+  color: #eef6ff; font-size: 15px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.viz3d-fs-btn:hover { background: rgba(124,92,255,0.4); }
+.viz3d-holder.viz3d-fullscreen {
+  height: 100vh !important; width: 100vw !important;
+  border-radius: 0; border: 0; margin: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(20,30,60,0.6), #050a14);
+}
+.viz3d-holder.viz3d-fullscreen .viz3d-caption {
+  font-size: 0.95rem; left: 18px; bottom: 18px; padding: 6px 14px;
+}
+.viz3d-holder.viz3d-fullscreen .viz3d-fs-btn { width: 42px; height: 42px; font-size: 20px; top: 16px; right: 16px; }
+/* A short hint about interaction, shown on Earth. */
+.viz3d-hint {
+  position: absolute; top: 8px; left: 8px; z-index: 4;
+  font-size: 0.66rem; color: var(--muted);
+  background: rgba(8,17,31,0.6); padding: 3px 8px; border-radius: 999px;
+  pointer-events: none;
+}
