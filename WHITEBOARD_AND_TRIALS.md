@@ -829,3 +829,42 @@ Student can GET the board while live (200), after the teacher stops live
 (200, snapshot, isLive=false), and it stays in their shared library; student
 WS connects to a non-live shared board and gets the sync; live:changed
 reaches students; unsharing returns 403.
+
+---
+
+# v3.3 — student flow fixes + new marketing homepage
+
+## Student flow
+- **Export on snapshots.** The student bar now keeps the ⬇ PDF button visible
+  at all times (live or snapshot); the live-only controls — reactions, raise
+  hand, "I'm lost" — hide when the board isn't live, so Export is unmissable.
+- **Library "Offline" is now a link.** A non-live shared board shows a
+  "View snapshot" link to /board/:id (was a dead disabled "Offline" button),
+  since snapshots are viewable now.
+- **Exit goes to the right home.** Students exit the board to /library (where
+  their shared boards live); teachers still go to /boards. The brand logo does
+  the same. Previously both went to /boards, which for a student is the wrong
+  page and bounced them toward the marketing site.
+
+## New marketing homepage
+Rebuilt index.html around the new capabilities, with **live 3D demos** on the
+page (real viz3d viewers, not images):
+- Hero: a rotatable Earth.
+- 3D Science grid: acetic acid (CH3COOH, chemically correct C2H4O2 with a C=O
+  double bond — click an atom for its electron shells), a geometric solid, and
+  a teaching globe.
+- Feature blocks for the AI whiteboard (handwriting->graph, shape snap,
+  flowcharts, Analyze), the live classroom (reactions, questions, I'm lost,
+  archived AI Notes, snapshots), and Notes/Study (scan->OCR->notes->5 quiz
+  types->weak-topic tracking).
+- A "without the hardware" comparison against fixed classroom AI boards.
+- Pricing and auth logic preserved (same landing.js hooks, plus a second CTA).
+
+Demos lazy-mount on scroll and are capped at 4 live WebGL viewers.
+
+## Verified vs. needs-your-eyes
+Verified: homepage + all 3D assets serve, the four demo holders are present,
+acetic acid's formula/bonds are correct, and all three student-flow fixes
+(snapshot GET, View snapshot link, export visible, exit target). Needs a real
+browser: how the live 3D demos look and perform on the marketing page, and the
+overall visual polish of the redesign.

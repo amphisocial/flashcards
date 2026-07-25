@@ -3,101 +3,205 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Athena Flashcards | AI-powered study sets</title>
-  <meta name="description" content="AI-powered flashcards, quizzes, and slides from documents, pasted content, or guided chat." />
+  <title>Athena — AI whiteboard, 3D science, and study sets for the classroom</title>
+  <meta name="description" content="An AI teaching whiteboard with handwriting-to-graph, shape recognition, interactive 3D geometry, molecules and a rotatable Earth, a live classroom, and AI study notes and quizzes — on the devices you already own." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260724-v6" />
+  <link rel="stylesheet" href="/styles.css?v=20260725-v12" />
+  <link rel="stylesheet" href="/landing3d.css?v=20260725-v12" />
 </head>
 <body data-page="landing">
   <div class="shell">
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Athena Flashcards home">
+      <a class="brand" href="/" aria-label="Athena home">
         <span class="brand-mark">A</span>
-        <span><strong>Athena</strong> Flashcards</span>
+        <span><strong>Athena</strong></span>
       </a>
       <nav class="nav-links">
         <a href="/app" id="landingCreateLink" style="display:none">Create</a>
         <a href="/library" id="landingLibraryLink" style="display:none">Your Library</a>
         <a href="/notes" id="landingNotesLink" style="display:none">Notes</a>
-        <a href="#features">Features</a>
+        <a href="#whiteboard">Whiteboard</a>
+        <a href="#science3d">3D Science</a>
+        <a href="#study">Study</a>
         <a href="#pricing">Pricing</a>
       </nav>
       <div class="auth-area" id="authArea"></div>
     </header>
 
     <main id="top">
-      <section class="hero">
+      <!-- HERO -->
+      <section class="hero3d">
         <div class="hero-copy">
-          <span class="eyebrow">AI-powered study sets for serious learning</span>
-          <h1>Turn any document, notes, or study goal into beautiful study sets.</h1>
-          <p>Upload a file, paste content, or use the guided AI coach. Athena builds clean flashcards, interactive multiple-choice quizzes, and presentation slides — stored in your library with invite-based sharing.</p>
+          <span class="eyebrow">The AI teaching board that runs on the devices you already own</span>
+          <h1>Write it. Watch it come alive in 3D.</h1>
+          <p>Athena turns a classroom whiteboard into an AI tutor: handwriting becomes graphs, rough sketches snap into shapes, and a flat drawing becomes a <strong>rotatable 3D model</strong> — geometry, molecules, even a labelled Earth. Add a live classroom, AI notes, and auto-generated quizzes, all in the browser.</p>
           <div class="hero-actions">
-            <button class="btn primary large" id="ctaStart">Start studying free</button>
-            <a href="#pricing" class="btn soft large">View plans</a>
+            <button class="btn primary large" id="ctaStart">Start free</button>
+            <a href="#science3d" class="btn soft large">See the 3D demos</a>
           </div>
           <div class="trust-row">
-            <span>5 free sets/day</span>
-            <span>Claude, OpenAI, or Gemini</span>
-            <span>Team sharing</span>
+            <span>◆ Runs on any tablet or laptop</span>
+            <span>◆ Live student join</span>
+            <span>◆ Claude · OpenAI · Gemini</span>
           </div>
         </div>
-        <div class="hero-card" aria-hidden="true">
-          <div class="floating-card one">
-            <span>Interview Prep</span>
-            <strong>How do you measure tech ROI?</strong>
+        <div class="hero-visual">
+          <!-- Live rotating Earth -->
+          <div class="demo3d-frame">
+            <div class="demo3d-holder" id="heroEarth" data-demo="earth"></div>
+            <div class="demo3d-cap">Draw a circle, write “Earth” — drag to spin, zoom, switch to a political map.</div>
           </div>
-          <div class="floating-card two">
-            <span>SAT Biology</span>
-            <strong>Define cellular respiration.</strong>
-          </div>
-          <div class="study-preview">
-            <div class="preview-top">
-              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+      </section>
+
+      <!-- LOGOS / STAT STRIP -->
+      <section class="stat-strip">
+        <div><strong>2D → 3D</strong><span>handwriting to rotatable models</span></div>
+        <div><strong>5 quiz types</strong><span>from any page you scan</span></div>
+        <div><strong>Live</strong><span>reactions, questions, “I'm lost”</span></div>
+        <div><strong>No new hardware</strong><span>works in the browser</span></div>
+      </section>
+
+      <!-- WHITEBOARD -->
+      <section class="feature-block" id="whiteboard">
+        <div class="feature-block-copy">
+          <span class="section-kicker">AI Whiteboard</span>
+          <h2>An AI tutor living on the board.</h2>
+          <ul class="check-list">
+            <li>Handwrite <code>y = x² − 3</code> and get a graph — with sliders that move the curve live while students watch.</li>
+            <li>Sketch a rough circle, triangle, pentagon or hexagon and it snaps to a clean shape.</li>
+            <li>Build flowcharts with connectors and automatic Y/N decision branches.</li>
+            <li>Hit <strong>Analyze</strong> for a worked, step-by-step explanation of anything on the board.</li>
+          </ul>
+        </div>
+        <div class="feature-block-visual">
+          <div class="mock-board">
+            <div class="mock-graph">
+              <svg viewBox="0 0 240 160" preserveAspectRatio="none">
+                <line x1="0" y1="80" x2="240" y2="80" stroke="rgba(255,255,255,0.2)"/>
+                <line x1="120" y1="0" x2="120" y2="160" stroke="rgba(255,255,255,0.2)"/>
+                <path d="M10,150 Q120,-40 230,150" fill="none" stroke="#14d9c4" stroke-width="3"/>
+              </svg>
+              <span class="mock-eq">y = x² − 3</span>
             </div>
-            <p class="mini-label">AI Study Set</p>
-            <h3>Exam or Interview Prep</h3>
-            <div class="meter"><span style="width:72%"></span></div>
-            <p>12 cards generated • flashcards + quiz + slides</p>
+            <div class="mock-shapes">
+              <span class="chip">◯ circle</span><span class="chip">△ triangle</span><span class="chip">⬠ pentagon</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="features" id="features">
-        <div class="pricing-heading">
-          <span class="section-kicker">Features</span>
-          <h2>Three ways to study, one generator.</h2>
+      <!-- 3D SCIENCE -->
+      <section class="science3d" id="science3d">
+        <div class="pricing-heading center">
+          <span class="section-kicker">3D Science</span>
+          <h2>Turn a flat drawing into something you can rotate.</h2>
+          <p class="section-sub">The models below are live. Drag to rotate, scroll to zoom, tap ⛶ for full screen.</p>
         </div>
-        <div class="feature-grid">
-          <article class="panel feature-card">
-            <span class="mini-label">Flashcards</span>
-            <h3>Flip cards that stick</h3>
-            <p>Classic question-and-answer flip cards with explanations, shuffle, and keyboard navigation.</p>
+        <div class="demo3d-grid">
+          <div class="demo3d-card">
+            <div class="demo3d-holder" id="demoMolecule" data-demo="molecule"></div>
+            <h3>Molecules in 3D</h3>
+            <p>Here's acetic acid, <strong>CH₃COOH</strong>. Click any atom to fly into its electron shells — protons, shells, valence electrons.</p>
+          </div>
+          <div class="demo3d-card">
+            <div class="demo3d-holder" id="demoSolid" data-demo="solid"></div>
+            <h3>Geometry you can hold</h3>
+            <p>Cubes, spheres, cones, pyramids and prisms with edges highlighted — surface area and volume worked out alongside.</p>
+          </div>
+          <div class="demo3d-card">
+            <div class="demo3d-holder" id="demoEarth2" data-demo="earth"></div>
+            <h3>A teaching globe</h3>
+            <p>Satellite or political map, real country borders, capitals, rivers, the equator and tropics — labels that appear as you zoom.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- LIVE CLASSROOM -->
+      <section class="feature-block reverse" id="live">
+        <div class="feature-block-copy">
+          <span class="section-kicker">Live Classroom</span>
+          <h2>Everyone in the room, on their own screen.</h2>
+          <ul class="check-list">
+            <li>Students join a live board and follow every stroke in real time.</li>
+            <li>They react with emojis, raise a hand, ask a question, or tap <strong>“I'm lost”</strong> — anonymously.</li>
+            <li>AI Notes are archived on the board, so students keep them after class and can export to PDF.</li>
+            <li>Shared boards stay viewable as a snapshot even after you end the live session.</li>
+          </ul>
+        </div>
+        <div class="feature-block-visual">
+          <div class="mock-live">
+            <div class="mock-reactions"><span>👍</span><span>🎉</span><span>🙏</span><span>❤️</span></div>
+            <div class="mock-pill lost">3 students lost</div>
+            <div class="mock-pill q">2 questions</div>
+            <div class="mock-pill live">● Live · 24 viewers</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STUDY / NOTES -->
+      <section class="feature-block" id="study">
+        <div class="feature-block-copy">
+          <span class="section-kicker">Notes &amp; Study</span>
+          <h2>Scan a page. Get notes and a quiz.</h2>
+          <ul class="check-list">
+            <li>Photograph a textbook page or upload a PDF — Athena reads it (OCR) and writes organized notes.</li>
+            <li>Summary, key terms, main ideas, dates &amp; people, and hard ideas explained simply.</li>
+            <li>Five quiz types — multiple choice, true/false, short answer, fill-in-the-blank, flashcards.</li>
+            <li>It tracks what you miss and quizzes you more on your weak topics.</li>
+          </ul>
+        </div>
+        <div class="feature-block-visual">
+          <div class="mock-notes">
+            <span class="mini-label">History → Chapter 4</span>
+            <h4>Boston Tea Party</h4>
+            <div class="mock-quiz-q">When did it happen?</div>
+            <div class="mock-quiz-opts"><span class="right">Dec 16, 1773 ✓</span><span>1776</span></div>
+            <div class="mock-weak">Weak topic: dates → +2 questions next time</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- COMPARISON -->
+      <section class="compare">
+        <div class="pricing-heading center">
+          <span class="section-kicker">Why Athena</span>
+          <h2>The famous AI blackboard demo — without the hardware.</h2>
+        </div>
+        <div class="compare-grid">
+          <article class="panel">
+            <h3>Big classroom AI boards</h3>
+            <ul class="x-list">
+              <li>A fixed device bolted to one wall</li>
+              <li>Expensive per-room hardware</li>
+              <li>One board, one classroom</li>
+            </ul>
           </article>
-          <article class="panel feature-card">
-            <span class="mini-label">Quizzes</span>
-            <h3>Test yourself for real</h3>
-            <p>Multiple-choice questions where you pick an answer and get instant correct/incorrect feedback.</p>
-          </article>
-          <article class="panel feature-card">
-            <span class="mini-label">Slides</span>
-            <h3>Instant presentations</h3>
-            <p>Turn any material into a clean slide deck you can step through — perfect for teaching or review.</p>
+          <article class="panel featured">
+            <h3>Athena</h3>
+            <ul class="check-list tight">
+              <li>Runs in the browser on tablets &amp; laptops you own</li>
+              <li>Handwriting → graphs, shapes, and 3D models</li>
+              <li>Every student on their own device, live</li>
+              <li>Per-student weak-topic tracking &amp; quizzes</li>
+            </ul>
           </article>
         </div>
       </section>
 
+      <!-- PRICING (logic preserved) -->
       <section class="pricing" id="pricing">
-        <div class="pricing-heading">
+        <div class="pricing-heading center">
           <span class="section-kicker">Pricing</span>
-          <h2>Start free. Upgrade when studying gets serious.</h2>
+          <h2>Start free. Upgrade when it gets serious.</h2>
         </div>
         <div class="pricing-grid three">
           <article class="price-card">
             <h3>Free</h3>
             <p class="price">$0</p>
-            <p>5 AI study sets per day.</p>
+            <p>5 AI study sets per day. Flashcards, quizzes, and slides.</p>
             <button class="btn soft" data-plan="free" disabled>Included</button>
           </article>
           <article class="price-card featured">
@@ -110,11 +214,17 @@
           <article class="price-card">
             <h3>Teams</h3>
             <p class="price">$9.99<span>/mo</span></p>
-            <p>Create and share study sets — plus a live AI whiteboard — with up to 30 invited users.</p>
+            <p>Everything, plus the live AI whiteboard, 3D science, notes &amp; quizzes, and sharing with up to 30 invited students.</p>
             <button class="btn primary checkout" data-plan="team">Upgrade to Teams</button>
             <button class="btn soft start-trial" data-plan="team">Try free for 7 days</button>
           </article>
         </div>
+      </section>
+
+      <section class="final-cta">
+        <h2>Bring the AI board to your classroom today.</h2>
+        <p>No new hardware. Open it in a browser and start teaching.</p>
+        <button class="btn primary large" id="ctaStart2">Start free</button>
       </section>
     </main>
   </div>
@@ -142,7 +252,10 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/common.js?v=20260724-v6"></script>
-  <script src="/landing.js?v=20260724-v6"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="/viz3d.js?v=20260725-v12"></script>
+  <script src="/common.js?v=20260725-v12"></script>
+  <script src="/landing.js?v=20260725-v12"></script>
+  <script src="/landing3d.js?v=20260725-v12"></script>
 </body>
 </html>

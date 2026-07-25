@@ -1,13 +1,12 @@
 (async () => {
   const { state, $, openAuth, initCommon, setStatus } = window.AppCommon;
 
-  $('#ctaStart').addEventListener('click', () => {
-    if (state.user) {
-      window.location.href = '/app';
-    } else {
-      openAuth('signup');
-    }
-  });
+  const startFree = () => {
+    if (state.user) { window.location.href = '/app'; }
+    else { openAuth('signup'); }
+  };
+  $('#ctaStart').addEventListener('click', startFree);
+  $('#ctaStart2')?.addEventListener('click', startFree);
 
   await initCommon();
 

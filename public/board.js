@@ -1507,6 +1507,12 @@
     $('#readonlyBanner').style.display = isOwner ? 'none' : '';
     updateViewerBanner();
     $('#studentBar').style.display = isOwner ? 'none' : 'flex';
+    // Students exit to their Library (where shared boards live), teachers to
+    // their board manager. Previously both went to /boards, which for a
+    // student is the wrong page.
+    const home = isOwner ? '/boards' : '/library';
+    const exitLink = $('#exitLink'); if (exitLink) exitLink.href = home;
+    const brandLink = $('#brandLink'); if (brandLink) brandLink.href = home;
     $('#replayOpenBtn').style.display = isOwner ? '' : 'none';
     canvas.style.cursor = isOwner ? 'crosshair' : 'default';
     updateBadge();
@@ -1515,10 +1521,18 @@
   function updateViewerBanner() {
     if (isOwner) return;
     const txt = $('#readonlyBannerText');
-    if (!txt) return;
-    txt.textContent = board && board.isLive
-      ? 'Viewing live. Only the teacher can draw.'
-      : 'This is a shared snapshot — the teacher isn\'t live right now. You can view and export it.';
+    if (txt) {
+      txt.textContent = board && board.isLive
+        ? 'Viewing live. Only the teacher can draw.'
+        : 'This is a shared snapshot — the teacher isn\'t live right now. You can view and export it.';
+    }
+    // The reactions / raise-hand controls only make sense during a live
+    // session; on a static snapshot just keep Export visible so it's obvious
+    // students can save it.
+    const live = !!(board && board.isLive);
+    document.querySelectorAll('.student-bar .react-btn').forEach((b) => { b.style.display = live ? '' : 'none'; });
+    ['#lostBtn', '#askBtn'].forEach((id) => { const el = $(id); if (el) el.style.display = live ? '' : 'none'; });
+    const exp = $('#studentExportBtn'); if (exp) exp.style.display = '';
   }
 
   function updateBadge() {

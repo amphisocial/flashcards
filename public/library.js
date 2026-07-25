@@ -23,11 +23,11 @@
       $('#sharedBoards').innerHTML = boards.map((b) => `
         <div class="set-item">
           <span class="set-title">${escapeHtml(b.title)} ${b.isLive ? '<span style="color:#14d9c4; font-size:0.75rem; font-weight:700;">● LIVE</span>' : ''}</span>
-          <span class="set-meta">${escapeHtml(b.teacherName)}'s whiteboard${b.isLive ? '' : ' • not live right now'}</span>
+          <span class="set-meta">${escapeHtml(b.teacherName)}'s whiteboard${b.isLive ? '' : ' • snapshot available'}</span>
           <div class="set-actions">
             ${b.isLive
               ? `<a class="btn primary" href="/board/${b.boardId}">Join</a>`
-              : '<button class="btn soft" disabled title="Your teacher needs to start this board">Offline</button>'}
+              : `<a class="btn soft" href="/board/${b.boardId}" title="View the last snapshot your teacher shared">View snapshot</a>`}
           </div>
         </div>
       `).join('');
