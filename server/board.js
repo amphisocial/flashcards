@@ -105,6 +105,10 @@ function migrateBoardShape(board) {
     page.strokes ||= [];
     page.objects ||= [];
   });
+  // AI Notes generated during any session are archived on the board itself,
+  // so they survive the teacher going offline and are visible to students
+  // whenever the board is open to them.
+  board.insights ||= [];
   return board;
 }
 
@@ -667,9 +671,34 @@ function attachBoardWebSocket(httpServer, deps) {
           return;
         }
 
-        // Teacher chooses to reveal an analysis to the room.
+        // Teacher reveals an analysis to the room. Persist it to the board's
+        // AI Notes archive first (so it survives the teacher leaving and shows
+        // for students who open the board later), then broadcast live.
         if (msg.type === 'insight:push') {
-          broadcast(targetBoardId, { type: 'insight', analysis: msg.analysis }, ws);
+          const b = getBoard(targetBoardId);
+          if (b) {
+            b.insights ||= [];
+            const entry = { ...msg.analysis };
+            entry.id ||= boardId('ain');
+            entry.archivedAt = nowIso();
+            // De-dupe: don't archive the same analysis twice if re-pushed.
+            if (!b.insights.some((x) => x.id === entry.id)) {
+              b.insights.push(entry);
+              if (b.insights.length > 200) b.insights = b.insights.slice(-200);
+              saveBoard(b);
+            }
+            broadcast(targetBoardId, { type: 'insight', analysis: entry }, ws);
+          }
+          return;
+        }
+
+        // Teacher erases the whole AI Notes archive for this board. It clears
+        // for students too (broadcast), and is wiped from storage.
+        if (msg.type === 'insight:clear') {
+          if (!isOwner) return;
+          const b = getBoard(targetBoardId);
+          if (b) { b.insights = []; saveBoard(b); }
+          broadcast(targetBoardId, { type: 'insight:cleared' }, null);
           return;
         }
 

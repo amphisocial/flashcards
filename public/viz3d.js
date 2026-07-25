@@ -768,39 +768,83 @@
     btn.type = 'button';
     btn.title = 'Maximize';
     btn.innerHTML = '⛶';
+    container.appendChild(btn);
+
+    // The Fullscreen API is unsupported for arbitrary elements on iPhone
+    // Safari (it only allows fullscreen <video>), so requestFullscreen either
+    // is missing or silently no-ops. Detect that and fall back to a CSS
+    // "pseudo-fullscreen" that fixes the container over the whole viewport -
+    // which is what actually makes the button work for students on iOS.
+    const canNativeFS = !!(container.requestFullscreen || container.webkitRequestFullscreen)
+      && !isIOS();
+    let pseudo = false;
+
+    function resize() {
+      requestAnimationFrame(() => {
+        const rw = container.clientWidth || 300;
+        const rh = container.clientHeight || 220;
+        if (handle.onResize) handle.onResize(rw, rh);
+      });
+    }
+
+    function enterPseudo() {
+      pseudo = true;
+      container.classList.add('viz3d-fullscreen', 'viz3d-pseudo-fullscreen');
+      document.body.classList.add('viz3d-pseudo-lock');
+      btn.innerHTML = '✕';
+      resize();
+    }
+    function exitPseudo() {
+      pseudo = false;
+      container.classList.remove('viz3d-fullscreen', 'viz3d-pseudo-fullscreen');
+      document.body.classList.remove('viz3d-pseudo-lock');
+      btn.innerHTML = '⛶';
+      resize();
+    }
+
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-      if (fsEl === container) {
-        (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
-      } else if (container.requestFullscreen || container.webkitRequestFullscreen) {
-        (container.requestFullscreen || container.webkitRequestFullscreen).call(container);
+      if (canNativeFS) {
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        if (fsEl === container) {
+          (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        } else {
+          (container.requestFullscreen || container.webkitRequestFullscreen).call(container);
+        }
+      } else {
+        // iOS / unsupported: toggle the CSS fallback.
+        if (pseudo) exitPseudo(); else enterPseudo();
       }
     });
-    container.appendChild(btn);
 
     const onFsChange = () => {
       const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
       const active = fsEl === container;
       container.classList.toggle('viz3d-fullscreen', active);
       btn.innerHTML = active ? '✕' : '⛶';
-      // Resize the renderer to whatever the holder is now.
-      requestAnimationFrame(() => {
-        const rw = container.clientWidth || 300;
-        const rh = container.clientHeight || 220;
-        if (handle.onResize) handle.onResize(rw, rh);
-      });
+      resize();
     };
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
 
-    // Chain dispose so listeners are cleaned up too.
+    // Esc / back also exits the pseudo mode.
+    const onKey = (e) => { if (e.key === 'Escape' && pseudo) exitPseudo(); };
+    document.addEventListener('keydown', onKey);
+
     const origDispose = handle.dispose;
     handle.dispose = () => {
       document.removeEventListener('fullscreenchange', onFsChange);
       document.removeEventListener('webkitfullscreenchange', onFsChange);
+      document.removeEventListener('keydown', onKey);
+      if (pseudo) exitPseudo();
       if (origDispose) origDispose();
     };
+  }
+
+  function isIOS() {
+    return /iP(hone|ad|od)/.test(navigator.platform || '')
+      || (/Mac/.test(navigator.platform || '') && navigator.maxTouchPoints > 1)  // iPadOS 13+
+      || /iPhone|iPad|iPod/.test(navigator.userAgent || '');
   }
 
   window.AthenaViz3D = { mount };

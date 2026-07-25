@@ -324,3 +324,21 @@ body[data-page="board"] {
 }
 .viz3d-back-btn:hover { background: rgba(124,92,255,0.4); }
 .viz3d-holder.viz3d-fullscreen .viz3d-back-btn { height: 42px; font-size: 0.95rem; top: 16px; left: 16px; padding: 0 18px; }
+
+/* ---------- iOS-safe pseudo-fullscreen for 3D viewers ---------- */
+.viz3d-holder.viz3d-pseudo-fullscreen {
+  position: fixed !important;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100vw !important; height: 100vh !important;
+  height: 100dvh !important;   /* honour iOS toolbars */
+  z-index: 9999; border-radius: 0; border: 0; margin: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(20,30,60,0.6), #050a14);
+  padding-top: env(safe-area-inset-top);
+}
+body.viz3d-pseudo-lock { overflow: hidden; }
+
+/* ---------- AI Notes panel header actions + erase ---------- */
+.info-panel-header-actions { display: flex; align-items: center; gap: 8px; }
+.btn.tiny { padding: 4px 9px; font-size: 0.72rem; border-radius: 7px; }
+#eraseNotesBtn { color: #ff9f6b; border-color: rgba(255,159,107,0.4); }
+#eraseNotesBtn:hover { background: rgba(255,107,122,0.14); border-color: var(--danger); }

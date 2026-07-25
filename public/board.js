@@ -1077,7 +1077,11 @@
     const empty = body.querySelector('.info-empty');
     if (empty) empty.remove();
     body.prepend(card);
+    // Avoid duplicating an archived note that arrives both via initial load
+    // and a live push (they share an id once persisted).
+    if (a.id && analyses.some((x) => x.id === a.id)) { updateEraseBtn(); return; }
     analyses.push(a);
+    updateEraseBtn();
     // Force the panel open for BOTH teacher and students. Students never open
     // it themselves, so a pushed analysis has to reveal it or it looks like
     // nothing happened - which is exactly the "attendees don't see Analyze
@@ -1090,6 +1094,28 @@
     $('#infoPanel').classList.remove('collapsed');
     localStorage.setItem(PANEL_KEY, '0');
     setTimeout(resizeCanvas, 200);
+  }
+
+  function updateEraseBtn() {
+    const btn = $('#eraseNotesBtn');
+    if (btn) btn.style.display = (isOwner && analyses.length) ? '' : 'none';
+  }
+
+  // Teacher erases the whole archive; it clears for students too via the
+  // server broadcast. We clear our own view immediately for responsiveness.
+  function eraseAllNotes() {
+    if (!isOwner || !analyses.length) return;
+    if (!confirm('Erase all AI Notes for this whiteboard? This removes them for students too and cannot be undone.')) return;
+    send({ type: 'insight:clear' });
+    clearNotesLocally();
+    setStatus('AI Notes erased.', 'success');
+  }
+
+  function clearNotesLocally() {
+    analyses.length = 0;
+    const body = $('#infoBody');
+    if (body) body.innerHTML = '<p class="info-empty">No AI Notes yet. Analyze the board, then Push to students to archive an explanation here.</p>';
+    updateEraseBtn();
   }
 
   async function analyzeBoard() {
@@ -1440,6 +1466,7 @@
       }
       if (m.type === 'lost:self') { $('#lostBtn').classList.toggle('active', m.lost); return; }
       if (m.type === 'insight') { renderInsight(m.analysis, { fromTeacher: true }); return; }
+      if (m.type === 'insight:cleared') { clearNotesLocally(); return; }
       if (m.type === 'presence') { updateViewers(m.viewers || []); return; }
       if (m.type === 'question') { addQuestion(m.question); return; }
       if (m.type === 'question:cleared') { removeQuestion(m.id); return; }
@@ -1472,6 +1499,7 @@
     $('#replayOpenBtn').style.display = isOwner ? '' : 'none';
     canvas.style.cursor = isOwner ? 'crosshair' : 'default';
     updateBadge();
+    updateEraseBtn();
   }
   function updateBadge() {
     const b = $('#boardBadge');
@@ -1609,6 +1637,8 @@
     $('#infoClose').addEventListener('click', togglePanel);
     $('#analyzeBtn').addEventListener('click', analyzeBoard);
     $('#exportBtn').addEventListener('click', exportPdf);
+    $('#eraseNotesBtn')?.addEventListener('click', eraseAllNotes);
+    $('#studentExportBtn')?.addEventListener('click', exportPdf);
     $('#studySetBtn').addEventListener('click', toStudySet);
     $('#zoomResetBtn').addEventListener('click', () => { view.x = 0; view.y = 0; view.scale = 1; updateZoomLabel(); redraw(); });
 
@@ -1761,6 +1791,11 @@
       const data = await api(`/api/board/${boardIdValue}`);
       board = data.board; isOwner = Boolean(data.isOwner);
       $('#boardTitle').textContent = isOwner ? board.title : `${data.teacher.name}'s whiteboard`;
+      // Load the archived AI Notes for this board so they persist across the
+      // teacher going offline and are visible to students on open.
+      if (Array.isArray(board.insights) && board.insights.length) {
+        board.insights.forEach((a) => renderInsight(a, { fromTeacher: true, archived: true }));
+      }
     } catch (error) {
       setStatus(error.message, 'error');
       $('#boardTitle').textContent = 'Whiteboard unavailable';

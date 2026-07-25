@@ -753,3 +753,47 @@ Verified: the electron-shell chemistry, that all three viewers pass zoom
 options, the mount/dispose lifecycle, and asset serving. Needs a real
 browser: how the Bohr animation looks, label legibility, click-to-focus
 feel, and whether the zoom ranges (min/max) feel right per model type.
+
+---
+
+# v3.1 — AI Notes survive the lesson; students can save; iPhone fullscreen works
+
+Four fixes, all about students not losing access when the teacher leaves.
+
+## AI Notes are now archived on the board
+Previously AI Notes (Analyze results pushed to the room) were ephemeral —
+broadcast over the socket and gone the moment the teacher went offline. Now
+each pushed note is **persisted to the board's `insights` archive** on the
+server before broadcasting. When anyone opens the board — including students,
+including while the teacher is offline — the archive loads and shows under
+"AI Notes". Verified: teacher pushes a note, closes their connection, and a
+student's board load still returns it.
+
+## Teacher can Erase all AI Notes
+An "Erase all" button in the AI Notes panel header (teacher-only). It wipes
+the archive from storage and broadcasts `insight:cleared`, so the notes
+vanish for students in real time too. Owner-only on the server — a student
+message can't add or clear notes. Verified both the clear + broadcast and
+the owner guard.
+
+## Students can export to PDF during the lesson
+Added a ⬇ PDF button to the student bar. Since the archived AI Notes load
+into the same `analyses` list the PDF builder uses, a student's export
+includes the board pages AND every AI Note — so they keep everything even
+after the teacher ends the session. (Export was never owner-gated; the button
+just wasn't shown to students before.)
+
+## iPhone fullscreen now works
+The Fullscreen API doesn't work for arbitrary elements on iPhone Safari
+(video only), so the ⛶ button did nothing for students on iOS. Now we detect
+iOS (and iPadOS 13+, which reports as Mac) and fall back to a CSS
+"pseudo-fullscreen" that fixes the viewer over the whole viewport (100dvh,
+safe-area aware) — works on iPhone/iPad, while desktop still uses the native
+API. Verified the detection routes iPhone/iPad to the CSS path and desktop to
+native.
+
+## Verified vs. needs-your-eyes
+Verified: note persistence, offline student access, erase + broadcast, the
+owner guard, and the iOS-vs-desktop fullscreen routing. Needs a real device:
+that the iOS pseudo-fullscreen actually fills an iPhone screen cleanly, and
+that a student's PDF looks right.

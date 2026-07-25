@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20260724-v6" />
-  <link rel="stylesheet" href="/board.css?v=20260725-v9b" />
+  <link rel="stylesheet" href="/board.css?v=20260725-v10" />
 </head>
 <body data-page="board">
   <div class="board-shell" id="boardShell">
@@ -139,6 +139,7 @@
           <button class="react-btn" data-emoji="❤️">❤️</button>
           <button class="btn soft small" id="lostBtn">🤔 I'm lost</button>
           <button class="btn soft small" id="askBtn">✋ Ask</button>
+          <button class="btn soft small" id="studentExportBtn" title="Save this board + notes as PDF">⬇ PDF</button>
         </div>
 
         <div class="page-bar" id="pageBar">
@@ -177,8 +178,11 @@
 
       <aside class="info-panel" id="infoPanel">
         <div class="info-panel-header">
-          <span id="infoTitle">Info</span>
-          <button class="ai-panel-close" id="infoClose" title="Collapse">›</button>
+          <span id="infoTitle">AI Notes</span>
+          <div class="info-panel-header-actions">
+            <button class="btn ghost tiny owner-only" id="eraseNotesBtn" title="Erase all AI Notes for everyone" style="display:none">Erase all</button>
+            <button class="ai-panel-close" id="infoClose" title="Collapse">›</button>
+          </div>
         </div>
         <div class="info-panel-body" id="infoBody">
           <p class="info-empty">Draw or write something, then hit <strong>Analyze board</strong> and the explanation appears here.</p>
@@ -190,8 +194,8 @@
   <div class="toast" id="toast"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="/viz3d.js?v=20260725-v9b"></script>
+  <script src="/viz3d.js?v=20260725-v10"></script>
   <script src="/common.js?v=20260724-v6"></script>
-  <script src="/board.js?v=20260725-v8"></script>
+  <script src="/board.js?v=20260725-v10"></script>
 </body>
 </html>
