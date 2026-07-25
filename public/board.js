@@ -398,6 +398,51 @@
   function analyzeFunction(expression) {
     const rhs = rhsOf(expression).replace(/\s+/g, '');
     const P = (value, min, max, step, label) => ({ value, min, max, step, label });
+    const low = rhs.toLowerCase();
+
+    // Canonical textbook forms written with SYMBOLIC coefficients (the letters
+    // themselves), e.g. y = mx + b or y = ax^2 + bx + c. A teacher writes the
+    // general formula and expects to drag the named constants and watch the
+    // shape change. Start them at teaching-friendly values (m=1, b=0, a=1...).
+    if (low === 'mx+b' || low === 'mx' || low === 'mx-b') {
+      return {
+        family: 'linear', label: 'Straight line',
+        params: { m: P(1, -10, 10, 0.1, 'Slope (m)'), b: P(0, -10, 10, 0.5, 'Y-intercept (b)') },
+        build: (p) => (x) => p.m * x + p.b,
+        pretty: (p) => `y = ${fmt(p.m)}x ${p.b >= 0 ? '+' : '−'} ${fmt(Math.abs(p.b))}`
+      };
+    }
+    if (low === 'ax+b' || low === 'ax-b') {
+      return {
+        family: 'linear', label: 'Straight line',
+        params: { a: P(1, -10, 10, 0.1, 'Slope (a)'), b: P(0, -10, 10, 0.5, 'Y-intercept (b)') },
+        build: (p) => (x) => p.a * x + p.b,
+        pretty: (p) => `y = ${fmt(p.a)}x ${p.b >= 0 ? '+' : '−'} ${fmt(Math.abs(p.b))}`
+      };
+    }
+    if (low === 'ax^2+bx+c' || low === 'ax2+bx+c' || low === 'ax^2+bx' || low === 'ax^2+c' || low === 'ax^2') {
+      return {
+        family: 'quadratic', label: 'Parabola',
+        params: {
+          a: P(1, -5, 5, 0.1, 'Steepness / direction (a)'),
+          b: P(0, -10, 10, 0.5, 'Tilt (b)'),
+          c: P(0, -10, 10, 0.5, 'Height (c)')
+        },
+        build: (p) => (x) => p.a * x * x + p.b * x + p.c,
+        pretty: (p) => `y = ${fmt(p.a)}x² ${p.b >= 0 ? '+' : '−'} ${fmt(Math.abs(p.b))}x ${p.c >= 0 ? '+' : '−'} ${fmt(Math.abs(p.c))}`
+      };
+    }
+    if (low === 'asin(bx+c)+d' || low === 'asin(bx)' || low === 'asin(x)') {
+      return {
+        family: 'sinusoid', label: 'Sine wave',
+        params: {
+          A: P(1, -5, 5, 0.1, 'Amplitude (A)'), B: P(1, 0.1, 5, 0.1, 'Frequency (B)'),
+          C: P(0, -3.14, 3.14, 0.1, 'Phase shift (C)'), D: P(0, -5, 5, 0.5, 'Vertical shift (D)')
+        },
+        build: (p) => (x) => p.A * Math.sin(p.B * x + p.C) + p.D,
+        pretty: (p) => `y = ${fmt(p.A)}sin(${fmt(p.B)}x + ${fmt(p.C)}) + ${fmt(p.D)}`
+      };
+    }
 
     // Linear: y = m x + b  (also plain "x", "-x", "3x", "x+2", "5")
     let m = rhs.match(/^([+-]?\d*\.?\d*)\*?x([+-]\d*\.?\d+)?$/i);
@@ -518,22 +563,26 @@
       if (num) { pos += num[0].length; const n = Number(num[0]); return () => n; }
       const ident = /^[a-zA-Z]+/.exec(source.slice(pos));
       if (ident) {
-        const name = ident[0].toLowerCase(); pos += ident[0].length;
-        if (name === 'x') return (x) => x;
-        if (CONSTANTS[name] !== undefined) return () => CONSTANTS[name];
-        // Single-letter (or short) parameters like A, B, k are read live from
-        // the params map, so a slider can change them without recompiling.
-        if (params && Object.prototype.hasOwnProperty.call(params, ident[0])) {
-          const key = ident[0];
-          return () => Number(params[key]) || 0;
-        }
-        if (FUNCS[name]) {
-          skipWs(); if (peek() !== '(') throw new Error(`Expected "(" after ${name}`);
+        const full = ident[0];
+        const lower = full.toLowerCase();
+        // A multi-letter run is consumed WHOLE only if it's a known function
+        // or constant (sin, cos, sqrt, pi, ...). Otherwise we take ONE letter
+        // at a time, so "mx" parses as m * x via implicit multiplication
+        // instead of an unknown 2-letter name. This lets a teacher write the
+        // general form y = mx + b and get slope/intercept sliders.
+        if (FUNCS[lower]) {
+          pos += full.length;
+          skipWs(); if (peek() !== '(') throw new Error(`Expected "(" after ${lower}`);
           pos += 1; const arg = parseExpr(); skipWs();
           if (peek() !== ')') throw new Error('Missing ")"'); pos += 1;
-          return (x) => FUNCS[name](arg(x));
+          return (x) => FUNCS[lower](arg(x));
         }
-        throw new Error(`Unknown name "${name}"`);
+        if (CONSTANTS[lower] !== undefined) { pos += full.length; return () => CONSTANTS[lower]; }
+        const ch = full[0]; pos += 1;
+        if (ch.toLowerCase() === 'x') return (x) => x;
+        // Any other single letter is a live parameter (default 0 if unset).
+        if (params && !Object.prototype.hasOwnProperty.call(params, ch)) params[ch] = params[ch] ?? 0;
+        return () => Number(params[ch]) || 0;
       }
       throw new Error(`Unexpected "${peek() || ''}"`);
     }
@@ -1279,10 +1328,19 @@
   // Pull single-letter constants (A, B, k...) out of an expression so the
   // graph gets sliders for them. x and known funcs/constants are excluded.
   function detectParams(expression) {
-    const reserved = new Set(['x', 'y', 'e', 'pi', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'exp', 'log', 'ln']);
+    const funcs = new Set(['sin', 'cos', 'tan', 'sqrt', 'abs', 'exp', 'log', 'ln', 'pi']);
+    const skip = new Set(['x', 'y', 'e']);
     const params = {};
-    const idents = String(expression).match(/[a-zA-Z]+/g) || [];
-    idents.forEach((id) => { if (id.length === 1 && !reserved.has(id.toLowerCase())) params[id] = 1; });
+    const rhs = String(expression).split('=').pop();
+    // Consume known funcs/constants whole; split everything else letter by
+    // letter, matching how compileExpression now tokenizes. "mx" -> param m.
+    (rhs.match(/[a-zA-Z]+/g) || []).forEach((run) => {
+      if (funcs.has(run.toLowerCase())) return;
+      for (const ch of run) {
+        if (skip.has(ch.toLowerCase())) continue;
+        if (!(ch in params)) params[ch] = 1;   // default 1 so the line is visible
+      }
+    });
     return params;
   }
 

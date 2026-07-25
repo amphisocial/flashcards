@@ -963,3 +963,37 @@ Verified: y-exclusion, function recognition + math, semantic slider broadcast,
 physics accuracy, headless mount/dispose, assets serve. Needs a real browser:
 the feel of the semantic sliders, the physics animation, and slider/label
 layout polish.
+
+---
+
+# v3.6 — plot the general formula (y = mx + b) instead of erroring
+
+Built on the pushed v3.5 (commit 6ee1bd8).
+
+## The bug
+Writing the literal formula y = mx + b failed with 'Cannot plot: Unknown
+name "mx"'. Two causes:
+- The expression tokenizer read "mx" as one 2-letter identifier, which wasn't
+  a known name -> error.
+- detectParams matched whole letter-runs, so "mx" (length 2) was skipped and
+  never became a parameter; only "b" registered.
+
+## The fix
+- Tokenizer: a multi-letter run is consumed whole ONLY if it's a known
+  function/constant (sin, cos, sqrt, pi, ...). Otherwise it's read one letter
+  at a time, so "mx" becomes m * x via the implicit-multiplication the parser
+  already supports. Any single letter that isn't x is a live parameter.
+- detectParams splits runs the same way, so m and b both become sliders.
+- analyzeFunction now recognizes the canonical SYMBOLIC forms too: y = mx + b
+  and y = ax + b -> Straight line with "Slope"/"Y-intercept" sliders (start
+  m=1, b=0); y = ax^2 + bx + c -> Parabola with a/b/c; y = asin(bx+c)+d ->
+  Sine. So the general textbook formula gives the right named sliders, not
+  just generic ones.
+
+## Verified
+Full parser regression: y = mx + b, mx, 2x+3, 4x^2, sin/cos/sqrt, x^2+2x+1,
+pi/2pi/e all evaluate correctly; symbolic and numeric forms both recognized
+with correct slider labels; assets serve; syntax clean.
+
+Needs a real browser: that the sliders feel right when dragging the symbolic
+form live.
