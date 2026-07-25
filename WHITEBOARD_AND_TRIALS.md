@@ -997,3 +997,33 @@ with correct slider labels; assets serve; syntax clean.
 
 Needs a real browser: that the sliders feel right when dragging the symbolic
 form live.
+
+---
+
+# v3.7 — physics simulation library (4 new sims + shared scaffold)
+
+Refactored mountPhysics into a shared physicsScaffold (scene, renderer, HUD,
+control bar, render loop, standard handle) that each sim plugs into. Then
+added four sims alongside the existing free-fall:
+
+- **Projectile**: speed + angle sliders, a live trajectory arc, and a
+  range/apex readout. Teaches that 45° maximizes range and complementary
+  angles share a range. (Verified: range = v²sin2θ/g, 45° is max, 30°=60°.)
+- **Pendulum**: length + gravity sliders, exact ODE swing, live period.
+  Teaches T = 2π√(L/g) — independent of mass and (small-angle) amplitude.
+  (Verified: T(1m)=2.006s, 4×L doubles T.)
+- **Inclined plane**: wedge-angle, friction μ, and mass sliders; block slides
+  or is held. Teaches a = g(sinθ − μcosθ) and that sliding depends on tanθ vs
+  μ, NOT mass. (Verified: holds when tanθ<μ, mass cancels.)
+- **Collision (1D)**: mass A/B, speed, and restitution e sliders. Teaches
+  momentum is always conserved; KE only when elastic (e=1). (Verified: equal-
+  mass elastic swaps velocities, momentum conserved, e=0 sticks & loses KE.)
+
+Analyze schema updated so the vision model picks the matching type
+(projectile/pendulum/incline/collision/freefall). Each mounts with the same
+zoom + fullscreen as the other 3D viewers, and all pass headless mount/dispose.
+
+## Still to come (see notes to user)
+Orbit, wall-of-death, reflection (mirrors), and circuits are further physics
+sims of the same shape. Biology 3D (skeleton, heart, brain, lungs) needs real
+anatomical model files, not primitives — planned as a separate track.

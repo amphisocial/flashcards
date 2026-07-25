@@ -749,99 +749,59 @@
   // (big area, small mass) lags badly; with air off (vacuum / Moon) they land
   // together - the "aha" moment. A live readout shows time, velocity and the
   // controlling equations.
-  function mountPhysics(container, spec, w, h) {
+  // ---- Physics simulations ----------------------------------------------
+  // A shared scaffold gives every sim a scene, renderer, HUD, control bar,
+  // render loop, and the standard viewer handle (snapshot/fullscreen/resize).
+  // Each individual sim just declares its bodies, a step(dt) function, its
+  // control widgets, and a readout. This keeps the physics per sim isolated
+  // and testable while sharing all the boilerplate.
+  function physicsScaffold(container, w, h, opts) {
     const scene = baseScene();
-    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
-    camera.position.set(0, 3, 12);
-    camera.lookAt(0, 3, 0);
+    const camera = new THREE.PerspectiveCamera(opts.fov || 50, w / h, 0.1, 200);
+    if (opts.camera) camera.position.set(opts.camera[0], opts.camera[1], opts.camera[2]);
+    else camera.position.set(0, 3, 12);
+    camera.lookAt(opts.lookAt ? opts.lookAt[0] : 0, opts.lookAt ? opts.lookAt[1] : 3, opts.lookAt ? opts.lookAt[2] : 0);
     const renderer = makeRenderer(container, w, h);
 
-    // Ground.
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(20, 0.4, 6), new THREE.MeshPhongMaterial({ color: 0x243247 }));
-    ground.position.y = -0.2; scene.add(ground);
-
-    const H0 = 7;           // drop height (world units)
-    // Two falling bodies. Physical params drive the sim; radius is visual.
-    const bodies = [
-      { name: 'Stone', mass: 5, area: 0.02, color: 0xbfc6d0, x: -2.2, r: 0.5 },
-      { name: 'Feather', mass: 0.05, area: 1.2, color: 0xffd27a, x: 2.2, r: 0.42 }
-    ];
-    bodies.forEach((b) => {
-      b.mesh = new THREE.Mesh(new THREE.SphereGeometry(b.r, 24, 18), new THREE.MeshPhongMaterial({ color: b.color, shininess: 60 }));
-      b.mesh.position.set(b.x, H0, 0);
-      scene.add(b.mesh);
-      const lab = makeLabelSprite(b.name, { color: '#ffffff', weight: 800, fontSize: 34, scale: 0.5, depthTest: false });
-      lab.position.set(b.x, H0 + 0.9, 0);
-      b.label = lab; scene.add(lab);
-      b.y = H0; b.v = 0; b.landed = false; b.tLand = null;
-    });
-
-    // Simulation state (adjustable live).
-    const sim = { g: (spec.dims && spec.dims.g) || 9.8, air: spec.air !== false, rho: 1.2, running: false, t: 0 };
-
-    function reset() {
-      sim.t = 0; sim.running = false;
-      bodies.forEach((b) => { b.y = H0; b.v = 0; b.landed = false; b.tLand = null; b.mesh.position.y = H0; b.label.position.y = H0 + 0.9; });
-      updateReadout();
-    }
-    function step(dt) {
-      if (!sim.running) return;
-      sim.t += dt;
-      bodies.forEach((b) => {
-        if (b.landed) return;
-        // F = mg - drag. drag = 0.5*rho*Cd*A*v^2 (opposing motion). Cd~1.
-        const weight = b.mass * sim.g;
-        const drag = sim.air ? 0.5 * sim.rho * 1.0 * b.area * b.v * b.v : 0;
-        const a = (weight - drag) / b.mass;   // downward positive
-        b.v += a * dt;
-        b.y -= b.v * dt;
-        if (b.y <= b.r) { b.y = b.r; b.landed = true; b.tLand = sim.t; }
-        b.mesh.position.y = b.y; b.label.position.y = b.y + 0.9;
-      });
-      if (bodies.every((b) => b.landed)) sim.running = false;
-      updateReadout();
-    }
-
-    // Readout + controls DOM.
     const hud = document.createElement('div');
     hud.className = 'phys-hud';
     container.appendChild(hud);
-    function updateReadout() {
-      const rows = bodies.map((b) => `${b.name}: v=${b.v.toFixed(1)} m/s${b.tLand ? ` · landed ${b.tLand.toFixed(2)}s` : ''}`);
-      hud.innerHTML = `<div class="phys-eq">${sim.air ? 'F = mg − ½ρC<sub>d</sub>Av²' : 'F = mg  (vacuum)'} · g=${sim.g.toFixed(1)} m/s²</div>` +
-        rows.map((r) => `<div>${r}</div>`).join('') +
-        `<div class="phys-hint">${sim.air ? 'Air ON: the feather lags — air resistance dominates its tiny mass.' : 'Vacuum: both land together, regardless of mass (Galileo / Apollo 15).'}</div>`;
-    }
-
     const controls = document.createElement('div');
     controls.className = 'phys-controls';
-    controls.innerHTML = `
-      <button class="phys-btn" data-act="drop">▶ Drop</button>
-      <button class="phys-btn" data-act="reset">⟲ Reset</button>
-      <label class="phys-toggle"><input type="checkbox" data-act="air" ${sim.air ? 'checked' : ''}/> Air resistance</label>
-      <label class="phys-slider">Gravity <span class="pg-out">${sim.g.toFixed(1)}</span>
-        <input type="range" min="1.6" max="25" step="0.1" value="${sim.g}" data-act="g"/>
-        <span class="phys-presets"><button data-g="9.8">Earth</button><button data-g="1.6">Moon</button><button data-g="24.8">Jupiter</button></span>
-      </label>`;
     container.appendChild(controls);
-    controls.querySelector('[data-act=drop]').addEventListener('click', () => { reset(); sim.running = true; });
-    controls.querySelector('[data-act=reset]').addEventListener('click', reset);
-    controls.querySelector('[data-act=air]').addEventListener('change', (e) => { sim.air = e.target.checked; reset(); });
-    const gIn = controls.querySelector('[data-act=g]');
-    gIn.addEventListener('input', () => { sim.g = Number(gIn.value); controls.querySelector('.pg-out').textContent = sim.g.toFixed(1); updateReadout(); });
-    controls.querySelectorAll('.phys-presets button').forEach((btn) => btn.addEventListener('click', () => {
-      sim.g = Number(btn.dataset.g); gIn.value = sim.g; controls.querySelector('.pg-out').textContent = sim.g.toFixed(1); reset();
-    }));
 
-    updateReadout();
+    const api = {
+      scene, camera, renderer, hud, controls,
+      setHud(html) { hud.innerHTML = html; },
+      // Build a labelled slider; onInput gets the numeric value.
+      slider(label, min, max, step, value, onInput, presets) {
+        const wrap = document.createElement('label'); wrap.className = 'phys-slider';
+        wrap.innerHTML = `${label} <span class="pg-out">${(+value).toFixed(step < 1 ? (step < 0.1 ? 2 : 1) : 0)}</span>
+          <input type="range" min="${min}" max="${max}" step="${step}" value="${value}"/>` +
+          (presets ? `<span class="phys-presets">${presets.map((p) => `<button data-v="${p.v}">${p.label}</button>`).join('')}</span>` : '');
+        const inp = wrap.querySelector('input'); const out = wrap.querySelector('.pg-out');
+        inp.addEventListener('input', () => { const v = Number(inp.value); out.textContent = v.toFixed(step < 1 ? (step < 0.1 ? 2 : 1) : 0); onInput(v); });
+        if (presets) wrap.querySelectorAll('.phys-presets button').forEach((b) => b.addEventListener('click', () => { inp.value = b.dataset.v; out.textContent = Number(b.dataset.v).toFixed(step < 1 ? 1 : 0); onInput(Number(b.dataset.v)); }));
+        controls.appendChild(wrap); return wrap;
+      },
+      button(label, onClick) {
+        const b = document.createElement('button'); b.className = 'phys-btn'; b.textContent = label;
+        b.addEventListener('click', onClick); controls.appendChild(b); return b;
+      },
+      toggle(label, checked, onChange) {
+        const l = document.createElement('label'); l.className = 'phys-toggle';
+        l.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''}/> ${label}`;
+        l.querySelector('input').addEventListener('change', (e) => onChange(e.target.checked));
+        controls.appendChild(l); return l;
+      }
+    };
 
-    // Animation loop.
     let raf = 0, disposed = false, last = performance.now();
     function tick() {
       if (disposed) return;
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
-      step(dt);
+      if (opts.step) opts.step(dt);
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     }
@@ -850,10 +810,264 @@
     const handle = {
       onResize(width, height) { camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height); },
       snapshot() { try { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/png'); } catch (_) { return null; } },
-      dispose() { disposed = true; cancelAnimationFrame(raf); renderer.dispose?.(); if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement); hud.remove(); controls.remove(); }
+      dispose() { disposed = true; cancelAnimationFrame(raf); renderer.dispose && renderer.dispose(); if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement); hud.remove(); controls.remove(); }
     };
     addFullscreenButton(container, handle);
-    return handle;
+    return { api, handle, isDisposed: () => disposed };
+  }
+
+  function ballMesh(r, color) {
+    return new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), new THREE.MeshPhongMaterial({ color, shininess: 60 }));
+  }
+  function groundMesh(width, color) {
+    const g = new THREE.Mesh(new THREE.BoxGeometry(width || 20, 0.4, 6), new THREE.MeshPhongMaterial({ color: color || 0x243247 }));
+    g.position.y = -0.2; return g;
+  }
+
+  function mountPhysics(container, spec, w, h) {
+    const type = spec.type || 'freefall';
+    if (type === 'projectile') return simProjectile(container, spec, w, h);
+    if (type === 'pendulum') return simPendulum(container, spec, w, h);
+    if (type === 'incline') return simIncline(container, spec, w, h);
+    if (type === 'collision') return simCollision(container, spec, w, h);
+    return simFreefall(container, spec, w, h);
+  }
+
+  // ---- Free-fall (stone vs feather) --------------------------------------
+  function simFreefall(container, spec, w, h) {
+    const H0 = 7;
+    const bodies = [
+      { name: 'Stone', mass: 5, area: 0.02, color: 0xbfc6d0, x: -2.2, r: 0.5 },
+      { name: 'Feather', mass: 0.05, area: 1.2, color: 0xffd27a, x: 2.2, r: 0.42 }
+    ];
+    const sim = { g: (spec.dims && spec.dims.g) || 9.8, air: spec.air !== false, rho: 1.2, running: false, t: 0 };
+    let S;
+    function reset() {
+      sim.t = 0; sim.running = false;
+      bodies.forEach((b) => { b.y = H0; b.v = 0; b.landed = false; b.tLand = null; b.mesh.position.y = H0; b.label.position.y = H0 + 0.9; });
+      readout();
+    }
+    function step(dt) {
+      if (!sim.running) return;
+      sim.t += dt;
+      bodies.forEach((b) => {
+        if (b.landed) return;
+        const weight = b.mass * sim.g;
+        const drag = sim.air ? 0.5 * sim.rho * 1.0 * b.area * b.v * b.v : 0;
+        const a = (weight - drag) / b.mass;
+        b.v += a * dt; b.y -= b.v * dt;
+        if (b.y <= b.r) { b.y = b.r; b.landed = true; b.tLand = sim.t; }
+        b.mesh.position.y = b.y; b.label.position.y = b.y + 0.9;
+      });
+      if (bodies.every((b) => b.landed)) sim.running = false;
+      readout();
+    }
+    function readout() {
+      S.api.setHud(`<div class="phys-eq">${sim.air ? 'F = mg − ½ρC<sub>d</sub>Av²' : 'F = mg  (vacuum)'} · g=${sim.g.toFixed(1)} m/s²</div>` +
+        bodies.map((b) => `<div>${b.name}: v=${b.v.toFixed(1)} m/s${b.tLand ? ` · landed ${b.tLand.toFixed(2)}s` : ''}</div>`).join('') +
+        `<div class="phys-hint">${sim.air ? 'Air ON: the feather lags — drag dominates its tiny mass.' : 'Vacuum: both land together regardless of mass (Galileo / Apollo 15).'}</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 3, 12], lookAt: [0, 3, 0] });
+    S.api.scene.add(groundMesh());
+    bodies.forEach((b) => {
+      b.mesh = ballMesh(b.r, b.color); b.mesh.position.set(b.x, H0, 0); S.api.scene.add(b.mesh);
+      b.label = makeLabelSprite(b.name, { color: '#fff', weight: 800, fontSize: 34, scale: 0.5, depthTest: false });
+      b.label.position.set(b.x, H0 + 0.9, 0); S.api.scene.add(b.label);
+      b.y = H0; b.v = 0; b.landed = false; b.tLand = null;
+    });
+    S.api.button('▶ Drop', () => { reset(); sim.running = true; });
+    S.api.button('⟲ Reset', reset);
+    S.api.toggle('Air resistance', sim.air, (v) => { sim.air = v; reset(); });
+    S.api.slider('Gravity', 1.6, 25, 0.1, sim.g, (v) => { sim.g = v; readout(); },
+      [{ label: 'Earth', v: 9.8 }, { label: 'Moon', v: 1.6 }, { label: 'Jupiter', v: 24.8 }]);
+    readout();
+    return S.handle;
+  }
+
+  // ---- Projectile motion --------------------------------------------------
+  function simProjectile(container, spec, w, h) {
+    const sim = { g: 9.8, speed: 14, angle: 45, running: false, t: 0, x: 0, y: 0, vx: 0, vy: 0, landed: false, range: 0, apex: 0 };
+    let S, ball, arc, arcPts = [];
+    function launch() {
+      const a = sim.angle * Math.PI / 180;
+      sim.vx = sim.speed * Math.cos(a); sim.vy = sim.speed * Math.sin(a);
+      sim.x = 0; sim.y = 0; sim.t = 0; sim.landed = false; sim.running = true; sim.apex = 0;
+      arcPts = []; predictArc();
+    }
+    // Predict the whole trajectory for the faint guide arc + range/apex readout.
+    function predictArc() {
+      const a = sim.angle * Math.PI / 180;
+      const vx = sim.speed * Math.cos(a), vy = sim.speed * Math.sin(a);
+      const tEnd = 2 * vy / sim.g;
+      sim.range = vx * tEnd;
+      sim.apex = (vy * vy) / (2 * sim.g);
+      const pts = [];
+      for (let i = 0; i <= 40; i += 1) {
+        const t = (tEnd * i) / 40;
+        pts.push(new THREE.Vector3(vx * t - 6, Math.max(0, vy * t - 0.5 * sim.g * t * t) + 0.2, 0));
+      }
+      if (arc) S.api.scene.remove(arc);
+      arc = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x7c5cff, transparent: true, opacity: 0.5 }));
+      S.api.scene.add(arc);
+      readout();
+    }
+    function step(dt) {
+      if (!sim.running) { return; }
+      sim.t += dt;
+      sim.x += sim.vx * dt;
+      sim.vy -= sim.g * dt;
+      sim.y += sim.vy * dt;
+      if (sim.y <= 0) { sim.y = 0; sim.landed = true; sim.running = false; }
+      ball.position.set(sim.x - 6, sim.y + 0.2, 0);
+      readout();
+    }
+    function readout() {
+      S.api.setHud(`<div class="phys-eq">x = v·cosθ·t · y = v·sinθ·t − ½gt²</div>` +
+        `<div>speed=${sim.speed.toFixed(0)} m/s · angle=${sim.angle.toFixed(0)}° · g=${sim.g.toFixed(1)}</div>` +
+        `<div>range ≈ ${sim.range.toFixed(1)} m · max height ≈ ${sim.apex.toFixed(1)} m</div>` +
+        `<div class="phys-hint">45° gives the greatest range; complementary angles (30° & 60°) share the same range.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 4, 16], lookAt: [0, 3, 0] });
+    S.api.scene.add(groundMesh(28));
+    ball = ballMesh(0.4, 0xffd27a); ball.position.set(-6, 0.2, 0); S.api.scene.add(ball);
+    S.api.button('▶ Launch', launch);
+    S.api.slider('Speed (m/s)', 4, 24, 1, sim.speed, (v) => { sim.speed = v; predictArc(); });
+    S.api.slider('Angle (°)', 5, 85, 1, sim.angle, (v) => { sim.angle = v; predictArc(); });
+    predictArc();
+    return S.handle;
+  }
+
+  // ---- Pendulum (length vs period) ---------------------------------------
+  function simPendulum(container, spec, w, h) {
+    const sim = { g: 9.8, L: 3, theta: Math.PI / 6, omega: 0, pivotY: 7 };
+    let S, bob, rod, pivot;
+    function period() { return 2 * Math.PI * Math.sqrt(sim.L / sim.g); }
+    function step(dt) {
+      // Exact pendulum ODE: theta'' = -(g/L) sin(theta). Small damping for realism.
+      const alpha = -(sim.g / sim.L) * Math.sin(sim.theta) - 0.02 * sim.omega;
+      sim.omega += alpha * dt; sim.theta += sim.omega * dt;
+      const bx = sim.L * Math.sin(sim.theta);
+      const by = sim.pivotY - sim.L * Math.cos(sim.theta);
+      bob.position.set(bx, by, 0);
+      // Rebuild rod line.
+      rod.geometry.setFromPoints([new THREE.Vector3(0, sim.pivotY, 0), new THREE.Vector3(bx, by, 0)]);
+      readout();
+    }
+    function readout() {
+      S.api.setHud(`<div class="phys-eq">T = 2π·√(L / g)</div>` +
+        `<div>length L=${sim.L.toFixed(1)} m · g=${sim.g.toFixed(1)} m/s²</div>` +
+        `<div>period T ≈ ${period().toFixed(2)} s</div>` +
+        `<div class="phys-hint">Period depends on length and gravity — NOT on the bob's mass or (for small swings) the angle.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 4, 13], lookAt: [0, 4, 0] });
+    pivot = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 0.6), new THREE.MeshPhongMaterial({ color: 0x243247 }));
+    pivot.position.set(0, sim.pivotY + 0.15, 0); S.api.scene.add(pivot);
+    rod = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, sim.pivotY, 0), new THREE.Vector3(0, sim.pivotY - sim.L, 0)]), new THREE.LineBasicMaterial({ color: 0x9fb2cd }));
+    S.api.scene.add(rod);
+    bob = ballMesh(0.5, 0x14d9c4); S.api.scene.add(bob);
+    S.api.slider('Length (m)', 1, 6, 0.1, sim.L, (v) => { sim.L = v; readout(); });
+    S.api.slider('Gravity', 1.6, 25, 0.1, sim.g, (v) => { sim.g = v; readout(); },
+      [{ label: 'Earth', v: 9.8 }, { label: 'Moon', v: 1.6 }]);
+    S.api.button('⟲ Reset swing', () => { sim.theta = Math.PI / 6; sim.omega = 0; });
+    readout();
+    return S.handle;
+  }
+
+  // ---- Inclined plane (friction) -----------------------------------------
+  function simIncline(container, spec, w, h) {
+    const sim = { g: 9.8, angle: 25, mu: 0.3, mass: 2, running: false, s: 0, v: 0 };
+    let S, block, ramp, rampLen = 9;
+    function accel() {
+      const a = sim.angle * Math.PI / 180;
+      // a = g(sinθ − μcosθ) while sliding; if static friction holds, 0.
+      const net = Math.sin(a) - sim.mu * Math.cos(a);
+      return net > 0 ? sim.g * net : 0;
+    }
+    function willSlide() { const a = sim.angle * Math.PI / 180; return Math.tan(a) > sim.mu; }
+    function reset() { sim.s = 0; sim.v = 0; sim.running = false; place(); readout(); }
+    function place() {
+      const a = sim.angle * Math.PI / 180;
+      // Block position along the ramp from the top.
+      const topX = -rampLen / 2 * Math.cos(a), topY = rampLen / 2 * Math.sin(a) + 0.2;
+      const bx = topX + sim.s * Math.cos(a), by = topY - sim.s * Math.sin(a);
+      block.position.set(bx, by + 0.4, 0);
+      block.rotation.z = -a;
+    }
+    function step(dt) {
+      if (!sim.running) return;
+      const acc = accel();
+      sim.v += acc * dt; sim.s += sim.v * dt;
+      if (sim.s >= rampLen) { sim.s = rampLen; sim.running = false; }
+      place(); readout();
+    }
+    function readout() {
+      const a = sim.angle * Math.PI / 180;
+      S.api.setHud(`<div class="phys-eq">a = g(sinθ − μcosθ)</div>` +
+        `<div>angle θ=${sim.angle.toFixed(0)}° · μ=${sim.mu.toFixed(2)} · mass=${sim.mass.toFixed(1)} kg</div>` +
+        `<div>acceleration = ${accel().toFixed(2)} m/s² · ${willSlide() ? 'sliding' : 'held by friction'}</div>` +
+        `<div class="phys-hint">Whether it slides depends on tanθ vs μ — NOT on mass. Mass cancels out. It slips once tanθ &gt; μ.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 3, 14], lookAt: [0, 2, 0] });
+    S.api.scene.add(groundMesh(24));
+    const a0 = sim.angle * Math.PI / 180;
+    ramp = new THREE.Mesh(new THREE.BoxGeometry(rampLen, 0.3, 4), new THREE.MeshPhongMaterial({ color: 0x2c3b52 }));
+    ramp.rotation.z = -a0; ramp.position.set(0, rampLen / 4 * Math.sin(a0), 0); S.api.scene.add(ramp);
+    block = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshPhongMaterial({ color: 0xff9f6b })); S.api.scene.add(block);
+    function rebuildRamp() { const a = sim.angle * Math.PI / 180; ramp.rotation.z = -a; ramp.position.set(0, rampLen / 4 * Math.sin(a), 0); }
+    S.api.button('▶ Release', () => { reset(); sim.running = true; });
+    S.api.button('⟲ Reset', reset);
+    S.api.slider('Wedge angle (°)', 5, 60, 1, sim.angle, (v) => { sim.angle = v; rebuildRamp(); reset(); });
+    S.api.slider('Friction μ', 0, 1, 0.01, sim.mu, (v) => { sim.mu = v; reset(); });
+    S.api.slider('Mass (kg)', 0.5, 10, 0.5, sim.mass, (v) => { sim.mass = v; readout(); });
+    reset();
+    return S.handle;
+  }
+
+  // ---- Collision (1D, momentum + restitution) ----------------------------
+  function simCollision(container, spec, w, h) {
+    const sim = {
+      running: false,
+      A: { m: 2, v: 4, x: -6, r: 0.6, color: 0x14d9c4 },
+      B: { m: 2, v: 0, x: 3, r: 0.6, color: 0xff6b7a },
+      e: 1, wall: false
+    };
+    let S;
+    function reset() { sim.running = false; sim.A.x = -6; sim.A.v = 4; sim.B.x = 3; sim.B.v = 0; place(); readout(); }
+    function place() { sim.A.mesh.position.x = sim.A.x; sim.B.mesh.position.x = sim.B.x; }
+    function step(dt) {
+      if (!sim.running) return;
+      sim.A.x += sim.A.v * dt; sim.B.x += sim.B.v * dt;
+      // Collision when spheres touch.
+      if (sim.A.x + sim.A.r >= sim.B.x - sim.B.r && sim.A.v > sim.B.v) {
+        const { m: m1, v: u1 } = sim.A, { m: m2, v: u2 } = sim.B, e = sim.e;
+        // 1D collision with restitution e.
+        sim.A.v = (m1 * u1 + m2 * u2 - m2 * e * (u1 - u2)) / (m1 + m2);
+        sim.B.v = (m1 * u1 + m2 * u2 + m1 * e * (u1 - u2)) / (m1 + m2);
+      }
+      // Bounce off the side walls to keep them on screen.
+      [sim.A, sim.B].forEach((o) => { if (o.x < -9) { o.x = -9; o.v = Math.abs(o.v); } if (o.x > 9) { o.x = 9; o.v = -Math.abs(o.v); } });
+      place(); readout();
+    }
+    function readout() {
+      const p = sim.A.m * sim.A.v + sim.B.m * sim.B.v;
+      const ke = 0.5 * sim.A.m * sim.A.v * sim.A.v + 0.5 * sim.B.m * sim.B.v * sim.B.v;
+      S.api.setHud(`<div class="phys-eq">m₁u₁ + m₂u₂ = m₁v₁ + m₂v₂</div>` +
+        `<div>A: m=${sim.A.m.toFixed(1)} v=${sim.A.v.toFixed(2)} · B: m=${sim.B.m.toFixed(1)} v=${sim.B.v.toFixed(2)}</div>` +
+        `<div>total momentum ${p.toFixed(2)} · KE ${ke.toFixed(2)} · e=${sim.e.toFixed(2)} (${sim.e >= 0.99 ? 'elastic' : sim.e <= 0.01 ? 'perfectly inelastic' : 'inelastic'})</div>` +
+        `<div class="phys-hint">Momentum is always conserved. Kinetic energy is conserved only when e = 1 (elastic).</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 4, 15], lookAt: [0, 1, 0] });
+    S.api.scene.add(groundMesh(22));
+    sim.A.mesh = ballMesh(sim.A.r, sim.A.color); sim.A.mesh.position.set(sim.A.x, 0.6, 0); S.api.scene.add(sim.A.mesh);
+    sim.B.mesh = ballMesh(sim.B.r, sim.B.color); sim.B.mesh.position.set(sim.B.x, 0.6, 0); S.api.scene.add(sim.B.mesh);
+    S.api.button('▶ Go', () => { sim.running = true; });
+    S.api.button('⟲ Reset', reset);
+    S.api.slider('Mass A', 0.5, 8, 0.5, sim.A.m, (v) => { sim.A.m = v; readout(); });
+    S.api.slider('Speed A', 0, 8, 0.5, sim.A.v, (v) => { sim.A.v = v; reset(); });
+    S.api.slider('Mass B', 0.5, 8, 0.5, sim.B.m, (v) => { sim.B.m = v; readout(); });
+    S.api.slider('Bounciness e', 0, 1, 0.05, sim.e, (v) => { sim.e = v; readout(); });
+    reset();
+    return S.handle;
   }
 
   function mount(container, spec) {

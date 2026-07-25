@@ -394,7 +394,7 @@ function attachBoardRoutes(app, deps) {
     '  "plots": ["any function in the form y = ... that would help, else omit"],',
     '  "viz3d": null OR { "shape": one of "cube","cuboid","sphere","cylinder","cone","pyramid","prism","tetrahedron","earth", "dims": { "a": number, "b": number, "c": number, "r": number, "h": number }, "label": "short caption" },',
     '  "molecule": null OR { "name": "compound name", "formula": "e.g. H2O", "smiles": "SMILES string if known e.g. O for water, CCO for ethanol", "atoms": [{"el":"O","x":0,"y":0,"z":0}], "bonds": [[0,1,1]] },',
-    '  "physicsSim": null OR { "type": "freefall", "g": number (9.8 Earth, 1.6 Moon), "air": true|false } - use for gravity / free-fall / falling-object / Galileo / Apollo-feather questions,',
+    '  "physicsSim": null OR { "type": one of "freefall","projectile","pendulum","incline","collision", "g": number (9.8 Earth, 1.6 Moon), "air": true|false } - pick the type that matches the board,',
     '  "warnings": ["anything wrong, ambiguous, or dimensionally inconsistent"]',
     '}',
     'Guidance by kind:',
@@ -403,7 +403,7 @@ function attachBoardRoutes(app, deps) {
     '- geometry: "facts" for labeled properties, "formulas" for area/perimeter/theorems that apply.',
     '- solid: use this kind when the board shows (or labels) a 3D shape - a cube, box, sphere/ball, cylinder, cone, pyramid, prism, or a circle labeled "Earth"/"globe". Fill "viz3d" with the shape and any dimensions written on the board (side length a, width/height/depth a/b/c, radius r, height h). For a circle containing the word Earth or globe, use shape "earth". Also fill "formulas" with surface-area and volume formulas and "facts" with computed values when dimensions are given.',
     '- chemistry: compound name in "title", balanced equation in "answer", structural observations in "facts". If a molecule or compound is shown or named, ALSO fill "molecule" with its formula and, when you know it, a SMILES string and an explicit atoms+bonds list (bond order 1/2/3). Keep atoms to the real structure; small molecules only.',
-    '- physics: name the concept in "title", governing formulas in "formulas", and CHECK UNITS - put any dimensional inconsistency in "warnings". If the board is about gravity, free-fall, falling objects, terminal velocity, or the feather-and-hammer/stone demonstration, ALSO fill "physicsSim" with type "freefall" and the right g (Earth 9.8, Moon 1.6) and whether air resistance applies.',
+    '- physics: name the concept in "title", governing formulas in "formulas", and CHECK UNITS. ALSO fill "physicsSim" when the board matches a known simulation: "freefall" for gravity/falling/feather-hammer; "projectile" for a ball/cannon launched at an angle, range, or trajectory; "pendulum" for a swinging bob or period questions; "incline" for a block on a ramp/wedge with friction (mu); "collision" for two masses colliding, momentum, or elastic/inelastic. Set g (Earth 9.8, Moon 1.6) and air where relevant.',
     '- diagram: summarize structure in "summary" and list what is missing or unclear in "warnings".',
     '- sketch: identify the drawing in "title" and describe how to finish it in "steps".',
     'If the board is blank, use kind "empty".'
