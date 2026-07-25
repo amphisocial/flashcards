@@ -152,6 +152,20 @@
     );
   }
 
+  // Build a set of border/river lines from GeoJSON-style [[lon,lat],...] rings
+  // draped onto the sphere. Returned as one merged Group.
+  function buildLines(features, r, color, opacity, closed) {
+    const group = new THREE.Group();
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+    features.forEach((ring) => {
+      const pts = ring.map(([lon, lat]) => latLonToVec(lat, lon, r));
+      if (pts.length < 2) return;
+      const geom = new THREE.BufferGeometry().setFromPoints(pts);
+      group.add(closed ? new THREE.LineLoop(geom, mat) : new THREE.Line(geom, mat));
+    });
+    return group;
+  }
+
   function mountEarth(container, w, h) {
     const scene = baseScene();
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
@@ -160,15 +174,17 @@
 
     const group = new THREE.Group();
 
-    // Real Blue Marble map texture bundled in the repo (no CORS/runtime
-    // dependency). Falls back to a plain blue sphere if it can't load.
+    // Base sphere. Two materials: satellite (Blue Marble photo) and a plain
+    // dark "political" fill that makes borders and labels pop. We swap the
+    // material's map/color rather than rebuild the mesh.
     const geo = new THREE.SphereGeometry(EARTH_R, 96, 64);
     const mat = new THREE.MeshPhongMaterial({ color: 0x2a4a7c, shininess: 8 });
     const earth = new THREE.Mesh(geo, mat);
     group.add(earth);
+    let satelliteTex = null;
     new THREE.TextureLoader().load('/textures/earth.jpg', (tex) => {
-      tex.anisotropy = 4;
-      mat.map = tex; mat.color.setHex(0xffffff); mat.needsUpdate = true;
+      tex.anisotropy = 4; satelliteTex = tex;
+      if (mode === 'satellite') { mat.map = tex; mat.color.setHex(0xffffff); mat.needsUpdate = true; }
     });
 
     // Atmosphere halo.
@@ -177,63 +193,151 @@
       new THREE.MeshBasicMaterial({ color: 0x3a7bd5, transparent: true, opacity: 0.14, side: THREE.BackSide })
     ));
 
-    // Graticule every 15 degrees.
-    group.add(buildGraticule(EARTH_R * 1.002, 15, 0xffffff, 0.16));
-
-    // Highlighted lines: equator (bright), tropics (amber), polar circles (cyan).
-    group.add(latitudeRing(0, EARTH_R, 0x14d9c4));       // Equator
-    group.add(latitudeRing(23.5, EARTH_R, 0xffcc66));    // Tropic of Cancer
-    group.add(latitudeRing(-23.5, EARTH_R, 0xffcc66));   // Tropic of Capricorn
-    group.add(latitudeRing(66.5, EARTH_R, 0x5bd0ff));    // Arctic Circle
-    group.add(latitudeRing(-66.5, EARTH_R, 0x5bd0ff));   // Antarctic Circle
-
-    // Labels for the special latitudes (placed out at the edge, mid-Pacific
-    // longitude so they don't sit on a continent).
-    const latLabels = [
-      [0, 'Equator', '#14d9c4'], [23.5, 'Tropic of Cancer', '#ffcc66'],
-      [-23.5, 'Tropic of Capricorn', '#ffcc66'], [66.5, 'Arctic Circle', '#5bd0ff'],
-      [-66.5, 'Antarctic Circle', '#5bd0ff']
-    ];
-    latLabels.forEach(([lat, text, color]) => {
-      const sp = makeLabelSprite(text, { color, fontSize: 34, scale: 0.34 });
+    // Graticule + special latitudes (always on).
+    group.add(buildGraticule(EARTH_R * 1.002, 15, 0xffffff, 0.14));
+    [[0, 0x14d9c4, 'Equator'], [23.5, 0xffcc66, 'Tropic of Cancer'], [-23.5, 0xffcc66, 'Tropic of Capricorn'],
+     [66.5, 0x5bd0ff, 'Arctic Circle'], [-66.5, 0x5bd0ff, 'Antarctic Circle']].forEach(([lat, color, text]) => {
+      group.add(latitudeRing(lat, EARTH_R, color));
+      const sp = makeLabelSprite(text, { color: '#' + color.toString(16).padStart(6, '0'), fontSize: 30, scale: 0.3 });
       sp.position.copy(latLonToVec(lat, -160, EARTH_R * 1.04));
+      sp.userData.tier = 'lat';
       group.add(sp);
     });
 
-    // Ocean labels (italic-ish, lighter) and continent labels (bold, white).
-    const oceans = [
-      ['Pacific Ocean', 0, -150], ['Atlantic Ocean', 5, -30],
-      ['Indian Ocean', -25, 78], ['Arctic Ocean', 80, 0],
-      ['Southern Ocean', -75, 120]
-    ];
-    oceans.forEach(([name, lat, lon]) => {
-      const sp = makeLabelSprite(name, { color: '#bcd4ff', weight: 500, fontSize: 30, scale: 0.28 });
+    // Ocean + continent labels (shown when zoomed out).
+    const macroLabels = new THREE.Group();
+    [['Pacific Ocean', 0, -150], ['Atlantic Ocean', 5, -30], ['Indian Ocean', -25, 78],
+     ['Arctic Ocean', 80, 0], ['Southern Ocean', -75, 120]].forEach(([name, lat, lon]) => {
+      const sp = makeLabelSprite(name, { color: '#bcd4ff', weight: 500, fontSize: 28, scale: 0.26 });
       sp.position.copy(latLonToVec(lat, lon, EARTH_R * 1.02));
-      group.add(sp);
+      macroLabels.add(sp);
     });
-
-    const continents = [
-      ['N. America', 40, -100], ['S. America', -15, -60], ['Africa', 3, 22],
-      ['Europe', 50, 12], ['Asia', 45, 90], ['Australia', -25, 134], ['Antarctica', -82, 0]
-    ];
-    continents.forEach(([name, lat, lon]) => {
-      const sp = makeLabelSprite(name, { color: '#ffffff', weight: 800, fontSize: 32, scale: 0.3 });
+    [['N. America', 40, -100], ['S. America', -15, -60], ['Africa', 3, 22], ['Europe', 50, 12],
+     ['Asia', 45, 90], ['Australia', -25, 134]].forEach(([name, lat, lon]) => {
+      const sp = makeLabelSprite(name, { color: '#ffffff', weight: 800, fontSize: 30, scale: 0.28 });
       sp.position.copy(latLonToVec(lat, lon, EARTH_R * 1.02));
-      group.add(sp);
+      macroLabels.add(sp);
     });
+    group.add(macroLabels);
 
-    group.rotation.z = -0.41; // axial tilt ~23.5 deg
+    group.rotation.z = -0.41;   // axial tilt
+    group.rotation.y = -1.2;    // start facing Africa/Europe
     scene.add(group);
 
-    // Start rotated to show a recognizable face (Africa/Europe), not the Pacific.
-    group.rotation.y = -1.2;
+    // Political layers, loaded async and added when ready.
+    let mode = 'satellite';
+    const borders = new THREE.Group(); borders.visible = false; group.add(borders);
+    const riversG = new THREE.Group(); riversG.visible = false; group.add(riversG);
+    const countryLabels = new THREE.Group(); group.add(countryLabels);
+    const cityLabels = new THREE.Group(); group.add(cityLabels);
+    const capitalDots = new THREE.Group(); capitalDots.visible = false; group.add(capitalDots);
 
+    // Fetch the bundled cartographic data. All optional - the globe still
+    // works (just without political overlays) if a file is missing.
+    Promise.all([
+      fetch('/geo/countries.json').then((r) => r.json()).catch(() => []),
+      fetch('/geo/cities.json').then((r) => r.json()).catch(() => []),
+      fetch('/geo/rivers.json').then((r) => r.json()).catch(() => [])
+    ]).then(([countries, cities, rivers]) => {
+      // Country borders (all outer rings).
+      const rings = [];
+      countries.forEach((c) => c.p.forEach((ring) => rings.push(ring)));
+      borders.add(buildLines(rings, EARTH_R * 1.003, 0x9fd0ff, 0.55, true));
+
+      // Rivers.
+      riversG.add(buildLines(rivers, EARTH_R * 1.004, 0x4aa3ff, 0.5, false));
+
+      // Country name labels at centroids, tiered by Natural Earth LABELRANK
+      // (lower rank = more prominent -> shown sooner as you zoom).
+      countries.forEach((c) => {
+        if (!c.n) return;
+        const sp = makeLabelSprite(c.n, { color: '#eaf2ff', weight: 700, fontSize: 26, scale: 0.2 });
+        sp.position.copy(latLonToVec(c.c[1], c.c[0], EARTH_R * 1.015));
+        sp.userData.tier = 'country';
+        sp.userData.rank = c.lr || 6;
+        sp.visible = false;
+        countryLabels.add(sp);
+      });
+
+      // City labels + capital dots.
+      cities.forEach((ct) => {
+        const pos = latLonToVec(ct.c[1], ct.c[0], EARTH_R * 1.012);
+        const sp = makeLabelSprite(ct.n, { color: ct.cap ? '#ffe08a' : '#dfe8f5', weight: ct.cap ? 700 : 500, fontSize: 22, scale: 0.16 });
+        sp.position.copy(pos);
+        sp.userData.tier = 'city';
+        sp.userData.cap = ct.cap;
+        sp.userData.rank = ct.sr || 10;
+        sp.visible = false;
+        cityLabels.add(sp);
+
+        if (ct.cap) {
+          const dot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffcc33 }));
+          dot.position.copy(latLonToVec(ct.c[1], ct.c[0], EARTH_R * 1.006));
+          capitalDots.add(dot);
+        }
+      });
+      updateLOD(camera.position.length());
+    });
+
+    // Level-of-detail: which labels are visible depends on how far the camera
+    // is. Far -> continents/oceans only. Closer -> countries. Closest ->
+    // cities and capitals. Thresholds are camera distances (EARTH_R = 1.7).
+    function updateLOD(dist) {
+      const showMacro = dist > 4.0;
+      const showCountries = dist <= 4.6;
+      const showCities = dist < 3.1;
+      const showCapitals = dist < 3.6;
+      macroLabels.visible = showMacro || mode === 'satellite' && dist > 3.6;
+      // Progressive reveal by rank: the closer you are, the higher the rank
+      // number we allow (rank 1-2 shows first, up to 6+ when very close).
+      const countryRankCut = dist > 4.2 ? 2 : dist > 3.6 ? 3 : dist > 3.0 ? 5 : 8;
+      countryLabels.children.forEach((sp) => {
+        sp.visible = mode === 'political' && showCountries && (sp.userData.rank <= countryRankCut);
+      });
+      const cityRankCut = dist > 2.9 ? 1 : dist > 2.6 ? 3 : dist > 2.3 ? 6 : 12;
+      cityLabels.children.forEach((sp) => {
+        const allow = sp.userData.cap ? showCapitals : showCities;
+        sp.visible = mode === 'political' && allow && (sp.userData.rank <= (sp.userData.cap ? cityRankCut + 3 : cityRankCut));
+      });
+      capitalDots.visible = mode === 'political' && showCapitals;
+    }
+
+    function setMode(next) {
+      mode = next;
+      if (mode === 'political') {
+        mat.map = null; mat.color.setHex(0x0c1a30); mat.needsUpdate = true;
+        borders.visible = true; riversG.visible = true;
+      } else {
+        if (satelliteTex) { mat.map = satelliteTex; mat.color.setHex(0xffffff); }
+        else mat.color.setHex(0x2a4a7c);
+        mat.needsUpdate = true;
+        borders.visible = false; riversG.visible = false;
+      }
+      updateLOD(camera.position.length());
+    }
+
+    // Interaction hint + mode toggle.
     const hint = document.createElement('div');
     hint.className = 'viz3d-hint';
-    hint.textContent = 'Drag to rotate · scroll to zoom';
+    hint.textContent = 'Drag to rotate · scroll to zoom in';
     container.appendChild(hint);
 
-    return spinLoop(renderer, scene, camera, group, container, 0.0022, { zoom: true, minZoom: 2.4, maxZoom: 9 });
+    const toggle = document.createElement('button');
+    toggle.className = 'viz3d-mode-btn';
+    toggle.type = 'button';
+    toggle.textContent = '🗺 Political';
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMode(mode === 'satellite' ? 'political' : 'satellite');
+      toggle.textContent = mode === 'political' ? '🛰 Satellite' : '🗺 Political';
+      toggle.classList.toggle('active', mode === 'political');
+    });
+    container.appendChild(toggle);
+
+    return spinLoop(renderer, scene, camera, group, container, 0.0022, {
+      zoom: true, minZoom: 2.15, maxZoom: 9,
+      onZoom: (dist) => updateLOD(dist)
+    });
   }
 
   function mountMolecule(container, spec, w, h) {
@@ -368,6 +472,7 @@
       dist = Math.max(min, Math.min(max, dist));
       camera.position.copy(dir.multiplyScalar(dist));
       camera.lookAt(0, 0, 0);
+      if (opts.onZoom) opts.onZoom(dist);
     }
     const wheel = (e) => { e.preventDefault(); auto = false; applyZoom(e.deltaY * 0.002); };
     if (opts.zoom) el.addEventListener('wheel', wheel, { passive: false });

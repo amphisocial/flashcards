@@ -302,3 +302,15 @@ body[data-page="board"] {
   background: rgba(8,17,31,0.6); padding: 3px 8px; border-radius: 999px;
   pointer-events: none;
 }
+
+/* ---------- 3D globe political-mode toggle ---------- */
+.viz3d-mode-btn {
+  position: absolute; top: 8px; right: 46px; z-index: 5;
+  height: 30px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: rgba(8,17,31,0.72);
+  color: #eef6ff; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; gap: 4px;
+}
+.viz3d-mode-btn:hover { background: rgba(124,92,255,0.4); }
+.viz3d-mode-btn.active { border-color: var(--brand-2); color: var(--brand-2); }
+.viz3d-holder.viz3d-fullscreen .viz3d-mode-btn { height: 42px; font-size: 0.9rem; top: 16px; right: 66px; padding: 0 16px; }

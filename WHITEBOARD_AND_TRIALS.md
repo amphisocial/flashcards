@@ -626,3 +626,52 @@ in a circle and Analyze to check. If labels are hard to read over bright
 terrain, that's a quick tweak (stronger shadow or a semi-opaque pill behind
 each). A night-lights texture is also available on the same host if you want
 a day/night option later.
+
+---
+
+# v2.8 — political globe (countries, cities, rivers, zoom labels)
+
+The v2.7 Earth showed physical terrain (Blue Marble satellite). This adds a
+**political map mode** with real cartographic data, toggleable against the
+satellite view.
+
+## What's bundled (real Natural Earth data, ~185KB total)
+- `public/geo/countries.json` — 177 countries, real border polygons
+  (simplified) plus a centroid and label rank each.
+- `public/geo/cities.json` — 700 places including all 200 national capitals,
+  with a prominence rank for level-of-detail.
+- `public/geo/rivers.json` — 12 major river systems.
+
+## Political mode
+A 🗺 Political / 🛰 Satellite toggle on the globe:
+- **Country borders** drawn as glowing vector lines on the sphere surface.
+- **Rivers** as blue centerlines.
+- **Capital city dots** (gold) at their real coordinates.
+- The base sphere switches to a dark fill so borders and labels pop.
+
+## Zoom-based labels (the "Google Earth" behaviour)
+Labels reveal progressively as you zoom in, by prominence:
+- **Far out**: continents + oceans only.
+- **Mid**: country names, most prominent first (label rank 2 -> 3 -> 5 -> 8).
+- **Close**: national capitals, then progressively more cities (rank 1 -> 12).
+Driven by camera distance via an onZoom hook into the shared render loop.
+Verified: at max distance no country/city labels show; zooming in reveals
+countries then capitals then cities in the right order.
+
+## Honest limits of the technology
+This is a labelled political *globe*, not live tile streaming. What it does
+NOT do (and can't, without map-tile servers + API keys):
+- No street-level / building-level imagery or continuous zoom to a street.
+- No search-to-fly-to-a-place, no real-time data, no road networks.
+- Borders/rivers are simplified for size; not survey-accurate at high zoom.
+It's a classroom teaching globe: recognisable countries, capitals, oceans,
+rivers, the graticule and tropics — enough for geography lessons, not a
+Google Earth replacement.
+
+## Verified vs. needs-your-eyes
+Verified here: all data parses and serves, every border/label point lands
+exactly on the sphere (2519/2519 sampled), Paris/Tokyo/New York present and
+at correct latitudes, the LOD reveal order, and the political build path
+resolving with real counts (288 rings, 177 country + 700 city labels, 200
+capital dots, 12 rivers). Needs a real browser: how readable the labels are
+over the map, whether border lines are the right brightness, and zoom feel.
