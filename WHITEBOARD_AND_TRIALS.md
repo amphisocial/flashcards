@@ -1131,3 +1131,27 @@ analysis for independent study.
 
 Needs a real browser: that a pushed 3D note renders its interactive viewer on
 the student side, and the feel of the student Analyze button.
+
+---
+
+# v4.1 — rebrand to AthenaBoard across the whole app
+
+- New owl logo (public/img/athenaboard-logo.svg + .png + favicon.png) shown in
+  the header brand mark on all 8 pages (.brand-mark now renders the logo image
+  instead of a letter "A"); "Board" suffix in warm amber to match the mark.
+- All page <title>s and aria-labels updated to AthenaBoard; every stale
+  "Athena Flashcards" removed. Favicon + apple-touch-icon added to all pages.
+- Homepage:
+  - New hero: "Make the hard stuff click." — reframed around AI making tough
+    concepts tangible (rotate 3D, real-gravity drops, graph sliders), teachers
+    turning theory into live simulation, and students using AI responsibly to
+    understand rather than shortcut.
+  - Added a brief "everyday essentials" strip naming the original features —
+    AI flashcards, study sets, quizzes (5 types + weak-topic tracking), and
+    notes/prep — so the full package is represented without bloat.
+  - Comparison + study section rebranded to AthenaBoard.
+- Verified: all pages + logo/favicon assets serve, all 8 parse clean, brand
+  mark consistent across every page, no stale branding remains.
+
+Needs a real browser: the header logo at real size and the overall visual
+polish of the rebranded homepage.

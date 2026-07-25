@@ -2,21 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Athena — AI whiteboard, 3D science, and study sets for the classroom</title>
+  <title>AthenaBoard — the AI teaching whiteboard for 3D science, math &amp; study</title>
   <meta name="description" content="An AI teaching whiteboard with handwriting-to-graph, shape recognition, interactive 3D geometry, molecules and a rotatable Earth, a live classroom, and AI study notes and quizzes — on the devices you already own." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260725-v12" />
-  <link rel="stylesheet" href="/landing3d.css?v=20260725-v12" />
+  <link rel="stylesheet" href="/styles.css?v=20260725-v21" />
+  <link rel="stylesheet" href="/landing3d.css?v=20260725-v21" />
 </head>
 <body data-page="landing">
   <div class="shell">
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Athena home">
-        <span class="brand-mark">A</span>
-        <span><strong>Athena</strong></span>
+      <a class="brand" href="/" aria-label="AthenaBoard home">
+        <span class="brand-mark">AthenaBoard</span>
+        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
       </a>
       <nav class="nav-links">
         <a href="/app" id="landingCreateLink" style="display:none">Create</a>
@@ -34,9 +36,9 @@
       <!-- HERO -->
       <section class="hero3d">
         <div class="hero-copy">
-          <span class="eyebrow">The AI teaching board that runs on the devices you already own</span>
-          <h1>Write it. Watch it come alive in 3D.</h1>
-          <p>Athena turns a classroom whiteboard into an AI tutor: handwriting becomes graphs, rough sketches snap into shapes, and a flat drawing becomes a <strong>rotatable 3D model</strong> — geometry, molecules, even a labelled Earth. Add a live classroom, AI notes, and auto-generated quizzes, all in the browser.</p>
+          <span class="eyebrow">The AI teaching whiteboard — runs on the devices you already own</span>
+          <h1>Make the hard stuff click.</h1>
+          <p><strong>AthenaBoard</strong> uses AI to make tough concepts tangible. Handwrite an equation and bend it with a slider; sketch a molecule, atom, or solid and <strong>rotate it in 3D</strong>; drop a feather and a stone in real gravity. Teachers turn abstract theory into live simulations — and students build the habit of using AI responsibly, to understand rather than shortcut.</p>
           <div class="hero-actions">
             <button class="btn primary large" id="ctaStart">Start free</button>
             <a href="#science3d" class="btn soft large">See the 3D demos</a>
@@ -147,7 +149,7 @@
           <span class="section-kicker">Notes &amp; Study</span>
           <h2>Scan a page. Get notes and a quiz.</h2>
           <ul class="check-list">
-            <li>Photograph a textbook page or upload a PDF — Athena reads it (OCR) and writes organized notes.</li>
+            <li>Photograph a textbook page or upload a PDF — AthenaBoard reads it (OCR) and writes organized notes.</li>
             <li>Summary, key terms, main ideas, dates &amp; people, and hard ideas explained simply.</li>
             <li>Five quiz types — multiple choice, true/false, short answer, fill-in-the-blank, flashcards.</li>
             <li>It tracks what you miss and quizzes you more on your weak topics.</li>
@@ -161,6 +163,21 @@
             <div class="mock-quiz-opts"><span class="right">Dec 16, 1773 ✓</span><span>1776</span></div>
             <div class="mock-weak">Weak topic: dates → +2 questions next time</div>
           </div>
+        </div>
+      </section>
+
+      <!-- STUDY ESSENTIALS (brief) -->
+      <section class="essentials">
+        <div class="pricing-heading center">
+          <span class="section-kicker">And the everyday essentials</span>
+          <h2>Flashcards, study sets, quizzes &amp; notes — built in.</h2>
+          <p class="section-sub">Beyond the whiteboard, AthenaBoard is a full AI study kit for turning any topic into practice.</p>
+        </div>
+        <div class="essentials-grid">
+          <div class="essential-chip"><strong>AI flashcards</strong><span>Auto-made from any topic or page</span></div>
+          <div class="essential-chip"><strong>Study sets</strong><span>Organized by subject &amp; chapter</span></div>
+          <div class="essential-chip"><strong>Quizzes</strong><span>5 types, with weak-topic tracking</span></div>
+          <div class="essential-chip"><strong>Notes &amp; prep</strong><span>Scan → organized notes in seconds</span></div>
         </div>
       </section>
 
@@ -180,7 +197,7 @@
             </ul>
           </article>
           <article class="panel featured">
-            <h3>Athena</h3>
+            <h3>AthenaBoard</h3>
             <ul class="check-list tight">
               <li>Runs in the browser on tablets &amp; laptops you own</li>
               <li>Handwriting → graphs, shapes, and 3D models</li>
@@ -253,9 +270,9 @@
   <div class="toast" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="/viz3d.js?v=20260725-v19"></script>
-  <script src="/common.js?v=20260725-v12"></script>
-  <script src="/landing.js?v=20260725-v12"></script>
-  <script src="/landing3d.js?v=20260725-v12"></script>
+  <script src="/viz3d.js?v=20260725-v21"></script>
+  <script src="/common.js?v=20260725-v21"></script>
+  <script src="/landing.js?v=20260725-v21"></script>
+  <script src="/landing3d.js?v=20260725-v21"></script>
 </body>
 </html>

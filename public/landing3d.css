@@ -115,3 +115,14 @@
   .compare-grid { grid-template-columns: 1fr; }
   .demo3d-holder { height: 320px; }
 }
+
+/* ---------- Study essentials strip ---------- */
+.essentials { padding: 56px 0; border-top: 1px solid var(--line); }
+.essentials-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 960px; margin: 0 auto; }
+.essential-chip {
+  display: flex; flex-direction: column; gap: 5px; padding: 20px;
+  border-radius: 16px; border: 1px solid var(--line); background: var(--panel); text-align: center;
+}
+.essential-chip strong { color: var(--brand-2); font-size: 1.05rem; }
+.essential-chip span { color: var(--muted); font-size: 0.85rem; }
+@media (max-width: 900px) { .essentials-grid { grid-template-columns: 1fr 1fr; } }

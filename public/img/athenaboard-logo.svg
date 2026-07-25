@@ -1,0 +1,71 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a4a63"/>
+      <stop offset="1" stop-color="#1a3145"/>
+    </linearGradient>
+    <linearGradient id="owl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd28a"/>
+      <stop offset="1" stop-color="#f5a94e"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2dc"/>
+      <stop offset="1" stop-color="#ffe0b0"/>
+    </linearGradient>
+    <radialGradient id="eyeGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#1a3145"/>
+      <stop offset="1" stop-color="#0f2230"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- soft board grid, subtle (nods to the whiteboard) -->
+  <g stroke="#ffffff" stroke-opacity="0.05" stroke-width="2">
+    <line x1="0" y1="171" x2="512" y2="171"/>
+    <line x1="0" y1="341" x2="512" y2="341"/>
+    <line x1="171" y1="0" x2="171" y2="512"/>
+    <line x1="341" y1="0" x2="341" y2="512"/>
+  </g>
+
+  <!-- ===== OWL ===== -->
+  <!-- ear tufts -->
+  <path d="M150 168 Q168 96 214 138 Q186 158 176 196 Z" fill="url(#owl)"/>
+  <path d="M362 168 Q344 96 298 138 Q326 158 336 196 Z" fill="url(#owl)"/>
+
+  <!-- body / head -->
+  <path d="M256 128
+           C336 128 392 188 392 268
+           C392 356 332 412 256 412
+           C180 412 120 356 120 268
+           C120 188 176 128 256 128 Z" fill="url(#owl)"/>
+
+  <!-- belly -->
+  <path d="M256 300
+           C292 300 314 326 314 360
+           C314 390 290 402 256 402
+           C222 402 198 390 198 360
+           C198 326 220 300 256 300 Z" fill="url(#belly)"/>
+
+  <!-- ===== EYES (the teaching cue) ===== -->
+  <!-- left eye: a graph / parabola -->
+  <circle cx="202" cy="232" r="54" fill="#fff2dc"/>
+  <circle cx="202" cy="232" r="47" fill="url(#eyeGlow)"/>
+  <path d="M175 255 Q202 188 229 255" fill="none" stroke="#14d9c4" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="202" cy="232" r="6" fill="#14d9c4"/>
+
+  <!-- right eye: a 3D orbit (nods to the 3D/physics sims) -->
+  <circle cx="310" cy="232" r="54" fill="#fff2dc"/>
+  <circle cx="310" cy="232" r="47" fill="url(#eyeGlow)"/>
+  <ellipse cx="310" cy="232" rx="35" ry="13" fill="none" stroke="#a78bfa" stroke-width="6"/>
+  <circle cx="310" cy="232" r="9" fill="#ffcf6b"/>
+  <circle cx="345" cy="232" r="5" fill="#a78bfa"/>
+
+  <!-- beak -->
+  <path d="M256 282 L272 306 Q256 316 240 306 Z" fill="#f5883a"/>
+
+  <!-- little feet -->
+  <path d="M232 404 l0 16 M224 420 l16 0 M224 420 l-6 8 M240 420 l6 8" stroke="#f5883a" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <path d="M280 404 l0 16 M272 420 l16 0 M272 420 l-6 8 M288 420 l6 8" stroke="#f5883a" stroke-width="6" stroke-linecap="round" fill="none"/>
+</svg>
