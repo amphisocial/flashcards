@@ -1183,44 +1183,100 @@
   // weight (mg). Minimum speed to not slip down: v_min = √(gr/μ). The speed
   // slider shows the bike ride steadily above v_min and slip below it.
   function simWellOfDeath(container, spec, w, h) {
-    const sim = { g: 9.8, mu: 0.6, r: 4, speed: 6, angle: 0, height: 0, slipping: false };
-    let S, well, bike;
-    function vMin() { return Math.sqrt(sim.g * sim.r / sim.mu); }
+    // An inclined bowl (truncated cone): narrow at the bottom, wide at the rim.
+    // A bike rides the banked inner wall. On a banked wall the equilibrium
+    // radius grows with speed: r = v²/(g·tanβ). So faster -> the bike needs a
+    // wider radius -> it climbs the widening bowl. When its equilibrium radius
+    // exceeds the rim, it can't be held and flies out over the top.
+    const sim = { g: 9.8, wallDeg: 65, speed: 6, angle: 0, y: 0, ejected: false, ejV: null, t: 0 };
+    const rBottom = 1.2, rTop = 6, wallH = 6;   // bowl geometry
+    let S, bowl, bike, rimRing;
+
+    function wallAngleRad() { return sim.wallDeg * Math.PI / 180; } // from horizontal
+    // Local bowl radius at a given height y (0..wallH): linear from rBottom to rTop.
+    function radiusAtHeight(y) { return rBottom + (rTop - rBottom) * (y / wallH); }
+    // Equilibrium radius the bike "wants" for its current speed.
+    function eqRadius() { return (sim.speed * sim.speed) / (sim.g * Math.tan(wallAngleRad())); }
+    // Height on the bowl whose local radius equals the equilibrium radius.
+    function eqHeight() {
+      const rEq = eqRadius();
+      const y = ((rEq - rBottom) / (rTop - rBottom)) * wallH;
+      return y;
+    }
+
+    function reset() { sim.ejected = false; sim.ejV = null; sim.t = 0; sim.y = 0; sim.angle = 0; readout(); }
+
     function step(dt) {
-      // Angular speed from linear speed on the wall.
-      const omega = sim.speed / sim.r;
+      sim.t += dt;
+      if (sim.ejected) {
+        // Free flight after launching over the rim: simple projectile.
+        sim.ejV.y -= sim.g * dt;
+        sim.ejPos.x += sim.ejV.x * dt;
+        sim.ejPos.y += sim.ejV.y * dt;
+        sim.ejPos.z += sim.ejV.z * dt;
+        bike.position.set(sim.ejPos.x, sim.ejPos.y, sim.ejPos.z);
+        bike.rotation.x += dt * 4;   // tumble as it flies out
+        if (sim.ejPos.y < -2) reset();
+        return;
+      }
+      // Ride around the wall.
+      const rNow = radiusAtHeight(sim.y);
+      const omega = sim.speed / Math.max(0.3, rNow);
       sim.angle += omega * dt;
-      // Below v_min the friction can't hold the weight -> the bike sinks.
-      sim.slipping = sim.speed < vMin();
-      if (sim.slipping) sim.height = Math.max(-2.5, sim.height - 1.5 * dt);
-      else sim.height = Math.min(0, sim.height + 1.0 * dt);
-      const x = sim.r * Math.cos(sim.angle), z = sim.r * Math.sin(sim.angle);
-      bike.position.set(x, 1.6 + sim.height, z);
-      // Face along travel, lean into the wall.
-      bike.rotation.y = -sim.angle;
+      // Climb / descend toward the equilibrium height for this speed.
+      const yTarget = Math.max(0, eqHeight());
+      sim.y += (yTarget - sim.y) * Math.min(1, dt * 1.5);
+      // Launch out if the equilibrium height exceeds the rim.
+      if (eqHeight() > wallH + 0.4) {
+        sim.ejected = true;
+        const r = radiusAtHeight(wallH);
+        const x = r * Math.cos(sim.angle), z = r * Math.sin(sim.angle);
+        sim.ejPos = { x, y: wallH + 0.2, z };
+        // Tangential + slightly outward/upward launch velocity.
+        const tx = -Math.sin(sim.angle), tz = Math.cos(sim.angle);
+        sim.ejV = { x: tx * sim.speed + Math.cos(sim.angle) * 2, y: 2.5, z: tz * sim.speed + Math.sin(sim.angle) * 2 };
+        readout(); return;
+      }
+      const r = radiusAtHeight(sim.y);
+      const x = r * Math.cos(sim.angle), z = r * Math.sin(sim.angle);
+      bike.position.set(x, sim.y + 0.35, z);
+      // Lean the bike into the wall: tilt by the wall angle, face travel.
+      bike.rotation.set(0, -sim.angle, Math.PI / 2 - wallAngleRad());
       readout();
     }
     function readout() {
-      S.api.setHud(`<div class="phys-eq">N = mv²/r · friction μN ≥ mg · v_min = √(g·r/μ)</div>` +
-        `<div>speed=${sim.speed.toFixed(1)} m/s · μ=${sim.mu.toFixed(2)} · r=${sim.r.toFixed(1)} m</div>` +
-        `<div>minimum speed ≈ ${vMin().toFixed(2)} m/s · ${sim.slipping ? 'TOO SLOW — sliding down' : 'holding on the wall'}</div>` +
-        `<div class="phys-hint">The wall's push supplies the centripetal force; friction holds the weight. Go below v_min and it slips.</div>`);
+      const rEq = eqRadius();
+      const willEject = eqHeight() > wallH + 0.4;
+      S.api.setHud(`<div class="phys-eq">banked wall: r = v² / (g·tanβ) · N sinβ = mv²/r</div>` +
+        `<div>speed=${sim.speed.toFixed(1)} m/s · wall angle β=${sim.wallDeg}° · rim r=${rTop}</div>` +
+        `<div>equilibrium radius = ${rEq.toFixed(2)} m · ${sim.ejected ? 'THROWN OUT of the well!' : willEject ? 'about to fly out the top' : 'climbing the wall'}</div>` +
+        `<div class="phys-hint">Faster → the bike needs a bigger radius, so it climbs the widening bowl. Past the rim it launches out — raise the speed to see it fly.</div>`);
     }
-    S = physicsScaffold(container, w, h, { step, camera: [0, 6, 12], lookAt: [0, 0, 0] });
-    // Cylinder wall (open, semi-transparent).
-    well = new THREE.Mesh(new THREE.CylinderGeometry(sim.r, sim.r, 5, 40, 1, true), new THREE.MeshPhongMaterial({ color: 0x2c3b52, side: THREE.DoubleSide, transparent: true, opacity: 0.35 }));
-    well.position.y = 2.5; S.api.scene.add(well);
-    S.api.scene.add(groundMesh(16));
-    bike = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 1.1), new THREE.MeshPhongMaterial({ color: 0xff6b7a }));
+
+    S = physicsScaffold(container, w, h, { step, camera: [0, 7, 15], lookAt: [0, 2.5, 0] });
+
+    // Bowl: an open truncated cone (narrow bottom, wide top), inner side shown.
+    bowl = new THREE.Mesh(
+      new THREE.CylinderGeometry(rTop, rBottom, wallH, 48, 1, true),
+      new THREE.MeshPhongMaterial({ color: 0x2c3b52, side: THREE.DoubleSide, transparent: true, opacity: 0.4, flatShading: false })
+    );
+    bowl.position.y = wallH / 2; S.api.scene.add(bowl);
+    // A subtle floor disc at the very bottom of the bowl (small, doesn't cut through).
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(rBottom, 32), new THREE.MeshPhongMaterial({ color: 0x1b2740, side: THREE.DoubleSide }));
+    floor.rotation.x = -Math.PI / 2; floor.position.y = 0.02; S.api.scene.add(floor);
+    // Rim highlight ring at the top.
+    const rimPts = [];
+    for (let i = 0; i <= 64; i += 1) { const th = (i / 64) * Math.PI * 2; rimPts.push(new THREE.Vector3(rTop * Math.cos(th), wallH, rTop * Math.sin(th))); }
+    rimRing = new THREE.Line(new THREE.BufferGeometry().setFromPoints(rimPts), new THREE.LineBasicMaterial({ color: 0x5bd0ff }));
+    S.api.scene.add(rimRing);
+
+    bike = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.55, 0.95), new THREE.MeshPhongMaterial({ color: 0xff6b7a }));
     S.api.scene.add(bike);
-    S.api.slider('Speed (m/s)', 2, 14, 0.1, sim.speed, (v) => { sim.speed = v; readout(); });
-    S.api.slider('Friction μ', 0.1, 1, 0.01, sim.mu, (v) => { sim.mu = v; readout(); });
-    S.api.slider('Radius (m)', 2, 7, 0.1, sim.r, (v) => {
-      sim.r = v; if (well) S.api.scene.remove(well);
-      well = new THREE.Mesh(new THREE.CylinderGeometry(sim.r, sim.r, 5, 40, 1, true), new THREE.MeshPhongMaterial({ color: 0x2c3b52, side: THREE.DoubleSide, transparent: true, opacity: 0.35 }));
-      well.position.y = 2.5; S.api.scene.add(well); readout();
-    });
-    readout();
+
+    S.api.button('⟲ Reset', reset);
+    S.api.slider('Speed (m/s)', 2, 16, 0.1, sim.speed, (v) => { sim.speed = v; if (sim.ejected) reset(); readout(); });
+    S.api.slider('Wall angle (°)', 45, 85, 1, sim.wallDeg, (v) => { sim.wallDeg = v; if (sim.ejected) reset(); readout(); });
+    reset();
     S.api.ready();
     return S.handle;
   }

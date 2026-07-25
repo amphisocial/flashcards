@@ -1064,3 +1064,29 @@ and the analyze schema/vision prompt now route to the right sim type.
 Verified: every sim's physics against theory, the crash fix ordering, the
 incline geometry, and headless mount/dispose. Needs a real browser: the visual
 look and animation feel of all nine.
+
+---
+
+# v3.9 — wall of death rebuilt as an inclined bowl
+
+The old version had three problems (all visible in the screenshot): the bike
+poked through the wall, a flat ground slab cut straight through the cylinder,
+and the flat vertical wall couldn't show speed throwing the bike out.
+
+Rebuilt as an **inclined bowl** (a truncated cone — narrow at the bottom, wide
+at the rim), which is the shape that actually demonstrates the effect:
+- The bike rides the banked inner wall. On a banked wall the equilibrium
+  radius grows with speed: r = v²/(g·tanβ). So faster → the bike needs a wider
+  radius → it climbs the widening bowl.
+- Past the rim it can't be held and launches out over the top (then tumbles
+  off in free flight). Raise the Speed slider and watch it fly out.
+- Sliders: Speed and Wall angle β.
+- No more flat ground slab (small floor disc at the bowl bottom only); camera
+  raised to look down into the bowl; bike sits on the inner wall, leaning at
+  the wall angle.
+
+Verified: the bike stays at the bottom at low speed, climbs progressively with
+speed (riding exactly on the wall radius at each height), and ejects once its
+equilibrium height exceeds the rim; mounts + animates headless without crash.
+
+Needs a real browser: the look of the bowl and the eject animation.
