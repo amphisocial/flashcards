@@ -1432,7 +1432,10 @@
   function connect() {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${proto}//${window.location.host}/ws/board?boardId=${encodeURIComponent(boardIdValue)}`);
-    ws.addEventListener('open', () => setPill('Live', 'live'));
+    ws.addEventListener('open', () => {
+      if (isOwner || (board && board.isLive)) setPill('Live', 'live');
+      else setPill('Snapshot', 'shared');
+    });
     ws.addEventListener('close', () => { setPill('Reconnecting…', 'error'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 1500); });
     ws.addEventListener('error', () => setPill('Connection error', 'error'));
 
@@ -1442,6 +1445,7 @@
 
       if (m.type === 'sync') {
         board = m.board; isOwner = m.isOwner;
+        updateViewerBanner();
         if (pageIndex >= board.pages.length) pageIndex = 0;
         applyRole(); updatePageBar(); redraw();
         return;
@@ -1467,6 +1471,12 @@
       if (m.type === 'lost:self') { $('#lostBtn').classList.toggle('active', m.lost); return; }
       if (m.type === 'insight') { renderInsight(m.analysis, { fromTeacher: true }); return; }
       if (m.type === 'insight:cleared') { clearNotesLocally(); return; }
+      if (m.type === 'live:changed') {
+        if (board) board.isLive = m.isLive;
+        updateViewerBanner();
+        if (!isOwner) setPill(m.isLive ? 'Live' : 'Snapshot', m.isLive ? 'live' : 'shared');
+        return;
+      }
       if (m.type === 'presence') { updateViewers(m.viewers || []); return; }
       if (m.type === 'question') { addQuestion(m.question); return; }
       if (m.type === 'question:cleared') { removeQuestion(m.id); return; }
@@ -1495,12 +1505,22 @@
     $('#boardToolbar').style.display = isOwner ? '' : 'none';
     $('#ownerActions').style.display = isOwner ? 'flex' : 'none';
     $('#readonlyBanner').style.display = isOwner ? 'none' : '';
+    updateViewerBanner();
     $('#studentBar').style.display = isOwner ? 'none' : 'flex';
     $('#replayOpenBtn').style.display = isOwner ? '' : 'none';
     canvas.style.cursor = isOwner ? 'crosshair' : 'default';
     updateBadge();
     updateEraseBtn();
   }
+  function updateViewerBanner() {
+    if (isOwner) return;
+    const txt = $('#readonlyBannerText');
+    if (!txt) return;
+    txt.textContent = board && board.isLive
+      ? 'Viewing live. Only the teacher can draw.'
+      : 'This is a shared snapshot — the teacher isn\'t live right now. You can view and export it.';
+  }
+
   function updateBadge() {
     const b = $('#boardBadge');
     if (!isOwner || !board) { b.style.display = 'none'; return; }
@@ -1767,6 +1787,7 @@
       try {
         const d = await api(`/api/board/${boardIdValue}/${board.isLive ? 'stop-live' : 'go-live'}`, { method: 'POST', body: JSON.stringify({}) });
         board.isLive = d.board.isLive; board.shared = d.board.shared; updateBadge();
+        send({ type: 'live:changed', isLive: board.isLive });
         setStatus(board.isLive ? 'You are live.' : 'Stopped broadcasting.', 'success');
       } catch (e) { setStatus(e.message, 'error'); }
     });

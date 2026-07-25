@@ -797,3 +797,35 @@ Verified: note persistence, offline student access, erase + broadcast, the
 owner guard, and the iOS-vs-desktop fullscreen routing. Needs a real device:
 that the iOS pseudo-fullscreen actually fills an iPhone screen cleanly, and
 that a student's PDF looks right.
+
+---
+
+# v3.2 — shared boards stay viewable after the teacher stops live
+
+## The bug
+Student access required `shared && isLive`. So the moment a teacher came out
+of a live session, `isLive` went false and every student got a 403 — they
+lost the board entirely, even though it was still shared with them.
+
+## The fix
+Visibility is now gated on **shared**, not live. A shared board is viewable
+by its students whether or not it's currently live; when it isn't live they
+see the last saved snapshot, read-only (drawing was always owner-only). Live
+now controls only real-time updates, not whether the board can be opened.
+- GET `/api/board/:id`: shared is sufficient.
+- WebSocket: a student may connect to a shared board even when not live, so
+  they get the snapshot sync and will receive live updates if the teacher
+  goes live again.
+- Unsharing still blocks access (verified 403).
+
+## Real-time live/snapshot indicator
+When the teacher toggles live, a `live:changed` message is broadcast so
+students' status flips between "Live" and "Snapshot" and the read-only banner
+updates ("Viewing live…" vs "This is a shared snapshot — the teacher isn't
+live right now. You can view and export it.") without a reload.
+
+## Verified
+Student can GET the board while live (200), after the teacher stops live
+(200, snapshot, isLive=false), and it stays in their shared library; student
+WS connects to a non-live shared board and gets the sync; live:changed
+reaches students; unsharing returns 403.

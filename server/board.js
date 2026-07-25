@@ -288,8 +288,11 @@ function attachBoardRoutes(app, deps) {
     const teacherInfo = { id: teacher.id, name: [teacher.firstName, teacher.lastName].filter(Boolean).join(' ') || teacher.email };
 
     if (!isOwner) {
-      const allowed = board.shared && board.isLive && viewerAllowed(mainStore, board.teacherId, req.user.email);
-      if (!allowed) return res.status(403).json({ error: 'This whiteboard is not currently live and shared with you.' });
+      // A shared board is viewable by students whether or not it's currently
+      // live. When it isn't live they simply see the last saved snapshot
+      // (read-only). Live only controls real-time updates, not visibility.
+      const allowed = board.shared && viewerAllowed(mainStore, board.teacherId, req.user.email);
+      if (!allowed) return res.status(403).json({ error: 'This whiteboard has not been shared with you.' });
     }
     res.json({ board, teacher: teacherInfo, isOwner });
   });
@@ -585,8 +588,8 @@ function attachBoardWebSocket(httpServer, deps) {
       if (isOwner && !userHasWhiteboardAccess(user)) return ws.close(4003, 'Teams plan required');
       if (!isOwner) {
         const mainStore = readStore();
-        const allowed = board.shared && board.isLive && viewerAllowed(mainStore, board.teacherId, user.email);
-        if (!allowed) return ws.close(4003, 'This whiteboard is not currently live and shared with you');
+        const allowed = board.shared && viewerAllowed(mainStore, board.teacherId, user.email);
+        if (!allowed) return ws.close(4003, 'This whiteboard has not been shared with you');
       }
 
       const client = { ws, user, isOwner, lost: false };
@@ -689,6 +692,15 @@ function attachBoardWebSocket(httpServer, deps) {
             }
             broadcast(targetBoardId, { type: 'insight', analysis: entry }, ws);
           }
+          return;
+        }
+
+        // Teacher toggled live/offline. Tell the room so students' banners and
+        // pills update in real time (they keep their read-only snapshot either
+        // way; this just changes the "live vs snapshot" indicator).
+        if (msg.type === 'live:changed') {
+          if (!isOwner) return;
+          broadcast(targetBoardId, { type: 'live:changed', isLive: !!msg.isLive }, ws);
           return;
         }
 

@@ -342,3 +342,6 @@ body.viz3d-pseudo-lock { overflow: hidden; }
 .btn.tiny { padding: 4px 9px; font-size: 0.72rem; border-radius: 7px; }
 #eraseNotesBtn { color: #ff9f6b; border-color: rgba(255,159,107,0.4); }
 #eraseNotesBtn:hover { background: rgba(255,107,122,0.14); border-color: var(--danger); }
+
+/* ---------- Snapshot (non-live shared) status pill ---------- */
+.board-status.shared { color: #9d7bff; border-color: rgba(124,92,255,0.5); }
