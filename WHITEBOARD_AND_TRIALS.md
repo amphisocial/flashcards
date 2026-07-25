@@ -1090,3 +1090,44 @@ speed (riding exactly on the wall radius at each height), and ejects once its
 equilibrium height exceeds the rim; mounts + animates headless without crash.
 
 Needs a real browser: the look of the bowl and the eject animation.
+
+---
+
+# v4.0 — fix Push to Students + add student self-analyze
+
+## Push to Students was silently broken (critical)
+Root cause: once an analysis mounted a 3D viewer, the client attached a live
+THREE.js handle to it (a._viz3dHandle) and pointed the handle back at the
+analysis (handle._owner = a) — a circular reference. The Push handler did
+send({..., analysis: a}), and send() does JSON.stringify — which THROWS on a
+circular structure. So Push to Students failed for every note that had a 3D
+model (molecules, physics sims, solids, Earth) — i.e. exactly the impressive
+ones — and it failed silently, showing "Shared with the room" while nothing
+sent.
+
+Fix:
+- cleanAnalysis(a) returns a serializable copy with all _-prefixed internals
+  (viewer handle, owner backref, cached snapshot) stripped. Push now sends the
+  clean copy. The student still gets a fresh interactive viewer because
+  renderInsight rebuilds it from the viz3d/molecule/physicsSim fields.
+- send() hardened: wraps stringify in try/catch and, on failure, retries while
+  dropping _-prefixed keys, and logs instead of failing silently — so one bad
+  field can never kill a whole message type again.
+Verified end-to-end: a physics/3D note now pushes and the student receives it
+with physicsSim intact.
+
+## Students can analyze the board themselves
+Even without the teacher pushing notes, a student can now run their own AI
+analysis for independent study.
+- New "🔍 Analyze" button in the student bar.
+- studentAnalyze() calls the same endpoint and renders the result privately in
+  the student's own AI Notes (tagged "your analysis", no Push button); it is
+  NOT broadcast to the room.
+- Server: the analyze endpoint now allows a shared-board viewer (shared +
+  on-roster), not just the teacher. Verified access matrix: shared student
+  passes the gate, an outsider is 403, the teacher still works, and unsharing
+  revokes it (403). (Fixed a store mix-up — viewer check must use readStore()
+  for users, not the board store.)
+
+Needs a real browser: that a pushed 3D note renders its interactive viewer on
+the student side, and the feel of the student Analyze button.

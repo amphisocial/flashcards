@@ -421,7 +421,12 @@ function attachBoardRoutes(app, deps) {
     const store = readBoardStore();
     const board = store.boards.find((b) => b.id === req.params.boardId);
     if (!board) return res.status(404).json({ error: 'Board not found.' });
-    if (board.teacherId !== req.user.id) return res.status(403).json({ error: 'Only the teacher can analyze this board.' });
+    // The teacher can always analyze. A student may analyze a board that's
+    // shared with them, for their own independent study - the result is
+    // returned only to them, not broadcast to the room.
+    const isTeacher = board.teacherId === req.user.id;
+    const isViewer = board.shared && viewerAllowed(readStore(), board.teacherId, req.user.email);
+    if (!isTeacher && !isViewer) return res.status(403).json({ error: 'This whiteboard has not been shared with you.' });
     if (!req.body.snapshot) return res.status(400).json({ error: 'No board snapshot provided.' });
     try {
       const raw = await askVisionAI({ instructions: ANALYZE_INSTRUCTIONS, imageDataUrl: req.body.snapshot });

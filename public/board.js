@@ -1191,6 +1191,18 @@
     setTimeout(resizeCanvas, 200);
   }
 
+  // Analysis objects accumulate live, non-serializable internals once a 3D
+  // viewer mounts (a._viz3dHandle is a THREE.js object, handle._owner points
+  // back at a - a circular reference). Strip everything internal (_-prefixed)
+  // before sending over the socket or JSON.stringify throws and the message
+  // silently never sends. THIS is why Push to students stopped working for any
+  // note that had a 3D model.
+  function cleanAnalysis(a) {
+    const out = {};
+    Object.keys(a).forEach((k) => { if (!k.startsWith('_')) out[k] = a[k]; });
+    return out;
+  }
+
   function renderInsight(a, opts = {}) {
     const body = $('#infoBody');
     const card = document.createElement('div');
@@ -1205,7 +1217,7 @@
     const hasPhysics = a.physicsSim && a.physicsSim.type;
 
     card.innerHTML = `
-      <span class="insight-kind">${escapeHtml(a.kind || 'info')}</span>
+      <span class="insight-kind">${escapeHtml(a.kind || 'info')}${opts.ownAnalysis ? ' · your analysis' : ''}</span>
       ${a.title ? `<h4>${escapeHtml(a.title)}</h4>` : ''}
       ${a.summary ? `<p>${escapeHtml(a.summary)}</p>` : ''}
       ${(has3d || hasMol || hasPhysics) ? `<div class="viz3d-holder${hasPhysics ? ' viz3d-holder-tall' : ''}"></div>` : ''}
@@ -1254,7 +1266,10 @@
       const push = document.createElement('button');
       push.className = 'btn soft small';
       push.textContent = 'Push to students';
-      push.addEventListener('click', () => { send({ type: 'insight:push', analysis: a }); setStatus('Shared with the room.', 'success'); });
+      push.addEventListener('click', () => {
+        send({ type: 'insight:push', analysis: cleanAnalysis(a) });
+        setStatus('Shared with the room.', 'success');
+      });
       actions.appendChild(push);
       plots.forEach((expr) => {
         const b = document.createElement('button');
@@ -1317,6 +1332,29 @@
       const data = await api(`/api/board/${boardIdValue}/analyze`, { method: 'POST', body: JSON.stringify({ snapshot }) });
       lastAnalysis = data.analysis;
       renderInsight(data.analysis);
+    } catch (error) {
+      setStatus(error.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = label;
+    }
+  }
+
+  // A student analyzes the board for their OWN study. Same endpoint, but the
+  // result is rendered privately in their panel (opts.fromTeacher so no Push
+  // button) and never broadcast to the room.
+  async function studentAnalyze() {
+    if (isOwner) return;
+    const btn = $('#studentAnalyzeBtn');
+    if (!btn) return;
+    btn.disabled = true; const label = btn.textContent; btn.textContent = 'Analyzing…';
+    try {
+      const snapshot = snapshotPage(pageIndex);
+      const data = await api(`/api/board/${boardIdValue}/analyze`, { method: 'POST', body: JSON.stringify({ snapshot }) });
+      // Mark as the student's own so renderInsight shows it without owner-only
+      // controls, and tag the card so they can tell it apart from teacher notes.
+      renderInsight(data.analysis, { fromTeacher: true, ownAnalysis: true });
+      openInfoPanel();
+      setStatus('Your analysis is ready in AI Notes.', 'success');
     } catch (error) {
       setStatus(error.message, 'error');
     } finally {
@@ -1703,7 +1741,19 @@
   function updateZoomLabel() { $('#zoomLabel').textContent = `${Math.round(view.scale * 100)}%`; }
 
   // ---- WebSocket ----------------------------------------------------------
-  function send(payload) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload)); }
+  function send(payload) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    let text;
+    try { text = JSON.stringify(payload); }
+    catch (err) {
+      // A non-serializable field slipped in (e.g. a live viewer handle). Don't
+      // fail silently - log it and drop the field so the rest still sends.
+      console.error('send(): payload not serializable', err);
+      try { text = JSON.stringify(payload, (k, v) => (k.startsWith('_') ? undefined : v)); }
+      catch (_) { return; }
+    }
+    ws.send(text);
+  }
   function setPill(text, kind) { const p = $('#boardStatus'); p.textContent = text; p.className = `board-status${kind ? ` ${kind}` : ''}`; }
 
   function connect() {
@@ -2004,6 +2054,7 @@
     $('#exportBtn').addEventListener('click', exportPdf);
     $('#eraseNotesBtn')?.addEventListener('click', eraseAllNotes);
     $('#studentExportBtn')?.addEventListener('click', exportPdf);
+    $('#studentAnalyzeBtn')?.addEventListener('click', studentAnalyze);
     $('#studySetBtn').addEventListener('click', toStudySet);
     $('#zoomResetBtn').addEventListener('click', () => { view.x = 0; view.y = 0; view.scale = 1; updateZoomLabel(); redraw(); });
 
