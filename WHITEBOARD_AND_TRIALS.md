@@ -533,3 +533,54 @@ verified only for clean error handling here.
 
 Costs: creating a passage's notes and generating a quiz each count one
 against the existing daily AI-generation limit; answering questions is free.
+
+---
+
+# v2.6 — 3D geometry, molecules, and a rotatable Earth
+
+Answers iFlytek's signature demo (turning a flat drawing into a rotatable 3D
+model) without their hardware, plus chemistry structure visualization.
+
+## How it works
+The Analyze result gained two optional fields the vision model fills:
+- **viz3d**: `{ shape, dims, label }` for a geometric solid — cube, cuboid,
+  sphere, cylinder, cone, pyramid, prism, tetrahedron — or `shape:"earth"`
+  when the board shows a circle labeled "Earth" or "globe".
+- **molecule**: `{ name, formula, smiles, atoms, bonds }` for chemistry.
+
+When either is present, the Info panel renders an interactive **Three.js**
+viewer (`public/viz3d.js`): drag to rotate, gentle auto-spin until touched.
+Solids show a cyan edge overlay so points/lines/faces read clearly. The
+whole analysis (including these fields) is what gets pushed to students, so
+attendees see the same rotatable 3D object the teacher does — verified over
+the live socket.
+
+## 1. 3D geometry
+Draw or label a solid, hit Analyze. The panel shows the rotatable shape plus
+(from the same call) its surface-area/volume formulas and computed values
+when dimensions are written on the board. Built on primitives available in
+three.js r128 (no OrbitControls dependency — rotation is a small custom
+pointer handler; no CapsuleGeometry, which is r142+).
+
+## 2. Earth
+Draw a circle, write "Earth" inside, Analyze -> a rotatable globe with a
+procedural land/ocean/ice texture (drawn to a canvas, so it needs no
+external image host or CORS) and a faint atmosphere halo at ~23.5° tilt.
+This is the foundation for future physics/astronomy simulations.
+
+## 3. Chemistry (molecules)
+A named or drawn compound renders as a ball-and-stick model with standard
+CPK atom colours and multi-order bonds. If the model returns a formula but
+no coordinates, a small built-in library (H2O, CO2, CH4, NaCl) supplies a
+sensible structure so the panel still shows something real rather than an
+empty box.
+
+## Notes / limits
+- Up to 4 live 3D viewers are kept at once; older ones are disposed to avoid
+  accumulating WebGL contexts over a long session.
+- Molecule geometry from the model is only as good as the coordinates it
+  returns; the fallback library covers the most common classroom molecules.
+- Rendering quality (lighting, the Earth texture, rotation feel) needs a
+  real browser to judge — the geometry selection, molecule fallbacks, the
+  dispose lifecycle, and the full push-to-student pipeline are verified
+  here, but the visual result is not something this environment can see.

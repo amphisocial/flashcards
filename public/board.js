@@ -39,6 +39,7 @@
   let replay = { active: false, index: 0, timer: null };
   let lastAnalysis = null;
   const analyses = [];
+  const viz3dViewers = [];
   const questions = [];
   let liveAnalyze = false;
   let liveAnalyzeTimer = null;
@@ -1020,11 +1021,14 @@
     const formulas = Array.isArray(a.formulas) ? a.formulas : [];
     const warnings = Array.isArray(a.warnings) ? a.warnings : [];
     const plots = Array.isArray(a.plots) ? a.plots : [];
+    const has3d = a.viz3d && a.viz3d.shape;
+    const hasMol = a.molecule && (a.molecule.formula || a.molecule.name || (a.molecule.atoms && a.molecule.atoms.length));
 
     card.innerHTML = `
       <span class="insight-kind">${escapeHtml(a.kind || 'info')}</span>
       ${a.title ? `<h4>${escapeHtml(a.title)}</h4>` : ''}
       ${a.summary ? `<p>${escapeHtml(a.summary)}</p>` : ''}
+      ${(has3d || hasMol) ? '<div class="viz3d-holder"></div>' : ''}
       ${a.method ? `<div class="insight-method">Method: ${escapeHtml(a.method)}</div>` : ''}
       ${a.answer ? `<div class="insight-answer">${escapeHtml(a.answer)}</div>` : ''}
       ${steps.length ? `<ol class="insight-steps">${steps.map((s) => `<li>${escapeHtml(s.step || '')}${s.why ? `<span class="why">${escapeHtml(s.why)}</span>` : ''}</li>`).join('')}</ol>` : ''}
@@ -1033,6 +1037,28 @@
       ${warnings.length ? warnings.map((w) => `<div class="insight-warn">⚠ ${escapeHtml(w)}</div>`).join('') : ''}
       <div class="insight-actions"></div>
     `;
+
+    // Mount an interactive 3D viewer if the analysis produced one. Disposed
+    // when this card scrolls out isn't tracked individually; instead we cap
+    // how many live viewers exist (see viz3dViewers) so a long session
+    // doesn't accumulate WebGL contexts without bound.
+    const holder = card.querySelector('.viz3d-holder');
+    if (holder && window.AthenaViz3D) {
+      let spec = null;
+      if (has3d) spec = { kind: 'solid', shape: a.viz3d.shape, dims: a.viz3d.dims || {}, label: a.viz3d.label };
+      else if (hasMol) spec = { kind: 'molecule', name: a.molecule.name, formula: a.molecule.formula, atoms: a.molecule.atoms, bonds: a.molecule.bonds };
+      // Defer to next frame so the holder has layout dimensions.
+      requestAnimationFrame(() => {
+        const handle = window.AthenaViz3D.mount(holder, spec);
+        viz3dViewers.push(handle);
+        while (viz3dViewers.length > 4) { const old = viz3dViewers.shift(); try { old.dispose(); } catch (_) {} }
+        const cap = document.createElement('div');
+        cap.className = 'viz3d-caption';
+        cap.textContent = (a.viz3d && a.viz3d.label) || (a.molecule && (a.molecule.formula || a.molecule.name)) || 'Drag to rotate';
+        holder.appendChild(cap);
+      });
+    }
+
     const actions = card.querySelector('.insight-actions');
     if (isOwner && !opts.fromTeacher) {
       const push = document.createElement('button');
