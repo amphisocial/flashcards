@@ -279,27 +279,82 @@
       updateLOD(camera.position.length());
     });
 
-    // Level-of-detail: which labels are visible depends on how far the camera
-    // is. Far -> continents/oceans only. Closer -> countries. Closest ->
-    // cities and capitals. Thresholds are camera distances (EARTH_R = 1.7).
+    // Level-of-detail is BOTH distance-based and FOCUS-based. Distance sets
+    // how much detail is available; focus restricts detailed labels (cities)
+    // to a cone around the point the camera is looking at - the centre of the
+    // screen - so a zoomed-in view doesn't stack every label in the
+    // hemisphere on top of each other. Everything off-centre falls back to
+    // country/ocean level. The cone tightens as you zoom in.
+    const _v = new THREE.Vector3();
+    function labelWorldDir(sp) {
+      // The label's local position rotated by the group's current rotation.
+      // (Labels sit on the sphere, so their normalized position is also their
+      // direction from the centre.)
+      return _v.copy(sp.position).applyEuler(group.rotation).normalize();
+    }
     function updateLOD(dist) {
+      // Direction from globe centre toward the camera = the point currently
+      // facing the viewer (screen centre).
+      const viewDir = camera.position.clone().normalize();
+
       const showMacro = dist > 4.0;
-      const showCountries = dist <= 4.6;
-      const showCities = dist < 3.1;
-      const showCapitals = dist < 3.6;
-      macroLabels.visible = showMacro || mode === 'satellite' && dist > 3.6;
-      // Progressive reveal by rank: the closer you are, the higher the rank
-      // number we allow (rank 1-2 shows first, up to 6+ when very close).
-      const countryRankCut = dist > 4.2 ? 2 : dist > 3.6 ? 3 : dist > 3.0 ? 5 : 8;
+      macroLabels.visible = showMacro || (mode === 'satellite' && dist > 3.6);
+
+      // Country labels: shown across the front hemisphere (they're sparse
+      // enough not to stack badly), gated by rank + distance.
+      const countryRankCut = dist > 4.2 ? 2 : dist > 3.6 ? 3 : dist > 3.0 ? 5 : 9;
+      const showCountries = mode === 'political' && dist <= 4.6;
       countryLabels.children.forEach((sp) => {
-        sp.visible = mode === 'political' && showCountries && (sp.userData.rank <= countryRankCut);
+        if (!showCountries || sp.userData.rank > countryRankCut) { sp.visible = false; return; }
+        // Hide anything on the far side of the globe (facing away).
+        sp.visible = labelWorldDir(sp).dot(viewDir) > 0.12;
       });
-      const cityRankCut = dist > 2.9 ? 1 : dist > 2.6 ? 3 : dist > 2.3 ? 6 : 12;
+
+      // Cities: only inside the focus cone, and only once zoomed in enough to
+      // want them. cosThreshold rises (cone narrows) as you zoom in.
+      // dist 3.1 -> ~50deg cone; dist 2.15 -> ~24deg cone.
+      const wantCities = mode === 'political' && dist < 3.2;
+      const t = Math.max(0, Math.min(1, (3.2 - dist) / (3.2 - 2.15)));
+      const coneCos = 0.64 + t * 0.27;               // 0.64 (~50deg) -> 0.91 (~24deg)
+      const cityRankCut = 4 + Math.round(t * 8);     // more cities allowed the closer you are
+      const candidates = [];
       cityLabels.children.forEach((sp) => {
-        const allow = sp.userData.cap ? showCapitals : showCities;
-        sp.visible = mode === 'political' && allow && (sp.userData.rank <= (sp.userData.cap ? cityRankCut + 3 : cityRankCut));
+        if (!wantCities) { sp.visible = false; return; }
+        const cos = sp.userData.cap ? coneCos - 0.06 : coneCos;
+        const rankOk = sp.userData.rank <= (sp.userData.cap ? cityRankCut + 4 : cityRankCut);
+        const inCone = rankOk && labelWorldDir(sp).dot(viewDir) > cos;
+        sp.visible = inCone;
+        if (inCone) candidates.push(sp);
       });
-      capitalDots.visible = mode === 'political' && showCapitals;
+      declutter(candidates);
+      capitalDots.visible = mode === 'political' && dist < 3.6;
+    }
+
+    // Screen-space declutter: project each visible city label to 2D and hide
+    // any that would overlap one already placed. Capitals and higher-priority
+    // (lower-rank) labels win, so the important names survive and the pile-up
+    // in dense regions like India is thinned to what's readable.
+    const _p = new THREE.Vector3();
+    function declutter(labels) {
+      const W = renderer.domElement.clientWidth || 300;
+      const H = renderer.domElement.clientHeight || 220;
+      // Sort by priority: capitals first, then by rank (lower = more important).
+      labels.sort((a, b) => (b.userData.cap - a.userData.cap) || (a.userData.rank - b.userData.rank));
+      const placed = [];
+      const padX = W * 0.06, padY = H * 0.035;
+      labels.forEach((sp) => {
+        _p.copy(sp.position).applyEuler(group.rotation).project(camera);
+        // Behind camera or off-screen -> hide.
+        if (_p.z > 1) { sp.visible = false; return; }
+        const x = (_p.x * 0.5 + 0.5) * W;
+        const y = (-_p.y * 0.5 + 0.5) * H;
+        let clash = false;
+        for (let i = 0; i < placed.length; i += 1) {
+          if (Math.abs(x - placed[i].x) < padX && Math.abs(y - placed[i].y) < padY) { clash = true; break; }
+        }
+        if (clash) sp.visible = false;
+        else placed.push({ x, y });
+      });
     }
 
     function setMode(next) {
@@ -336,7 +391,8 @@
 
     return spinLoop(renderer, scene, camera, group, container, 0.0022, {
       zoom: true, minZoom: 2.15, maxZoom: 9,
-      onZoom: (dist) => updateLOD(dist)
+      onZoom: (dist) => updateLOD(dist),
+      onFrame: () => updateLOD(camera.position.length())
     });
   }
 
@@ -483,9 +539,14 @@
       camera.updateProjectionMatrix();
     }
 
+    let frameN = 0;
     function tick() {
       if (disposed) return;
       if (auto) group.rotation.y += autoSpeed;
+      // Refresh focus-based labels a few times a second (every 6th frame),
+      // not every frame - the label loop is the expensive part and it doesn't
+      // need 60fps to look smooth.
+      if (opts.onFrame && (frameN++ % 6 === 0)) opts.onFrame();
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     }

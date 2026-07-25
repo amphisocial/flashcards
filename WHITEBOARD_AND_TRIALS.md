@@ -675,3 +675,42 @@ at correct latitudes, the LOD reveal order, and the political build path
 resolving with real counts (288 rings, 177 country + 700 city labels, 200
 capital dots, 12 rivers). Needs a real browser: how readable the labels are
 over the map, whether border lines are the right brightness, and zoom feel.
+
+---
+
+# v2.9 — globe labels: focus on the centre, declutter the rest
+
+Fixes the zoomed-in label pile-up (every city in the hemisphere rendering at
+once, stacking into an unreadable wall).
+
+## Focus cone
+Detailed labels (cities) now only appear inside a cone around the point the
+camera is looking at — the centre of the screen. Everything off-centre or on
+the far side of the globe falls back to country/ocean level. The cone
+tightens as you zoom in:
+- ~50° half-angle when you first start seeing cities (dist 3.2)
+- ~24° half-angle at closest zoom (dist 2.15)
+So zooming into India shows India's cities; the surrounding countries stay at
+country-name level instead of dumping every label on screen.
+
+Because the globe also rotates (auto-spin and drag), the cone is recomputed
+a few times a second inside the render loop, not just on zoom — so whatever
+is centred is what's detailed.
+
+## Screen-space declutter
+Even inside the cone, dense regions could still overlap. A second pass
+projects each candidate label to 2D and hides any that collide with one
+already placed. Priority order: national capitals first, then by prominence
+rank — so the important names survive and the rest drop. Verified on a
+simulated India/Sri Lanka cluster: New Delhi and Colombo (capitals) and an
+isolated Chennai survive; overlapping lower-priority names are dropped.
+
+Country labels also now hide on the back hemisphere (facing away from the
+camera) instead of bleeding through the globe.
+
+## Verified vs. needs-your-eyes
+Verified: the cone half-angles by zoom distance, that screen-centre always
+shows and the backside/edges always hide, and that declutter keeps
+capitals + high-priority and drops overlaps. Needs a real browser: the exact
+label density that feels right — the cone width and the declutter padding are
+the two knobs to tune if it's still too busy or now too sparse.
