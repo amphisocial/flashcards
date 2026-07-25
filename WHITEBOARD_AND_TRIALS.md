@@ -868,3 +868,49 @@ acetic acid's formula/bonds are correct, and all three student-flow fixes
 (snapshot GET, View snapshot link, export visible, exit target). Needs a real
 browser: how the live 3D demos look and perform on the marketing page, and the
 overall visual polish of the redesign.
+
+---
+
+# v3.4 — PDF notes no longer jumbled + graphs get real move sliders
+
+## PDF AI Notes were overlapping
+Root cause: wrapText returned the y of its LAST line, not the position below
+the block — so every note block was drawn on top of the previous one (exactly
+the jumble in the screenshot). Also there was no pagination, so long content
+overwrote itself on one fixed canvas.
+
+Fixes:
+- wrapText now returns the y BELOW the block (last baseline + lineHeight), so
+  blocks stack cleanly. Verified: consecutive blocks advance and never
+  overlap; long wrapped text returns the correct bottom.
+- renderNotesPages() paginates across as many pages as needed instead of one
+  1600x1000 canvas, with a running "ensure(space)" that starts a fresh page
+  before content would run off the bottom.
+- Each analysis's 3D model is now embedded as a still image (PNG) in the
+  notes. viz3d viewers render with preserveDrawingBuffer and expose a
+  snapshot() method; exportPdf captures + decodes those stills (awaiting image
+  load) before drawing, so the picture actually appears.
+
+## Graph sliders did nothing; +constant didn't work
+Root cause: sliders only existed for single letters already in the expression
+(A, B, k). 4x^2 has none, so the slider controlled nothing, and adding "+2"
+didn't create an adjustable constant.
+
+Fix: every graph now carries a transform {shiftX, shiftY} and ALWAYS gets two
+sliders — "Move up / down" (adds a constant; +2 raises the curve) and "Move
+left / right" (slides it sideways) — applied to all curves regardless of the
+expression. Any real letter-params still get their own sliders too. Applied as
+f(x - shiftX) + shiftY.
+- Verified the math: 4x^2 with shiftY=+2 gives 2 at the vertex (4x^2+2);
+  shiftX=+2 moves the vertex to x=2.
+- Live broadcast now carries transform end-to-end (client -> server relay ->
+  student), so students watch the curve move. Verified over a real socket.
+- Fixed the colliding/garbled graph labels: expression(s) at the top, a
+  compact "+2.0 up  +1.0 right" readout just under them, no more bottom-line
+  overlap.
+
+## Verified vs. needs-your-eyes
+Verified: wrapText spacing, transform math, the live transform broadcast to
+students, and all syntax. Needs a real browser: the actual look of the
+paginated PDF and the embedded 3D stills, and the feel of dragging the new
+sliders.

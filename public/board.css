@@ -255,7 +255,8 @@ body[data-page="board"] {
 .graph-controls-head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 0.84rem; margin-bottom: 10px; }
 .graph-slider { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 12px; }
 .graph-slider input { width: 100%; margin-top: 5px; }
-.graph-slider span { color: #14d9c4; font-weight: 700; }
+.graph-slider .gs-label { color: #c8d6ee; font-weight: 600; }
+.graph-slider .gv-out { color: #14d9c4; font-weight: 700; }
 
 @media (max-width: 760px) {
   .questions-panel { right: 8px; left: 8px; width: auto; top: 8px; }

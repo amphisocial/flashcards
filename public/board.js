@@ -184,7 +184,7 @@
   }
 
   function wrapText(c, text, x, y, maxWidth, lineHeight) {
-    const words = String(text || '').split(/\s+/);
+    const words = String(text || '').split(/\s+/).filter(Boolean);
     let line = '';
     let cy = y;
     words.forEach((w) => {
@@ -192,7 +192,9 @@
       if (c.measureText(test).width > maxWidth && line) { c.fillText(line, x, cy); line = w; cy += lineHeight; }
       else line = test;
     });
-    if (line) c.fillText(line, x, cy);
+    if (line) { c.fillText(line, x, cy); cy += lineHeight; }
+    // Return the y position BELOW the block (not the last baseline), so the
+    // caller can place the next block without overlapping it.
     return cy;
   }
 
@@ -262,6 +264,22 @@
     return [{ expression: obj.expression || 'y = x', color: CURVE_COLORS[0] }];
   }
 
+  // Every graph carries a transform so ANY plotted function gets move-up/down
+  // and move-left/right sliders, even one like 4x^2 that has no letters to
+  // tweak. shiftY adds a constant (raises/lowers the curve); shiftX slides it
+  // sideways. Applied as f(x - shiftX) + shiftY.
+  function graphTransform(obj) {
+    obj.transform = obj.transform || { shiftX: 0, shiftY: 0 };
+    if (typeof obj.transform.shiftX !== 'number') obj.transform.shiftX = 0;
+    if (typeof obj.transform.shiftY !== 'number') obj.transform.shiftY = 0;
+    return obj.transform;
+  }
+  function sampleCurve(fn, wx, transform) {
+    const t = transform || { shiftX: 0, shiftY: 0 };
+    let v; try { v = fn(wx - (t.shiftX || 0)); } catch { return NaN; }
+    return Number.isFinite(v) ? v + (t.shiftY || 0) : NaN;
+  }
+
   function drawGraphObject(obj) {
     const { x, y, w, h } = obj;
     const params = obj.params || {};
@@ -272,6 +290,7 @@
     ctx.lineWidth = 1 / view.scale; ctx.stroke();
 
     const xMin = obj.xMin ?? -10, xMax = obj.xMax ?? 10;
+    const tf = graphTransform(obj);
     const curves = graphCurves(obj);
     const compiled = curves.map((c) => {
       try { return { fn: compileExpression(c.expression, params), color: c.color, expr: c.expression }; }
@@ -286,7 +305,7 @@
       const samples = [];
       for (let i = 0; i <= 200; i += 1) {
         const wx = xMin + ((xMax - xMin) * i) / 200;
-        let wy; try { wy = cc.fn(wx); } catch { wy = NaN; }
+        const wy = sampleCurve(cc.fn, wx, tf);
         if (Number.isFinite(wy)) { yMin = Math.min(yMin, wy); yMax = Math.max(yMax, wy); }
         samples.push({ x: wx, y: wy });
       }
@@ -322,16 +341,19 @@
       ctx.stroke();
     });
 
-    // Labels (expression per curve, plus current param values)
+    // Labels: expression(s) at top; a compact transform readout below them.
     ctx.font = '600 12px Inter, sans-serif';
     curves.forEach((c, i) => {
       ctx.fillStyle = compiled[i] ? c.color : '#ff6b7a';
       ctx.fillText(c.expression, x + 10, y + 16 + i * 15);
     });
-    const paramKeys = Object.keys(params);
-    if (paramKeys.length) {
+    const bits = [];
+    if (tf.shiftY) bits.push(`${tf.shiftY > 0 ? '+' : ''}${tf.shiftY.toFixed(1)} up`);
+    if (tf.shiftX) bits.push(`${tf.shiftX > 0 ? '+' : ''}${tf.shiftX.toFixed(1)} right`);
+    Object.keys(params).forEach((k) => bits.push(`${k}=${(+params[k]).toFixed(1)}`));
+    if (bits.length) {
       ctx.fillStyle = 'rgba(238,246,255,0.7)';
-      ctx.fillText(paramKeys.map((k) => `${k}=${(+params[k]).toFixed(2)}`).join('  '), x + 10, y + h - 8);
+      ctx.fillText(bits.join('  '), x + 10, y + 16 + curves.length * 15);
     }
     ctx.restore();
   }
@@ -1050,8 +1072,15 @@
       // Defer to next frame so the holder has layout dimensions.
       requestAnimationFrame(() => {
         const handle = window.AthenaViz3D.mount(holder, spec);
+        a._viz3dHandle = handle;   // so PDF export can snapshot this model
         viz3dViewers.push(handle);
-        while (viz3dViewers.length > 4) { const old = viz3dViewers.shift(); try { old.dispose(); } catch (_) {} }
+        while (viz3dViewers.length > 4) {
+          const old = viz3dViewers.shift();
+          // Grab a still BEFORE disposing, so its snapshot survives in exports.
+          try { if (old._owner && !old._owner._viz3dSnapshot && old.snapshot) old._owner._viz3dSnapshot = old.snapshot(); } catch (_) {}
+          try { old.dispose(); } catch (_) {}
+        }
+        handle._owner = a;
         const cap = document.createElement('div');
         cap.className = 'viz3d-caption';
         cap.textContent = (a.viz3d && a.viz3d.label) || (a.molecule && (a.molecule.formula || a.molecule.name)) || 'Drag to rotate';
@@ -1172,11 +1201,14 @@
       id: `obj_${Math.random().toString(16).slice(2)}`, type: 'graph',
       x: pos.x, y: pos.y, w, h,
       curves: [{ expression, color: CURVE_COLORS[0] }],
-      params
+      params,
+      transform: { shiftX: 0, shiftY: 0 }
     };
     addObject(obj);
     activeGraph = obj;
-    if (Object.keys(params).length) openGraphControls(obj);
+    // Always open controls: every graph now has move up/down + left/right
+    // sliders, so there's always something useful to adjust.
+    openGraphControls(obj);
   }
 
   // ---- Snapshots / export -------------------------------------------------
@@ -1245,13 +1277,14 @@
     c.beginPath(); c.roundRect(x, y, w, h, 10); c.fill();
     c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 1; c.stroke();
     const xMin = obj.xMin ?? -10, xMax = obj.xMax ?? 10;
+    const tf = graphTransform(obj);
     const curves = (obj.curves && obj.curves.length) ? obj.curves : [{ expression: obj.expression || 'y=x', color: '#14d9c4' }];
     const compiled = curves.map((cu) => { try { return { fn: compileExpression(cu.expression, params), color: cu.color, expr: cu.expression }; } catch { return null; } });
     let yMin = Infinity, yMax = -Infinity; const per = [];
     compiled.forEach((cc) => {
       if (!cc) { per.push(null); return; }
       const s2 = [];
-      for (let i = 0; i <= 200; i += 1) { const wx = xMin + ((xMax - xMin) * i) / 200; let wy; try { wy = cc.fn(wx); } catch { wy = NaN; } if (Number.isFinite(wy)) { yMin = Math.min(yMin, wy); yMax = Math.max(yMax, wy); } s2.push({ x: wx, y: wy }); }
+      for (let i = 0; i <= 200; i += 1) { const wx = xMin + ((xMax - xMin) * i) / 200; const wy = sampleCurve(cc.fn, wx, tf); if (Number.isFinite(wy)) { yMin = Math.min(yMin, wy); yMax = Math.max(yMax, wy); } s2.push({ x: wx, y: wy }); }
       per.push({ samples: s2, color: cc.color });
     });
     if (!Number.isFinite(yMin)) { yMin = -5; yMax = 5; }
@@ -1311,14 +1344,28 @@
       added += 1;
     });
 
-    // Append the AI notes / Info panel as a final page so the export carries
-    // the analysis, not just the drawing.
-    const notesImg = renderNotesPage();
-    if (notesImg) {
+    // Capture a still from each analysis's live 3D viewer and decode it into
+    // an Image before drawing, so drawImage has real pixels (data-URL images
+    // load asynchronously - drawing right after setting src draws nothing).
+    const decodedStills = new Map();
+    await Promise.all(analyses.map((a) => new Promise((resolve) => {
+      let data = a._viz3dSnapshot;
+      if (!data && a._viz3dHandle && a._viz3dHandle.snapshot) { try { data = a._viz3dHandle.snapshot(); } catch (_) {} }
+      if (!data) return resolve();
+      const im = new Image();
+      im.onload = () => { decodedStills.set(a, im); resolve(); };
+      im.onerror = () => resolve();
+      im.src = data;
+    })));
+
+    // Append the AI Notes as one or more pages (paginated if long), each with
+    // any 3D model rendered as a still image.
+    const notePages = renderNotesPages(decodedStills);
+    notePages.forEach((img) => {
       if (added) pdf.addPage([1600, 1000], 'landscape');
-      pdf.addImage(notesImg, 'PNG', 0, 0, 1600, 1000);
+      pdf.addImage(img, 'PNG', 0, 0, 1600, 1000);
       added += 1;
-    }
+    });
 
     if (!added) { setStatus('Nothing to export yet — the board is empty.', 'error'); return; }
     pdf.save(`${(board.title || 'whiteboard').replace(/[^\w\-]+/g, '-')}.pdf`);
@@ -1327,37 +1374,90 @@
 
   // Renders the accumulated Info-panel insights to a page-sized canvas so the
   // export includes the AI Notes, which the screenshot flagged as missing.
-  function renderNotesPage() {
-    if (!analyses.length) return null;
-    const W = 1600, H = 1000;
-    const off = document.createElement('canvas');
-    off.width = W; off.height = H;
-    const c = off.getContext('2d');
-    c.fillStyle = '#0a1526'; c.fillRect(0, 0, W, H);
-    c.fillStyle = '#eef6ff';
-    c.font = '800 34px Inter, sans-serif';
-    c.fillText('AI Notes', 60, 70);
-    let y = 120;
-    c.textBaseline = 'top';
+  // Render the AI Notes archive to one or more page images. Paginates when
+  // the content is taller than a page, and embeds a still image of any 3D
+  // model (solid / molecule / Earth) captured from its live viewer.
+  function renderNotesPages(decodedStills = new Map()) {
+    if (!analyses.length) return [];
+    const W = 1600, H = 1000, M = 60;      // page size + margin
+    const pages = [];
+    let c = null, y = 0;
+
+    function newPage() {
+      const off = document.createElement('canvas');
+      off.width = W; off.height = H;
+      const ctx2 = off.getContext('2d');
+      ctx2.fillStyle = '#0a1526'; ctx2.fillRect(0, 0, W, H);
+      ctx2.textBaseline = 'top';
+      pages.push(off);
+      return ctx2;
+    }
+    function ensure(space) {
+      if (!c || y + space > H - M) { c = newPage(); y = M; drawHeader(); }
+    }
+    function drawHeader() {
+      c.fillStyle = '#eef6ff'; c.font = '800 34px Inter, sans-serif';
+      c.fillText(pages.length > 1 ? 'AI Notes (cont.)' : 'AI Notes', M, y);
+      y += 56;
+    }
+
+    c = newPage(); y = M; drawHeader();
+
     analyses.slice().reverse().forEach((a) => {
-      if (y > H - 80) return;
-      c.fillStyle = '#14d9c4'; c.font = '700 22px Inter, sans-serif';
-      c.fillText(`${(a.kind || 'info').toUpperCase()}${a.title ? ' — ' + a.title : ''}`, 60, y);
-      y += 32;
-      c.fillStyle = '#c8d6ee'; c.font = '400 18px Inter, sans-serif';
-      if (a.summary) { y = wrapText(c, a.summary, 60, y, W - 120, 24) + 26; }
-      if (a.method) { c.fillStyle = '#9d7bff'; c.fillText(`Method: ${a.method}`, 60, y); y += 26; c.fillStyle = '#c8d6ee'; }
+      ensure(60);
+      // Title
+      c.fillStyle = '#14d9c4'; c.font = '700 24px Inter, sans-serif';
+      y = wrapText(c, `${(a.kind || 'info').toUpperCase()}${a.title ? ' — ' + a.title : ''}`, M, y, W - 2 * M, 30);
+      y += 8;
+
+      // 3D model still, if this analysis had one (pre-decoded image passed in).
+      const im = decodedStills.get(a);
+      if (im) {
+        const imgW = 460, imgH = Math.round(imgW * (im.height / im.width || 0.66));
+        ensure(imgH + 20);
+        try { c.drawImage(im, M, y, imgW, imgH); } catch (_) {}
+        y += imgH + 16;
+      }
+
+      // Summary
+      if (a.summary) {
+        ensure(30); c.fillStyle = '#c8d6ee'; c.font = '400 18px Inter, sans-serif';
+        y = wrapText(c, a.summary, M, y, W - 2 * M, 26) + 10;
+      }
+      // Method
+      if (a.method) {
+        ensure(28); c.fillStyle = '#9d7bff'; c.font = '600 18px Inter, sans-serif';
+        y = wrapText(c, `Method: ${a.method}`, M, y, W - 2 * M, 26) + 6;
+      }
+      // Steps
       (a.steps || []).forEach((st, i) => {
-        if (y > H - 60) return;
-        y = wrapText(c, `${i + 1}. ${st.step || ''}`, 70, y, W - 140, 23) + 6;
-        if (st.why) { c.fillStyle = '#8ea3c4'; y = wrapText(c, st.why, 92, y, W - 160, 21) + 8; c.fillStyle = '#c8d6ee'; }
+        ensure(28); c.fillStyle = '#c8d6ee'; c.font = '400 18px Inter, sans-serif';
+        y = wrapText(c, `${i + 1}. ${st.step || ''}`, M + 10, y, W - 2 * M - 20, 25) + 2;
+        if (st.why) {
+          ensure(24); c.fillStyle = '#8ea3c4'; c.font = '400 16px Inter, sans-serif';
+          y = wrapText(c, st.why, M + 32, y, W - 2 * M - 44, 22) + 4;
+        }
       });
-      if (a.answer) { c.fillStyle = '#14d9c4'; c.font = '700 19px Inter, sans-serif'; y = wrapText(c, `Answer: ${a.answer}`, 60, y, W - 120, 24) + 30; c.fillStyle = '#c8d6ee'; c.font = '400 18px Inter, sans-serif'; }
-      (a.warnings || []).forEach((wn) => { c.fillStyle = '#ff9f6b'; y = wrapText(c, `\u26a0 ${wn}`, 60, y, W - 120, 22) + 8; c.fillStyle = '#c8d6ee'; });
-      y += 26;
+      // Formulas
+      (a.formulas || []).forEach((f) => {
+        ensure(26); c.fillStyle = '#14d9c4'; c.font = '600 17px Inter, sans-serif';
+        y = wrapText(c, f, M + 10, y, W - 2 * M - 20, 24) + 2;
+      });
+      // Answer
+      if (a.answer) {
+        ensure(30); c.fillStyle = '#14d9c4'; c.font = '700 19px Inter, sans-serif';
+        y = wrapText(c, `Answer: ${a.answer}`, M, y, W - 2 * M, 26) + 8;
+      }
+      // Warnings
+      (a.warnings || []).forEach((wn) => {
+        ensure(26); c.fillStyle = '#ff9f6b'; c.font = '400 17px Inter, sans-serif';
+        y = wrapText(c, `\u26a0 ${wn}`, M, y, W - 2 * M, 24) + 4;
+      });
+
+      y += 30;  // gap between analyses
     });
-    c.textBaseline = 'alphabetic';
-    return off.toDataURL('image/png');
+
+    return pages.map((p) => p.toDataURL('image/png'));
   }
 
   async function toStudySet() {
@@ -1483,7 +1583,12 @@
       if (m.type === 'graph:live') {
         const p = pageFor(m.pageId);
         const obj = p.objects.find((o) => o.id === m.objectId);
-        if (obj) { obj.params = m.params; if (m.expression) obj.expression = m.expression; redraw(); }
+        if (obj) {
+          if (m.params) obj.params = m.params;
+          if (m.transform) obj.transform = m.transform;
+          if (m.expression) obj.expression = m.expression;
+          redraw();
+        }
         return;
       }
       if (m.type === 'equation:read') { if (isOwner) plotOnBoard(m.expression, m.rect); return; }
@@ -1623,33 +1728,51 @@
   let activeGraph = null;
   function openGraphControls(obj) {
     activeGraph = obj;
-    const params = obj.params || {};
-    const keys = Object.keys(params);
+    const params = obj.params || (obj.params = {});
+    const tf = graphTransform(obj);
     $('#graphCtrlLabel').textContent = graphCurves(obj).map((c) => c.expression).join(', ') || 'Graph';
     const wrap = $('#graphSliders');
-    if (!keys.length) {
-      wrap.innerHTML = '<p class="info-empty">This graph has no adjustable constants. Plot something like y = A*x + B to get sliders.</p>';
-    } else {
-      wrap.innerHTML = keys.map((k) => `
-        <label class="graph-slider">${k} = <span id="gv-${k}">${(+params[k]).toFixed(2)}</span>
-          <input type="range" min="-10" max="10" step="0.1" value="${params[k]}" data-key="${k}" />
-        </label>`).join('');
-      wrap.querySelectorAll('input[type=range]').forEach((inp) => {
-        inp.addEventListener('input', () => {
-          const key = inp.dataset.key;
-          activeGraph.params[key] = Number(inp.value);
-          $(`#gv-${key}`).textContent = Number(inp.value).toFixed(2);
-          redraw();
-          // Broadcast live so students watch the curve move.
-          send({ type: 'graph:live', objectId: activeGraph.id, pageId: pageId(), params: activeGraph.params, expression: activeGraph.expression });
-        });
-        inp.addEventListener('change', () => {
-          // Commit the final value to the saved board.
-          send({ type: 'object:update', pageId: pageId(), object: activeGraph });
-        });
-      });
+
+    // EVERY graph gets move up/down and left/right sliders that add/adjust a
+    // constant - this is what makes 4x^2 (which has no letters) adjustable.
+    // Any single-letter params in the expression get their own sliders too.
+    const rows = [];
+    rows.push(sliderRow('Move up / down', 'shiftY', tf.shiftY, -20, 20, 0.5, 'shift the whole curve vertically (adds a constant)'));
+    rows.push(sliderRow('Move left / right', 'shiftX', tf.shiftX, -20, 20, 0.5, 'slide the curve horizontally'));
+    Object.keys(params).forEach((k) => {
+      rows.push(sliderRow(`${k}`, `param:${k}`, +params[k], -10, 10, 0.1, `constant ${k} in the expression`));
+    });
+    wrap.innerHTML = rows.join('');
+
+    function commitLive() {
+      redraw();
+      send({ type: 'graph:live', objectId: activeGraph.id, pageId: pageId(), params: activeGraph.params, transform: activeGraph.transform, expression: activeGraph.expression });
     }
+
+    wrap.querySelectorAll('input[type=range]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const key = inp.dataset.key;
+        const val = Number(inp.value);
+        if (key === 'shiftY') tf.shiftY = val;
+        else if (key === 'shiftX') tf.shiftX = val;
+        else if (key.startsWith('param:')) activeGraph.params[key.slice(6)] = val;
+        const out = inp.parentElement.querySelector('.gv-out');
+        if (out) out.textContent = val.toFixed(1);
+        commitLive();
+      });
+      inp.addEventListener('change', () => {
+        send({ type: 'object:update', pageId: pageId(), object: activeGraph });
+      });
+    });
     $('#graphControls').style.display = 'block';
+  }
+
+  function sliderRow(label, key, value, min, max, step, hint) {
+    const v = Number(value) || 0;
+    return `<label class="graph-slider">
+      <span class="gs-label">${label}: <span class="gv-out">${v.toFixed(1)}</span></span>
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${v}" data-key="${key}" title="${hint}" />
+    </label>`;
   }
 
   function bindUI() {

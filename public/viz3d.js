@@ -57,7 +57,7 @@
   }
 
   function makeRenderer(container, w, h) {
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(w, h);
     container.appendChild(renderer.domElement);
@@ -722,6 +722,10 @@
 
     return {
       onResize,
+      snapshot() {
+        try { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/png'); }
+        catch (_) { return null; }
+      },
       resumeAuto() { auto = true; },
       dispose() {
         disposed = true;

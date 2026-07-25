@@ -650,7 +650,7 @@ function attachBoardWebSocket(httpServer, deps) {
         // the object's committed state is saved via the normal object:update.
         if (msg.type === 'graph:live') {
           if (!isOwner) return;
-          broadcast(targetBoardId, { type: 'graph:live', objectId: msg.objectId, pageId: msg.pageId, params: msg.params, expression: msg.expression }, ws);
+          broadcast(targetBoardId, { type: 'graph:live', objectId: msg.objectId, pageId: msg.pageId, params: msg.params, transform: msg.transform, expression: msg.expression }, ws);
           return;
         }
 
