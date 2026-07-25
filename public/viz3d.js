@@ -772,6 +772,7 @@
 
     const api = {
       scene, camera, renderer, hud, controls,
+      ready() { ready = true; },
       setHud(html) { hud.innerHTML = html; },
       // Build a labelled slider; onInput gets the numeric value.
       slider(label, min, max, step, value, onInput, presets) {
@@ -796,12 +797,15 @@
       }
     };
 
-    let raf = 0, disposed = false, last = performance.now();
+    let raf = 0, disposed = false, ready = false, last = performance.now();
     function tick() {
       if (disposed) return;
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
-      if (opts.step) opts.step(dt);
+      // Don't step the physics until the sim has finished building its meshes
+      // (the scaffold is created first, so the first frames would otherwise
+      // touch meshes that don't exist yet).
+      if (ready && opts.step) { try { opts.step(dt); } catch (_) {} }
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     }
@@ -830,6 +834,10 @@
     if (type === 'pendulum') return simPendulum(container, spec, w, h);
     if (type === 'incline') return simIncline(container, spec, w, h);
     if (type === 'collision') return simCollision(container, spec, w, h);
+    if (type === 'orbit') return simOrbit(container, spec, w, h);
+    if (type === 'welldeath' || type === 'wall-of-death') return simWellOfDeath(container, spec, w, h);
+    if (type === 'reflection' || type === 'mirror') return simReflection(container, spec, w, h);
+    if (type === 'circuit') return simCircuit(container, spec, w, h);
     return simFreefall(container, spec, w, h);
   }
 
@@ -881,6 +889,7 @@
     S.api.slider('Gravity', 1.6, 25, 0.1, sim.g, (v) => { sim.g = v; readout(); },
       [{ label: 'Earth', v: 9.8 }, { label: 'Moon', v: 1.6 }, { label: 'Jupiter', v: 24.8 }]);
     readout();
+    S.api.ready();
     return S.handle;
   }
 
@@ -934,6 +943,7 @@
     S.api.slider('Speed (m/s)', 4, 24, 1, sim.speed, (v) => { sim.speed = v; predictArc(); });
     S.api.slider('Angle (°)', 5, 85, 1, sim.angle, (v) => { sim.angle = v; predictArc(); });
     predictArc();
+    S.api.ready();
     return S.handle;
   }
 
@@ -970,56 +980,91 @@
       [{ label: 'Earth', v: 9.8 }, { label: 'Moon', v: 1.6 }]);
     S.api.button('⟲ Reset swing', () => { sim.theta = Math.PI / 6; sim.omega = 0; });
     readout();
+    S.api.ready();
     return S.handle;
   }
 
   // ---- Inclined plane (friction) -----------------------------------------
   function simIncline(container, spec, w, h) {
     const sim = { g: 9.8, angle: 25, mu: 0.3, mass: 2, running: false, s: 0, v: 0 };
-    let S, block, ramp, rampLen = 9;
+    let S, block, wedge;
+    const BASE = 9;         // wedge base length (along ground)
+    const BLOCK = 0.9;
     function accel() {
       const a = sim.angle * Math.PI / 180;
-      // a = g(sinθ − μcosθ) while sliding; if static friction holds, 0.
       const net = Math.sin(a) - sim.mu * Math.cos(a);
-      return net > 0 ? sim.g * net : 0;
+      return net > 0 ? sim.g * net : 0;   // static friction holds -> 0
     }
     function willSlide() { const a = sim.angle * Math.PI / 180; return Math.tan(a) > sim.mu; }
     function reset() { sim.s = 0; sim.v = 0; sim.running = false; place(); readout(); }
+
+    // The wedge is a right triangle sitting on the ground: left corner at the
+    // top, hypotenuse (the incline surface) running down to the right. The
+    // block sits ON that hypotenuse, offset along the surface NORMAL so it
+    // rests on top of the ramp, not embedded in it.
+    function geomOf(a) {
+      const H = BASE * Math.tan(a);          // wedge height at the left
+      const x0 = -BASE / 2, x1 = BASE / 2;   // ground span
+      const depth = 3;
+      // Triangle profile in XY: A(top-left), B(bottom-left), C(bottom-right).
+      const A = [x0, H], B = [x0, 0], C = [x1, 0];
+      const shape = new THREE.Shape();
+      shape.moveTo(A[0], A[1]); shape.lineTo(B[0], B[1]); shape.lineTo(C[0], C[1]); shape.closePath();
+      const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+      g.translate(0, 0, -depth / 2);
+      return { geo: g, A, C, H };
+    }
+    let ramp = geomOf(sim.angle * Math.PI / 180);
     function place() {
       const a = sim.angle * Math.PI / 180;
-      // Block position along the ramp from the top.
-      const topX = -rampLen / 2 * Math.cos(a), topY = rampLen / 2 * Math.sin(a) + 0.2;
-      const bx = topX + sim.s * Math.cos(a), by = topY - sim.s * Math.sin(a);
-      block.position.set(bx, by + 0.4, 0);
+      // Incline surface goes from top-left A to bottom-right C. Unit vector
+      // DOWN the slope and the outward normal.
+      const A = ramp.A, C = ramp.C;
+      const dx = C[0] - A[0], dy = C[1] - A[1];
+      const len = Math.hypot(dx, dy);
+      const ux = dx / len, uy = dy / len;          // down-slope unit
+      const nx = -uy, ny = ux;                      // outward normal (up-left)
+      const half = BLOCK / 2;
+      const px = A[0] + ux * sim.s + nx * half;
+      const py = A[1] + uy * sim.s + ny * half;
+      block.position.set(px, py, 0);
       block.rotation.z = -a;
     }
     function step(dt) {
       if (!sim.running) return;
-      const acc = accel();
-      sim.v += acc * dt; sim.s += sim.v * dt;
-      if (sim.s >= rampLen) { sim.s = rampLen; sim.running = false; }
+      sim.v += accel() * dt; sim.s += sim.v * dt;
+      const maxS = Math.hypot(ramp.C[0] - ramp.A[0], ramp.C[1] - ramp.A[1]) - BLOCK;
+      if (sim.s >= maxS) { sim.s = maxS; sim.running = false; }
       place(); readout();
     }
     function readout() {
-      const a = sim.angle * Math.PI / 180;
       S.api.setHud(`<div class="phys-eq">a = g(sinθ − μcosθ)</div>` +
         `<div>angle θ=${sim.angle.toFixed(0)}° · μ=${sim.mu.toFixed(2)} · mass=${sim.mass.toFixed(1)} kg</div>` +
         `<div>acceleration = ${accel().toFixed(2)} m/s² · ${willSlide() ? 'sliding' : 'held by friction'}</div>` +
         `<div class="phys-hint">Whether it slides depends on tanθ vs μ — NOT on mass. Mass cancels out. It slips once tanθ &gt; μ.</div>`);
     }
-    S = physicsScaffold(container, w, h, { step, camera: [0, 3, 14], lookAt: [0, 2, 0] });
+    function rebuildWedge() {
+      const a = sim.angle * Math.PI / 180;
+      if (wedge) S.api.scene.remove(wedge);
+      ramp = geomOf(a);
+      wedge = new THREE.Mesh(ramp.geo, new THREE.MeshPhongMaterial({ color: 0x2c3b52, flatShading: true }));
+      // Sit the whole wedge on the ground (its base is at y=0 already).
+      wedge.position.set(0, 0.2, 0);
+      S.api.scene.add(wedge);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 4, 15], lookAt: [0, 2, 0] });
     S.api.scene.add(groundMesh(24));
-    const a0 = sim.angle * Math.PI / 180;
-    ramp = new THREE.Mesh(new THREE.BoxGeometry(rampLen, 0.3, 4), new THREE.MeshPhongMaterial({ color: 0x2c3b52 }));
-    ramp.rotation.z = -a0; ramp.position.set(0, rampLen / 4 * Math.sin(a0), 0); S.api.scene.add(ramp);
-    block = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshPhongMaterial({ color: 0xff9f6b })); S.api.scene.add(block);
-    function rebuildRamp() { const a = sim.angle * Math.PI / 180; ramp.rotation.z = -a; ramp.position.set(0, rampLen / 4 * Math.sin(a), 0); }
+    rebuildWedge();
+    block = new THREE.Mesh(new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK), new THREE.MeshPhongMaterial({ color: 0xff9f6b }));
+    block.position.y = 100;   // parked off-view until placed, avoids a flash
+    S.api.scene.add(block);
     S.api.button('▶ Release', () => { reset(); sim.running = true; });
     S.api.button('⟲ Reset', reset);
-    S.api.slider('Wedge angle (°)', 5, 60, 1, sim.angle, (v) => { sim.angle = v; rebuildRamp(); reset(); });
+    S.api.slider('Wedge angle (°)', 5, 60, 1, sim.angle, (v) => { sim.angle = v; rebuildWedge(); reset(); });
     S.api.slider('Friction μ', 0, 1, 0.01, sim.mu, (v) => { sim.mu = v; reset(); });
     S.api.slider('Mass (kg)', 0.5, 10, 0.5, sim.mass, (v) => { sim.mass = v; readout(); });
     reset();
+    S.api.ready();
     return S.handle;
   }
 
@@ -1067,6 +1112,302 @@
     S.api.slider('Mass B', 0.5, 8, 0.5, sim.B.m, (v) => { sim.B.m = v; readout(); });
     S.api.slider('Bounciness e', 0, 1, 0.05, sim.e, (v) => { sim.e = v; readout(); });
     reset();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- Orbit (circular / elliptical / escape) ----------------------------
+  // A satellite orbits a central planet under inverse-square gravity. The
+  // velocity slider (as a fraction of circular speed) shows the transition:
+  // < circular -> ellipse dipping in; = circular; between circular and escape
+  // -> ellipse; >= escape (√2 × circular) -> hyperbolic escape.
+  function simOrbit(container, spec, w, h) {
+    const GM = 60;                 // gravitational parameter (tuned for view)
+    const r0 = 5;                  // launch radius
+    const vCirc = Math.sqrt(GM / r0);
+    const vEsc = Math.SQRT2 * vCirc;
+    const sim = { vfrac: 1.0, running: false };
+    let S, planet, sat, trail, trailPts = [], p = { x: 0, y: 0 }, vel = { x: 0, y: 0 };
+    function launch() {
+      p = { x: r0, y: 0 };
+      const v = sim.vfrac * vCirc;
+      vel = { x: 0, y: v };        // perpendicular to radius -> clean conic
+      trailPts = []; sim.running = true;
+    }
+    function classify() {
+      if (sim.vfrac >= Math.SQRT2 - 0.001) return 'escape (hyperbolic)';
+      if (Math.abs(sim.vfrac - 1) < 0.02) return 'circular';
+      return sim.vfrac < 1 ? 'ellipse (falls inward)' : 'ellipse (swings out)';
+    }
+    function step(dt) {
+      if (!sim.running) return;
+      // Sub-step for stability near the planet.
+      const N = 4; const h2 = dt / N;
+      for (let i = 0; i < N; i += 1) {
+        const r = Math.hypot(p.x, p.y);
+        if (r < 0.6) { sim.running = false; break; }     // crashed into planet
+        const acc = -GM / (r * r * r);
+        vel.x += acc * p.x * h2; vel.y += acc * p.y * h2;
+        p.x += vel.x * h2; p.y += vel.y * h2;
+      }
+      sat.position.set(p.x, p.y, 0);
+      trailPts.push(new THREE.Vector3(p.x, p.y, 0));
+      if (trailPts.length > 400) trailPts.shift();
+      trail.geometry.setFromPoints(trailPts);
+      if (Math.hypot(p.x, p.y) > 40) sim.running = false;  // escaped view
+      readout();
+    }
+    function readout() {
+      S.api.setHud(`<div class="phys-eq">v_circular = √(GM/r) · v_escape = √2 · v_circular</div>` +
+        `<div>launch speed = ${sim.vfrac.toFixed(2)} × circular</div>` +
+        `<div>trajectory: ${classify()}</div>` +
+        `<div class="phys-hint">At exactly circular speed the orbit is a circle; faster stretches it to an ellipse; at √2× it escapes.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 0, 26], lookAt: [0, 0, 0] });
+    planet = new THREE.Mesh(new THREE.SphereGeometry(0.9, 32, 24), new THREE.MeshPhongMaterial({ color: 0x3a7bd5, emissive: 0x14294a }));
+    S.api.scene.add(planet);
+    sat = ballMesh(0.28, 0xffd27a); S.api.scene.add(sat);
+    trail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x14d9c4 }));
+    S.api.scene.add(trail);
+    S.api.button('▶ Launch', launch);
+    S.api.slider('Speed (× circular)', 0.5, 1.6, 0.01, sim.vfrac, (v) => { sim.vfrac = v; readout(); },
+      [{ label: 'Circular', v: 1.0 }, { label: 'Escape', v: (Math.SQRT2).toFixed(2) }]);
+    readout();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- Wall of death / bike in a well ------------------------------------
+  // A bike rides the inside wall of a cylindrical well. The normal force
+  // provides the centripetal force (mv²/r); friction (μN) must hold up the
+  // weight (mg). Minimum speed to not slip down: v_min = √(gr/μ). The speed
+  // slider shows the bike ride steadily above v_min and slip below it.
+  function simWellOfDeath(container, spec, w, h) {
+    const sim = { g: 9.8, mu: 0.6, r: 4, speed: 6, angle: 0, height: 0, slipping: false };
+    let S, well, bike;
+    function vMin() { return Math.sqrt(sim.g * sim.r / sim.mu); }
+    function step(dt) {
+      // Angular speed from linear speed on the wall.
+      const omega = sim.speed / sim.r;
+      sim.angle += omega * dt;
+      // Below v_min the friction can't hold the weight -> the bike sinks.
+      sim.slipping = sim.speed < vMin();
+      if (sim.slipping) sim.height = Math.max(-2.5, sim.height - 1.5 * dt);
+      else sim.height = Math.min(0, sim.height + 1.0 * dt);
+      const x = sim.r * Math.cos(sim.angle), z = sim.r * Math.sin(sim.angle);
+      bike.position.set(x, 1.6 + sim.height, z);
+      // Face along travel, lean into the wall.
+      bike.rotation.y = -sim.angle;
+      readout();
+    }
+    function readout() {
+      S.api.setHud(`<div class="phys-eq">N = mv²/r · friction μN ≥ mg · v_min = √(g·r/μ)</div>` +
+        `<div>speed=${sim.speed.toFixed(1)} m/s · μ=${sim.mu.toFixed(2)} · r=${sim.r.toFixed(1)} m</div>` +
+        `<div>minimum speed ≈ ${vMin().toFixed(2)} m/s · ${sim.slipping ? 'TOO SLOW — sliding down' : 'holding on the wall'}</div>` +
+        `<div class="phys-hint">The wall's push supplies the centripetal force; friction holds the weight. Go below v_min and it slips.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 6, 12], lookAt: [0, 0, 0] });
+    // Cylinder wall (open, semi-transparent).
+    well = new THREE.Mesh(new THREE.CylinderGeometry(sim.r, sim.r, 5, 40, 1, true), new THREE.MeshPhongMaterial({ color: 0x2c3b52, side: THREE.DoubleSide, transparent: true, opacity: 0.35 }));
+    well.position.y = 2.5; S.api.scene.add(well);
+    S.api.scene.add(groundMesh(16));
+    bike = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 1.1), new THREE.MeshPhongMaterial({ color: 0xff6b7a }));
+    S.api.scene.add(bike);
+    S.api.slider('Speed (m/s)', 2, 14, 0.1, sim.speed, (v) => { sim.speed = v; readout(); });
+    S.api.slider('Friction μ', 0.1, 1, 0.01, sim.mu, (v) => { sim.mu = v; readout(); });
+    S.api.slider('Radius (m)', 2, 7, 0.1, sim.r, (v) => {
+      sim.r = v; if (well) S.api.scene.remove(well);
+      well = new THREE.Mesh(new THREE.CylinderGeometry(sim.r, sim.r, 5, 40, 1, true), new THREE.MeshPhongMaterial({ color: 0x2c3b52, side: THREE.DoubleSide, transparent: true, opacity: 0.35 }));
+      well.position.y = 2.5; S.api.scene.add(well); readout();
+    });
+    readout();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- Mirror reflection (flat / concave / convex) -----------------------
+  // Parallel rays come in from the left and reflect off a mirror. For a
+  // curved mirror they converge to (concave) or appear to diverge from
+  // (convex) the focal point at f = R/2. A flat mirror reflects them
+  // parallel. Rays reflect about the local surface normal (law of reflection:
+  // angle in = angle out).
+  function simReflection(container, spec, w, h) {
+    const sim = { type: 'concave', R: 8 };   // radius of curvature
+    let S, rayGroup, mirror, focalDot, focalLabel;
+    const mirrorX = 4;      // mirror sits near the right
+    const nRays = 7, span = 5;
+
+    // Mirror surface: returns { y -> point on mirror, normal } sampled.
+    function mirrorPointAndNormal(y) {
+      if (sim.type === 'flat') return { x: mirrorX, nx: -1, ny: 0 };
+      // Spherical mirror centered on the axis. Concave curves toward incoming
+      // rays (center of curvature to the LEFT), convex away.
+      const R = sim.R;
+      const sign = sim.type === 'concave' ? 1 : -1;
+      // Circle center at (mirrorX + sign*R, 0). Surface x for given y:
+      const cx = mirrorX + sign * R;
+      const dx = Math.sqrt(Math.max(0, R * R - y * y));
+      const x = cx - sign * dx;
+      // Outward normal points from surface toward the incoming side (left).
+      let nx = (x - cx), ny = (y - 0);
+      const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+      // Make normal face left (toward incoming rays).
+      if (nx > 0) { nx = -nx; ny = -ny; }
+      return { x, nx, ny };
+    }
+
+    function reflect(dx, dy, nx, ny) {
+      // r = d - 2(d·n)n
+      const dot = dx * nx + dy * ny;
+      return { rx: dx - 2 * dot * nx, ry: dy - 2 * dot * ny };
+    }
+
+    function build() {
+      if (rayGroup) S.api.scene.remove(rayGroup);
+      rayGroup = new THREE.Group();
+      // Incoming parallel rays travel in +x.
+      for (let i = 0; i < nRays; i += 1) {
+        const y = -span / 2 + (span * i) / (nRays - 1);
+        const hit = mirrorPointAndNormal(y);
+        const startX = -8;
+        // Incident segment.
+        addLine(rayGroup, [new THREE.Vector3(startX, y, 0), new THREE.Vector3(hit.x, y, 0)], 0x5bd0ff);
+        // Reflected segment.
+        const { rx, ry } = reflect(1, 0, hit.nx, hit.ny);
+        const L = 12;
+        addLine(rayGroup, [new THREE.Vector3(hit.x, y, 0), new THREE.Vector3(hit.x + rx * L, y + ry * L, 0)], 0x14d9c4);
+      }
+      S.api.scene.add(rayGroup);
+      // Focal point at f = R/2 from the mirror vertex, toward the centre of
+      // curvature (concave: in front / real; convex: behind / virtual).
+      const f = sim.R / 2;
+      const sign = sim.type === 'concave' ? 1 : -1;
+      const fx = mirrorX + sign * f;
+      focalDot.visible = sim.type !== 'flat';
+      focalLabel.visible = sim.type !== 'flat';
+      focalDot.position.set(fx, 0, 0);
+      focalLabel.position.set(fx, 0.7, 0);
+      rebuildMirror();
+      readout();
+    }
+    function rebuildMirror() {
+      if (mirror) S.api.scene.remove(mirror);
+      const pts = [];
+      for (let i = 0; i <= 40; i += 1) {
+        const y = -span / 2 + (span * i) / 40;
+        const hit = mirrorPointAndNormal(y);
+        pts.push(new THREE.Vector3(hit.x, y, 0));
+      }
+      mirror = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xdfe8f5, linewidth: 2 }));
+      S.api.scene.add(mirror);
+    }
+    function readout() {
+      const f = (sim.R / 2).toFixed(1);
+      const desc = sim.type === 'flat' ? 'Flat: reflected rays stay parallel (image is virtual, same size).'
+        : sim.type === 'concave' ? 'Concave: parallel rays converge to the focal point f = R/2 (real focus).'
+        : 'Convex: reflected rays diverge; they appear to come from a virtual focus behind the mirror.';
+      S.api.setHud(`<div class="phys-eq">angle of incidence = angle of reflection · f = R / 2</div>` +
+        `<div>mirror: ${sim.type}${sim.type !== 'flat' ? ` · R=${sim.R.toFixed(1)} · f=${f}` : ''}</div>` +
+        `<div class="phys-hint">${desc}</div>`);
+    }
+    S = physicsScaffold(container, w, h, { camera: [0, 0, 20], lookAt: [0, 0, 0] });
+    focalDot = ballMesh(0.18, 0xffcc66); S.api.scene.add(focalDot);
+    focalLabel = makeLabelSprite('F', { color: '#ffcc66', weight: 800, fontSize: 34, scale: 0.5, depthTest: false });
+    S.api.scene.add(focalLabel);
+    // Mirror-type buttons.
+    S.api.button('Flat', () => { sim.type = 'flat'; build(); });
+    S.api.button('Concave', () => { sim.type = 'concave'; build(); });
+    S.api.button('Convex', () => { sim.type = 'convex'; build(); });
+    S.api.slider('Curvature R', 4, 16, 0.5, sim.R, (v) => { sim.R = v; build(); });
+    build();
+    S.api.ready();
+    return S.handle;
+  }
+
+  function addLine(group, pts, color) {
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color })));
+  }
+
+  // ---- DC circuit (Ohm's law + RC charging) ------------------------------
+  // A battery drives current around a loop through a resistor. Sliders set
+  // voltage and resistance; current I = V/R is shown by the speed/density of
+  // moving charge dots. A capacitor toggle switches to an RC circuit where the
+  // capacitor charges up (current decays as e^(−t/RC)) and the flow slows to
+  // a stop.
+  function simCircuit(container, spec, w, h) {
+    const sim = { V: 6, R: 3, C: 1, useCap: false, t: 0, vCap: 0 };
+    let S, dots = [], loop, capGroup, resGroup;
+    // Rectangular loop path (perimeter), current dots travel along it.
+    const path = [
+      [-5, -3], [5, -3], [5, 3], [-5, 3]
+    ];
+    const segLen = [];
+    let perim = 0;
+    for (let i = 0; i < path.length; i += 1) {
+      const a = path[i], b = path[(i + 1) % path.length];
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]); segLen.push(l); perim += l;
+    }
+    function pointAt(d) {
+      d = ((d % perim) + perim) % perim;
+      for (let i = 0; i < path.length; i += 1) {
+        if (d <= segLen[i]) {
+          const a = path[i], b = path[(i + 1) % path.length];
+          const t = d / segLen[i];
+          return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        }
+        d -= segLen[i];
+      }
+      return path[0];
+    }
+    function current() {
+      if (!sim.useCap) return sim.V / sim.R;                 // Ohm's law
+      // RC charging current: I = (V/R) e^(−t/RC).
+      return (sim.V / sim.R) * Math.exp(-sim.t / (sim.R * sim.C));
+    }
+    function step(dt) {
+      sim.t += dt;
+      const I = current();
+      // Dot speed proportional to current (scaled for visibility).
+      const speed = I * 1.3;
+      dots.forEach((dot) => {
+        dot.d += speed * dt;
+        const p = pointAt(dot.d);
+        dot.mesh.position.set(p[0], p[1], 0);
+        dot.mesh.visible = I > 0.02;
+      });
+      if (sim.useCap) sim.vCap = sim.V * (1 - Math.exp(-sim.t / (sim.R * sim.C)));
+      readout();
+    }
+    function readout() {
+      const I = current();
+      S.api.setHud(`<div class="phys-eq">${sim.useCap ? 'I(t) = (V/R)·e^(−t/RC) · V_C = V(1−e^(−t/RC))' : 'Ohm: I = V / R'}</div>` +
+        `<div>V=${sim.V.toFixed(1)} V · R=${sim.R.toFixed(1)} Ω${sim.useCap ? ` · C=${sim.C.toFixed(1)} F` : ''}</div>` +
+        `<div>current I = ${I.toFixed(2)} A${sim.useCap ? ` · capacitor ${sim.vCap.toFixed(2)} V` : ''}</div>` +
+        `<div class="phys-hint">${sim.useCap ? 'The capacitor charges up and the current dies away — flow stops when it is full.' : 'More voltage → more current; more resistance → less. Double R and the current halves.'}</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 0, 15], lookAt: [0, 0, 0] });
+    // Draw the loop wire.
+    const loopPts = path.concat([path[0]]).map((p) => new THREE.Vector3(p[0], p[1], 0));
+    loop = new THREE.Line(new THREE.BufferGeometry().setFromPoints(loopPts), new THREE.LineBasicMaterial({ color: 0x9fb2cd }));
+    S.api.scene.add(loop);
+    // Battery marker (left side) + resistor marker (right side).
+    const batt = makeLabelSprite('🔋 battery', { color: '#ffcc66', weight: 700, fontSize: 26, scale: 0.4, depthTest: false });
+    batt.position.set(-5, 0, 0); S.api.scene.add(batt);
+    const res = makeLabelSprite('▧ resistor', { color: '#ff9f6b', weight: 700, fontSize: 26, scale: 0.4, depthTest: false });
+    res.position.set(5, 0, 0); S.api.scene.add(res);
+    // Current dots.
+    for (let i = 0; i < 16; i += 1) {
+      const m = ballMesh(0.16, 0x14d9c4);
+      S.api.scene.add(m);
+      dots.push({ mesh: m, d: (perim * i) / 16 });
+    }
+    S.api.button('⟲ Reset', () => { sim.t = 0; sim.vCap = 0; });
+    S.api.toggle('Add capacitor (RC)', sim.useCap, (v) => { sim.useCap = v; sim.t = 0; sim.vCap = 0; readout(); });
+    S.api.slider('Voltage (V)', 1, 12, 0.5, sim.V, (v) => { sim.V = v; readout(); });
+    S.api.slider('Resistance (Ω)', 1, 12, 0.5, sim.R, (v) => { sim.R = v; readout(); });
+    S.api.slider('Capacitance (F)', 0.2, 4, 0.1, sim.C, (v) => { sim.C = v; readout(); });
+    readout();
+    S.api.ready();
     return S.handle;
   }
 

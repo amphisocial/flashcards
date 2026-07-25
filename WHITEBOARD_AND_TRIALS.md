@@ -1027,3 +1027,40 @@ zoom + fullscreen as the other 3D viewers, and all pass headless mount/dispose.
 Orbit, wall-of-death, reflection (mirrors), and circuits are further physics
 sims of the same shape. Biology 3D (skeleton, heart, brain, lungs) needs real
 anatomical model files, not primitives — planned as a separate track.
+
+---
+
+# v3.8 — physics sims: 2 bug fixes + 4 new sims (9 total)
+
+## Fixes
+- **Pendulum crashed** ("Cannot read properties of undefined reading
+  'position'"): the shared scaffold started its render loop and called step()
+  before the sim had created its meshes. Added a ready-gate — step() runs only
+  after the sim calls S.api.ready() at the end of setup. Applied to all sims.
+- **Incline block sat under a floating plank**: replaced the thin tilted box
+  with a solid triangular wedge (ExtrudeGeometry) resting on the ground, and
+  placed the block ON the hypotenuse offset along the surface NORMAL. Verified
+  the block sits above the ramp surface at every angle.
+
+## New sims (now 9 total)
+- **Orbit**: velocity slider as ×circular-speed. Verified circular speed →
+  constant-radius circle; 1.2× → ellipse; √2× → hyperbolic escape; slow →
+  dips inward. Central inverse-square gravity with sub-stepping.
+- **Wall of death / bike in a well**: bike rides the inside of a cylinder;
+  normal force = centripetal, friction holds weight. v_min = √(g·r/μ); below
+  it the bike slips down. Speed / μ / radius sliders.
+- **Mirror reflection**: parallel rays reflect off flat/concave/convex mirrors
+  via r = d − 2(d·n)n. Concave converges to the real focus at f = R/2 (marker
+  verified at the convergence point); convex diverges from a virtual focus;
+  flat stays parallel. Curvature slider.
+- **DC circuit**: battery + resistor loop with moving charge dots; I = V/R
+  (verified double-R halves I). Capacitor toggle switches to RC charging with
+  I(t) = (V/R)e^(−t/RC) and V_C = V(1−e^(−t/RC)) (verified time constant τ=RC).
+
+All 9 mount + dispose without crashing (headless), share zoom + fullscreen,
+and the analyze schema/vision prompt now route to the right sim type.
+
+## Verified vs. needs-your-eyes
+Verified: every sim's physics against theory, the crash fix ordering, the
+incline geometry, and headless mount/dispose. Needs a real browser: the visual
+look and animation feel of all nine.
