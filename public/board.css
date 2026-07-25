@@ -346,3 +346,28 @@ body.viz3d-pseudo-lock { overflow: hidden; }
 
 /* ---------- Snapshot (non-live shared) status pill ---------- */
 .board-status.shared { color: #9d7bff; border-color: rgba(124,92,255,0.5); }
+
+/* ---------- Physics simulation viewer ---------- */
+.phys-hud {
+  position: absolute; top: 8px; left: 8px; z-index: 5;
+  background: rgba(8,17,31,0.82); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 12px; font-size: 0.76rem; color: #dfe8f5; max-width: 62%;
+}
+.phys-hud .phys-eq { color: #14d9c4; font-weight: 700; margin-bottom: 4px; }
+.phys-hud .phys-hint { color: #9fb2cd; margin-top: 5px; font-style: italic; }
+.phys-controls {
+  position: absolute; bottom: 8px; left: 8px; right: 8px; z-index: 5;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: rgba(8,17,31,0.82); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
+}
+.phys-btn { padding: 5px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: #eef6ff; font-weight: 700; font-size: 0.78rem; cursor: pointer; }
+.phys-btn:hover { background: rgba(124,92,255,0.35); }
+.phys-toggle { font-size: 0.78rem; color: #dfe8f5; display: flex; align-items: center; gap: 5px; }
+.phys-slider { font-size: 0.76rem; color: #9fb2cd; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px; }
+.phys-slider input[type=range] { flex: 1; }
+.phys-slider .pg-out { color: #14d9c4; font-weight: 700; }
+.phys-presets { display: flex; gap: 4px; }
+.phys-presets button { padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); background: rgba(20,217,196,0.1); color: #14d9c4; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+.phys-presets button:hover { background: rgba(20,217,196,0.25); }
+
+.viz3d-holder-tall { height: 340px !important; }

@@ -742,6 +742,120 @@
   }
 
   // ---- Public entry -------------------------------------------------------
+  // ---- Physics: falling-objects drop test --------------------------------
+  // The Apollo-15 / Galileo demonstration made interactive. Two objects (a
+  // heavy stone and a light feather) drop from the same height. Sliders set
+  // gravity; a toggle turns air resistance on/off. With air on, the feather
+  // (big area, small mass) lags badly; with air off (vacuum / Moon) they land
+  // together - the "aha" moment. A live readout shows time, velocity and the
+  // controlling equations.
+  function mountPhysics(container, spec, w, h) {
+    const scene = baseScene();
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    camera.position.set(0, 3, 12);
+    camera.lookAt(0, 3, 0);
+    const renderer = makeRenderer(container, w, h);
+
+    // Ground.
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(20, 0.4, 6), new THREE.MeshPhongMaterial({ color: 0x243247 }));
+    ground.position.y = -0.2; scene.add(ground);
+
+    const H0 = 7;           // drop height (world units)
+    // Two falling bodies. Physical params drive the sim; radius is visual.
+    const bodies = [
+      { name: 'Stone', mass: 5, area: 0.02, color: 0xbfc6d0, x: -2.2, r: 0.5 },
+      { name: 'Feather', mass: 0.05, area: 1.2, color: 0xffd27a, x: 2.2, r: 0.42 }
+    ];
+    bodies.forEach((b) => {
+      b.mesh = new THREE.Mesh(new THREE.SphereGeometry(b.r, 24, 18), new THREE.MeshPhongMaterial({ color: b.color, shininess: 60 }));
+      b.mesh.position.set(b.x, H0, 0);
+      scene.add(b.mesh);
+      const lab = makeLabelSprite(b.name, { color: '#ffffff', weight: 800, fontSize: 34, scale: 0.5, depthTest: false });
+      lab.position.set(b.x, H0 + 0.9, 0);
+      b.label = lab; scene.add(lab);
+      b.y = H0; b.v = 0; b.landed = false; b.tLand = null;
+    });
+
+    // Simulation state (adjustable live).
+    const sim = { g: (spec.dims && spec.dims.g) || 9.8, air: spec.air !== false, rho: 1.2, running: false, t: 0 };
+
+    function reset() {
+      sim.t = 0; sim.running = false;
+      bodies.forEach((b) => { b.y = H0; b.v = 0; b.landed = false; b.tLand = null; b.mesh.position.y = H0; b.label.position.y = H0 + 0.9; });
+      updateReadout();
+    }
+    function step(dt) {
+      if (!sim.running) return;
+      sim.t += dt;
+      bodies.forEach((b) => {
+        if (b.landed) return;
+        // F = mg - drag. drag = 0.5*rho*Cd*A*v^2 (opposing motion). Cd~1.
+        const weight = b.mass * sim.g;
+        const drag = sim.air ? 0.5 * sim.rho * 1.0 * b.area * b.v * b.v : 0;
+        const a = (weight - drag) / b.mass;   // downward positive
+        b.v += a * dt;
+        b.y -= b.v * dt;
+        if (b.y <= b.r) { b.y = b.r; b.landed = true; b.tLand = sim.t; }
+        b.mesh.position.y = b.y; b.label.position.y = b.y + 0.9;
+      });
+      if (bodies.every((b) => b.landed)) sim.running = false;
+      updateReadout();
+    }
+
+    // Readout + controls DOM.
+    const hud = document.createElement('div');
+    hud.className = 'phys-hud';
+    container.appendChild(hud);
+    function updateReadout() {
+      const rows = bodies.map((b) => `${b.name}: v=${b.v.toFixed(1)} m/s${b.tLand ? ` · landed ${b.tLand.toFixed(2)}s` : ''}`);
+      hud.innerHTML = `<div class="phys-eq">${sim.air ? 'F = mg − ½ρC<sub>d</sub>Av²' : 'F = mg  (vacuum)'} · g=${sim.g.toFixed(1)} m/s²</div>` +
+        rows.map((r) => `<div>${r}</div>`).join('') +
+        `<div class="phys-hint">${sim.air ? 'Air ON: the feather lags — air resistance dominates its tiny mass.' : 'Vacuum: both land together, regardless of mass (Galileo / Apollo 15).'}</div>`;
+    }
+
+    const controls = document.createElement('div');
+    controls.className = 'phys-controls';
+    controls.innerHTML = `
+      <button class="phys-btn" data-act="drop">▶ Drop</button>
+      <button class="phys-btn" data-act="reset">⟲ Reset</button>
+      <label class="phys-toggle"><input type="checkbox" data-act="air" ${sim.air ? 'checked' : ''}/> Air resistance</label>
+      <label class="phys-slider">Gravity <span class="pg-out">${sim.g.toFixed(1)}</span>
+        <input type="range" min="1.6" max="25" step="0.1" value="${sim.g}" data-act="g"/>
+        <span class="phys-presets"><button data-g="9.8">Earth</button><button data-g="1.6">Moon</button><button data-g="24.8">Jupiter</button></span>
+      </label>`;
+    container.appendChild(controls);
+    controls.querySelector('[data-act=drop]').addEventListener('click', () => { reset(); sim.running = true; });
+    controls.querySelector('[data-act=reset]').addEventListener('click', reset);
+    controls.querySelector('[data-act=air]').addEventListener('change', (e) => { sim.air = e.target.checked; reset(); });
+    const gIn = controls.querySelector('[data-act=g]');
+    gIn.addEventListener('input', () => { sim.g = Number(gIn.value); controls.querySelector('.pg-out').textContent = sim.g.toFixed(1); updateReadout(); });
+    controls.querySelectorAll('.phys-presets button').forEach((btn) => btn.addEventListener('click', () => {
+      sim.g = Number(btn.dataset.g); gIn.value = sim.g; controls.querySelector('.pg-out').textContent = sim.g.toFixed(1); reset();
+    }));
+
+    updateReadout();
+
+    // Animation loop.
+    let raf = 0, disposed = false, last = performance.now();
+    function tick() {
+      if (disposed) return;
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      step(dt);
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(tick);
+    }
+    tick();
+
+    const handle = {
+      onResize(width, height) { camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height); },
+      snapshot() { try { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/png'); } catch (_) { return null; } },
+      dispose() { disposed = true; cancelAnimationFrame(raf); renderer.dispose?.(); if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement); hud.remove(); controls.remove(); }
+    };
+    addFullscreenButton(container, handle);
+    return handle;
+  }
+
   function mount(container, spec) {
     if (typeof THREE === 'undefined') {
       container.innerHTML = '<p style="color:#ff6b7a;font-size:0.8rem;padding:10px">3D viewer failed to load (Three.js unavailable).</p>';
@@ -754,6 +868,7 @@
       if (spec.kind === 'molecule') handle = mountMolecule(container, spec, w, h);
       else if ((spec.kind === 'solid' && spec.shape === 'earth') || spec.kind === 'earth') handle = mountEarth(container, w, h);
       else if (spec.kind === 'solid') handle = mountSolid(container, spec, w, h);
+      else if (spec.kind === 'physics') handle = mountPhysics(container, spec, w, h);
       else return { dispose() {} };
     } catch (err) {
       container.innerHTML = `<p style="color:#ff6b7a;font-size:0.8rem;padding:10px">3D render error: ${err.message}</p>`;

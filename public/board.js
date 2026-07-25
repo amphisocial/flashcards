@@ -274,6 +274,21 @@
     if (typeof obj.transform.shiftY !== 'number') obj.transform.shiftY = 0;
     return obj.transform;
   }
+  // Returns the function f(x) to plot for a graph object's first curve. If the
+  // graph has a recognized family (line, parabola...), the function is rebuilt
+  // from its live fnParams so the semantic sliders drive the shape directly.
+  function graphFn(obj, expression) {
+    if (obj && obj.fnFamily) {
+      const model = analyzeFunction(expression);
+      if (model && model.family === obj.fnFamily) {
+        const pv = {};
+        Object.keys(model.params).forEach((k) => { pv[k] = (obj.fnParams && k in obj.fnParams) ? obj.fnParams[k] : model.params[k].value; });
+        try { return model.build(pv); } catch (_) {}
+      }
+    }
+    return compileExpression(expression, (obj && obj.params) || {});
+  }
+
   function sampleCurve(fn, wx, transform) {
     const t = transform || { shiftX: 0, shiftY: 0 };
     let v; try { v = fn(wx - (t.shiftX || 0)); } catch { return NaN; }
@@ -292,9 +307,11 @@
     const xMin = obj.xMin ?? -10, xMax = obj.xMax ?? 10;
     const tf = graphTransform(obj);
     const curves = graphCurves(obj);
-    const compiled = curves.map((c) => {
-      try { return { fn: compileExpression(c.expression, params), color: c.color, expr: c.expression }; }
-      catch { return null; }
+    const compiled = curves.map((c, ci) => {
+      try {
+        const fn = (ci === 0) ? graphFn(obj, c.expression) : compileExpression(c.expression, params);
+        return { fn, color: c.color, expr: c.expression };
+      } catch { return null; }
     });
 
     // Shared y-range across all curves so overlaid graphs align.
@@ -361,6 +378,97 @@
   // ---- Safe expression parser --------------------------------------------
   // Hand-rolled on purpose: plotted expressions are broadcast to other
   // people's browsers, so they must never reach eval()/Function().
+  // ---- Semantic function model -------------------------------------------
+  // Instead of a generic vertical/horizontal shift, recognize the FAMILY of
+  // the function the teacher wrote and expose the parameters that actually
+  // teach something: a line gets slope + intercept; a parabola gets a, b, c
+  // (or the leading coefficient + vertex); a sine wave gets amplitude,
+  // frequency, phase; an exponential gets base/rate. Each param becomes a
+  // labelled slider, and the curve is rebuilt from the params live.
+  //
+  // A model is { family, label, params:{name:{value,min,max,step,label}},
+  //   build(p) -> f(x), pretty(p) -> "y = 2x + 3" }. rhs is the right-hand
+  //   side of "y = ..." (or the whole thing if there's no "y =").
+
+  function rhsOf(expression) {
+    const m = String(expression).split('=');
+    return (m.length > 1 ? m.slice(1).join('=') : expression).trim();
+  }
+
+  function analyzeFunction(expression) {
+    const rhs = rhsOf(expression).replace(/\s+/g, '');
+    const P = (value, min, max, step, label) => ({ value, min, max, step, label });
+
+    // Linear: y = m x + b  (also plain "x", "-x", "3x", "x+2", "5")
+    let m = rhs.match(/^([+-]?\d*\.?\d*)\*?x([+-]\d*\.?\d+)?$/i);
+    if (m) {
+      let slope = m[1] === '' || m[1] === '+' ? 1 : (m[1] === '-' ? -1 : parseFloat(m[1]));
+      let intercept = m[2] ? parseFloat(m[2]) : 0;
+      return {
+        family: 'linear', label: 'Straight line',
+        params: { m: P(slope, -10, 10, 0.1, 'Slope (m)'), b: P(intercept, -10, 10, 0.5, 'Y-intercept (b)') },
+        build: (p) => (x) => p.m * x + p.b,
+        pretty: (p) => `y = ${fmt(p.m)}x ${p.b >= 0 ? '+' : '−'} ${fmt(Math.abs(p.b))}`
+      };
+    }
+
+    // Quadratic: y = a x^2 + b x + c
+    const q = rhs.match(/^([+-]?\d*\.?\d*)\*?x\^?2([+-]\d*\.?\d*\*?x)?([+-]\d*\.?\d+)?$/i);
+    if (q) {
+      let a = q[1] === '' || q[1] === '+' ? 1 : (q[1] === '-' ? -1 : parseFloat(q[1]));
+      let b = q[2] ? parseFloat(q[2].replace(/\*?x/i, '')) : 0;
+      let c = q[3] ? parseFloat(q[3]) : 0;
+      return {
+        family: 'quadratic', label: 'Parabola',
+        params: {
+          a: P(a, -5, 5, 0.1, 'Steepness / direction (a)'),
+          b: P(b, -10, 10, 0.5, 'Tilt (b)'),
+          c: P(c, -10, 10, 0.5, 'Height (c)')
+        },
+        build: (p) => (x) => p.a * x * x + p.b * x + p.c,
+        pretty: (p) => `y = ${fmt(p.a)}x² ${p.b >= 0 ? '+' : '−'} ${fmt(Math.abs(p.b))}x ${p.c >= 0 ? '+' : '−'} ${fmt(Math.abs(p.c))}`
+      };
+    }
+
+    // Sinusoid: y = A sin(B x + C)  /  cos
+    const trig = rhs.match(/^([+-]?\d*\.?\d*)\*?(sin|cos)\(?/i);
+    if (trig) {
+      const fnName = trig[2].toLowerCase();
+      let A = trig[1] === '' || trig[1] === '+' ? 1 : (trig[1] === '-' ? -1 : parseFloat(trig[1]));
+      return {
+        family: 'sinusoid', label: fnName === 'sin' ? 'Sine wave' : 'Cosine wave',
+        params: {
+          A: P(A, -5, 5, 0.1, 'Amplitude (A)'),
+          B: P(1, 0.1, 5, 0.1, 'Frequency (B)'),
+          C: P(0, -3.14, 3.14, 0.1, 'Phase shift (C)'),
+          D: P(0, -5, 5, 0.5, 'Vertical shift (D)')
+        },
+        build: (p) => (x) => p.A * Math[fnName](p.B * x + p.C) + p.D,
+        pretty: (p) => `y = ${fmt(p.A)}${fnName}(${fmt(p.B)}x ${p.C >= 0 ? '+' : '−'} ${fmt(Math.abs(p.C))}) ${p.D >= 0 ? '+' : '−'} ${fmt(Math.abs(p.D))}`
+      };
+    }
+
+    // Exponential: y = A * b^x
+    const exp = rhs.match(/^([+-]?\d*\.?\d*)\*?(\d*\.?\d+)\^x$/i);
+    if (exp) {
+      let A = exp[1] === '' || exp[1] === '+' ? 1 : (exp[1] === '-' ? -1 : parseFloat(exp[1]));
+      let base = parseFloat(exp[2]);
+      return {
+        family: 'exponential', label: 'Exponential',
+        params: { A: P(A, -5, 5, 0.1, 'Start value (A)'), b: P(base, 0.1, 4, 0.1, 'Growth base (b)') },
+        build: (p) => (x) => p.A * Math.pow(p.b, x),
+        pretty: (p) => `y = ${fmt(p.A)}·${fmt(p.b)}^x`
+      };
+    }
+
+    return null; // not a recognized family -> fall back to generic shifts
+  }
+
+  function fmt(n) {
+    const r = Math.round(n * 100) / 100;
+    return Number.isInteger(r) ? String(r) : String(r);
+  }
+
   function compileExpression(raw, params = {}) {
     const source = String(raw).split('=').pop().trim();
     let pos = 0;
@@ -1045,12 +1153,13 @@
     const plots = Array.isArray(a.plots) ? a.plots : [];
     const has3d = a.viz3d && a.viz3d.shape;
     const hasMol = a.molecule && (a.molecule.formula || a.molecule.name || (a.molecule.atoms && a.molecule.atoms.length));
+    const hasPhysics = a.physicsSim && a.physicsSim.type;
 
     card.innerHTML = `
       <span class="insight-kind">${escapeHtml(a.kind || 'info')}</span>
       ${a.title ? `<h4>${escapeHtml(a.title)}</h4>` : ''}
       ${a.summary ? `<p>${escapeHtml(a.summary)}</p>` : ''}
-      ${(has3d || hasMol) ? '<div class="viz3d-holder"></div>' : ''}
+      ${(has3d || hasMol || hasPhysics) ? `<div class="viz3d-holder${hasPhysics ? ' viz3d-holder-tall' : ''}"></div>` : ''}
       ${a.method ? `<div class="insight-method">Method: ${escapeHtml(a.method)}</div>` : ''}
       ${a.answer ? `<div class="insight-answer">${escapeHtml(a.answer)}</div>` : ''}
       ${steps.length ? `<ol class="insight-steps">${steps.map((s) => `<li>${escapeHtml(s.step || '')}${s.why ? `<span class="why">${escapeHtml(s.why)}</span>` : ''}</li>`).join('')}</ol>` : ''}
@@ -1069,6 +1178,7 @@
       let spec = null;
       if (has3d) spec = { kind: 'solid', shape: a.viz3d.shape, dims: a.viz3d.dims || {}, label: a.viz3d.label };
       else if (hasMol) spec = { kind: 'molecule', name: a.molecule.name, formula: a.molecule.formula, atoms: a.molecule.atoms, bonds: a.molecule.bonds };
+      else if (hasPhysics) spec = { kind: 'physics', type: a.physicsSim.type, dims: { g: a.physicsSim.g }, air: a.physicsSim.air !== false };
       // Defer to next frame so the holder has layout dimensions.
       requestAnimationFrame(() => {
         const handle = window.AthenaViz3D.mount(holder, spec);
@@ -1081,10 +1191,12 @@
           try { old.dispose(); } catch (_) {}
         }
         handle._owner = a;
-        const cap = document.createElement('div');
-        cap.className = 'viz3d-caption';
-        cap.textContent = (a.viz3d && a.viz3d.label) || (a.molecule && (a.molecule.formula || a.molecule.name)) || 'Drag to rotate';
-        holder.appendChild(cap);
+        if (!hasPhysics) {
+          const cap = document.createElement('div');
+          cap.className = 'viz3d-caption';
+          cap.textContent = (a.viz3d && a.viz3d.label) || (a.molecule && (a.molecule.formula || a.molecule.name)) || 'Drag to rotate';
+          holder.appendChild(cap);
+        }
       });
     }
 
@@ -1167,7 +1279,7 @@
   // Pull single-letter constants (A, B, k...) out of an expression so the
   // graph gets sliders for them. x and known funcs/constants are excluded.
   function detectParams(expression) {
-    const reserved = new Set(['x', 'e', 'pi', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'exp', 'log', 'ln']);
+    const reserved = new Set(['x', 'y', 'e', 'pi', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'exp', 'log', 'ln']);
     const params = {};
     const idents = String(expression).match(/[a-zA-Z]+/g) || [];
     idents.forEach((id) => { if (id.length === 1 && !reserved.has(id.toLowerCase())) params[id] = 1; });
@@ -1204,10 +1316,17 @@
       params,
       transform: { shiftX: 0, shiftY: 0 }
     };
+    // Recognize the function family so we can offer meaningful sliders
+    // (slope/intercept for a line, a/b/c for a parabola, etc.). Falls back to
+    // generic move up/down + left/right when the form isn't recognized.
+    const model = analyzeFunction(expression);
+    if (model) {
+      obj.fnFamily = model.family;
+      obj.fnParams = {};
+      Object.keys(model.params).forEach((k) => { obj.fnParams[k] = model.params[k].value; });
+    }
     addObject(obj);
     activeGraph = obj;
-    // Always open controls: every graph now has move up/down + left/right
-    // sliders, so there's always something useful to adjust.
     openGraphControls(obj);
   }
 
@@ -1279,7 +1398,7 @@
     const xMin = obj.xMin ?? -10, xMax = obj.xMax ?? 10;
     const tf = graphTransform(obj);
     const curves = (obj.curves && obj.curves.length) ? obj.curves : [{ expression: obj.expression || 'y=x', color: '#14d9c4' }];
-    const compiled = curves.map((cu) => { try { return { fn: compileExpression(cu.expression, params), color: cu.color, expr: cu.expression }; } catch { return null; } });
+    const compiled = curves.map((cu, ci) => { try { return { fn: (ci === 0) ? graphFn(obj, cu.expression) : compileExpression(cu.expression, params), color: cu.color, expr: cu.expression }; } catch { return null; } });
     let yMin = Infinity, yMax = -Infinity; const per = [];
     compiled.forEach((cc) => {
       if (!cc) { per.push(null); return; }
@@ -1586,6 +1705,8 @@
         if (obj) {
           if (m.params) obj.params = m.params;
           if (m.transform) obj.transform = m.transform;
+          if (m.fnFamily) obj.fnFamily = m.fnFamily;
+          if (m.fnParams) obj.fnParams = m.fnParams;
           if (m.expression) obj.expression = m.expression;
           redraw();
         }
@@ -1730,25 +1851,44 @@
     activeGraph = obj;
     const params = obj.params || (obj.params = {});
     const tf = graphTransform(obj);
-    $('#graphCtrlLabel').textContent = graphCurves(obj).map((c) => c.expression).join(', ') || 'Graph';
     const wrap = $('#graphSliders');
+    const expr0 = graphCurves(obj)[0].expression;
+    const model = obj.fnFamily ? analyzeFunction(expr0) : null;
 
-    // EVERY graph gets move up/down and left/right sliders that add/adjust a
-    // constant - this is what makes 4x^2 (which has no letters) adjustable.
-    // Any single-letter params in the expression get their own sliders too.
-    const rows = [];
-    rows.push(sliderRow('Move up / down', 'shiftY', tf.shiftY, -20, 20, 0.5, 'shift the whole curve vertically (adds a constant)'));
-    rows.push(sliderRow('Move left / right', 'shiftX', tf.shiftX, -20, 20, 0.5, 'slide the curve horizontally'));
-    Object.keys(params).forEach((k) => {
-      rows.push(sliderRow(`${k}`, `param:${k}`, +params[k], -10, 10, 0.1, `constant ${k} in the expression`));
-    });
-    wrap.innerHTML = rows.join('');
-
-    function commitLive() {
-      redraw();
-      send({ type: 'graph:live', objectId: activeGraph.id, pageId: pageId(), params: activeGraph.params, transform: activeGraph.transform, expression: activeGraph.expression });
+    if (model && model.family === obj.fnFamily) {
+      // SEMANTIC sliders: the parameters that actually teach something for this
+      // family (a line's slope + intercept, a parabola's a/b/c, etc.).
+      obj.fnParams = obj.fnParams || {};
+      $('#graphCtrlLabel').textContent = `${model.label}: ${model.pretty(effParams(obj, model))}`;
+      const rows = Object.keys(model.params).map((k) => {
+        const pdef = model.params[k];
+        const val = (k in obj.fnParams) ? obj.fnParams[k] : pdef.value;
+        return sliderRow(pdef.label, `fn:${k}`, val, pdef.min, pdef.max, pdef.step, pdef.label);
+      });
+      wrap.innerHTML = rows.join('');
+      wrap.querySelectorAll('input[type=range]').forEach((inp) => {
+        inp.addEventListener('input', () => {
+          const key = inp.dataset.key.slice(3);
+          obj.fnParams[key] = Number(inp.value);
+          const out = inp.parentElement.querySelector('.gv-out');
+          if (out) out.textContent = Number(inp.value).toFixed(pdefStep(model, key));
+          $('#graphCtrlLabel').textContent = `${model.label}: ${model.pretty(effParams(obj, model))}`;
+          redraw();
+          send({ type: 'graph:live', objectId: obj.id, pageId: pageId(), fnFamily: obj.fnFamily, fnParams: obj.fnParams, expression: obj.expression });
+        });
+        inp.addEventListener('change', () => send({ type: 'object:update', pageId: pageId(), object: obj }));
+      });
+      $('#graphControls').style.display = 'block';
+      return;
     }
 
+    // Fallback: generic move up/down + left/right for unrecognized forms.
+    $('#graphCtrlLabel').textContent = graphCurves(obj).map((c) => c.expression).join(', ') || 'Graph';
+    const rows = [];
+    rows.push(sliderRow('Move up / down', 'shiftY', tf.shiftY, -20, 20, 0.5, 'shift the whole curve vertically'));
+    rows.push(sliderRow('Move left / right', 'shiftX', tf.shiftX, -20, 20, 0.5, 'slide the curve horizontally'));
+    Object.keys(params).forEach((k) => rows.push(sliderRow(`${k}`, `param:${k}`, +params[k], -10, 10, 0.1, `constant ${k}`)));
+    wrap.innerHTML = rows.join('');
     wrap.querySelectorAll('input[type=range]').forEach((inp) => {
       inp.addEventListener('input', () => {
         const key = inp.dataset.key;
@@ -1758,13 +1898,23 @@
         else if (key.startsWith('param:')) activeGraph.params[key.slice(6)] = val;
         const out = inp.parentElement.querySelector('.gv-out');
         if (out) out.textContent = val.toFixed(1);
-        commitLive();
+        redraw();
+        send({ type: 'graph:live', objectId: activeGraph.id, pageId: pageId(), params: activeGraph.params, transform: activeGraph.transform, expression: activeGraph.expression });
       });
-      inp.addEventListener('change', () => {
-        send({ type: 'object:update', pageId: pageId(), object: activeGraph });
-      });
+      inp.addEventListener('change', () => send({ type: 'object:update', pageId: pageId(), object: activeGraph }));
     });
     $('#graphControls').style.display = 'block';
+  }
+
+  // Effective param values for a family model (live values or defaults).
+  function effParams(obj, model) {
+    const pv = {};
+    Object.keys(model.params).forEach((k) => { pv[k] = (obj.fnParams && k in obj.fnParams) ? obj.fnParams[k] : model.params[k].value; });
+    return pv;
+  }
+  function pdefStep(model, key) {
+    const st = model.params[key].step;
+    return st < 1 ? (st < 0.1 ? 2 : 1) : 0;
   }
 
   function sliderRow(label, key, value, min, max, step, hint) {

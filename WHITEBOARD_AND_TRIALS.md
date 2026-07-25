@@ -914,3 +914,52 @@ Verified: wrapText spacing, transform math, the live transform broadcast to
 students, and all syntax. Needs a real browser: the actual look of the
 paginated PDF and the embedded 3D stills, and the feel of dragging the new
 sliders.
+
+---
+
+# v3.5 — semantic function sliders + interactive physics simulator
+
+Built on top of v3.4 (the pushed PDF-notes + graph-move work).
+
+## Two slider bugs from the screenshot
+- `y` was being treated as an adjustable constant (the stray "y: 0.4" slider),
+  because detectParams picked up any single letter. `y` (and its role as the
+  output variable) is now excluded.
+- Graph label overlap addressed as part of the semantic-label rework below.
+
+## Semantic function sliders
+Sliders now match the FUNCTION the teacher wrote, instead of a generic
+up/down/left/right shift:
+- Straight line y = mx + b -> "Slope (m)" and "Y-intercept (b)".
+- Parabola y = ax² + bx + c -> a (steepness/direction), b (tilt), c (height).
+- Sine/cosine -> amplitude, frequency, phase, vertical shift.
+- Exponential y = A·b^x -> start value, growth base.
+A recognizer (analyzeFunction) detects the family; the curve is rebuilt live
+from the named params (graphFn), and the control panel shows the meaningful
+sliders with a live "y = 2x + 3" readout. Unrecognized forms fall back to the
+generic move up/down + left/right sliders from v3.4. Changes broadcast to
+students (fnFamily + fnParams) so they watch slope/shape change in real time.
+Verified: recognition + math for line/parabola/sine/exponential, and the live
+broadcast to a student socket.
+
+## Interactive physics simulator (new 3D viewer kind)
+A "physics" viewer for the falling-objects / Galileo / Apollo-15 demo:
+- A stone and a feather drop from the same height in real time.
+- Sliders/toggles: gravity g (with Earth 9.8 / Moon 1.6 / Jupiter 24.8
+  presets) and an air-resistance ON/OFF switch.
+- With air ON, the feather lags badly (drag dominates its tiny mass); with air
+  OFF (vacuum/Moon) both land together — the teaching "aha".
+- Live readout of each object's velocity, landing time, and the governing
+  equation (F = mg − ½ρC_dAv² with air, F = mg in vacuum).
+Physics verified against theory: vacuum fall time matches t=√(2h/g) exactly;
+feather reaches terminal velocity with air; Moon gravity slows everything.
+Wired end to end: analyze schema has a physicsSim field, the vision model is
+told to fill it for gravity/free-fall/feather-hammer questions, and
+renderInsight mounts the simulator (with zoom + fullscreen like the other 3D
+viewers).
+
+## Verified vs. needs-your-eyes
+Verified: y-exclusion, function recognition + math, semantic slider broadcast,
+physics accuracy, headless mount/dispose, assets serve. Needs a real browser:
+the feel of the semantic sliders, the physics animation, and slider/label
+layout polish.
