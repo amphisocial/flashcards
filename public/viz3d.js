@@ -20,6 +20,42 @@
   };
   const RADIUS = { H: 0.30, C: 0.42, N: 0.40, O: 0.40, S: 0.52, default: 0.44 };
 
+  // Per-element data for the zoom-in Bohr view: atomic number Z, full name,
+  // and electron counts per shell (K, L, M, N...). Covers the elements that
+  // actually turn up in classroom molecules; anything else is derived roughly
+  // from Z so the feature still shows something reasonable.
+  const ELEMENTS = {
+    H:  { z: 1,  name: 'Hydrogen',  shells: [1] },
+    He: { z: 2,  name: 'Helium',    shells: [2] },
+    Li: { z: 3,  name: 'Lithium',   shells: [2, 1] },
+    Be: { z: 4,  name: 'Beryllium', shells: [2, 2] },
+    B:  { z: 5,  name: 'Boron',     shells: [2, 3] },
+    C:  { z: 6,  name: 'Carbon',    shells: [2, 4] },
+    N:  { z: 7,  name: 'Nitrogen',  shells: [2, 5] },
+    O:  { z: 8,  name: 'Oxygen',    shells: [2, 6] },
+    F:  { z: 9,  name: 'Fluorine',  shells: [2, 7] },
+    Ne: { z: 10, name: 'Neon',      shells: [2, 8] },
+    Na: { z: 11, name: 'Sodium',    shells: [2, 8, 1] },
+    Mg: { z: 12, name: 'Magnesium', shells: [2, 8, 2] },
+    Al: { z: 13, name: 'Aluminium', shells: [2, 8, 3] },
+    Si: { z: 14, name: 'Silicon',   shells: [2, 8, 4] },
+    P:  { z: 15, name: 'Phosphorus',shells: [2, 8, 5] },
+    S:  { z: 16, name: 'Sulfur',    shells: [2, 8, 6] },
+    Cl: { z: 17, name: 'Chlorine',  shells: [2, 8, 7] },
+    Ar: { z: 18, name: 'Argon',     shells: [2, 8, 8] },
+    K:  { z: 19, name: 'Potassium', shells: [2, 8, 8, 1] },
+    Ca: { z: 20, name: 'Calcium',   shells: [2, 8, 8, 2] },
+    Fe: { z: 26, name: 'Iron',      shells: [2, 8, 14, 2] },
+    Br: { z: 35, name: 'Bromine',   shells: [2, 8, 18, 7] },
+    I:  { z: 53, name: 'Iodine',    shells: [2, 8, 18, 18, 7] }
+  };
+
+  // Rough shell fill for elements not in the table (2, 8, 18, 32 capacities).
+  function shellsFor(el) {
+    if (ELEMENTS[el]) return ELEMENTS[el];
+    return { z: 0, name: el, shells: [] };
+  }
+
   function makeRenderer(container, w, h) {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -79,7 +115,7 @@
     group.add(mesh); group.add(edges);
     scene.add(group);
 
-    return spinLoop(renderer, scene, camera, group, container);
+    return spinLoop(renderer, scene, camera, group, container, 0.006, { zoom: true, minZoom: 1.6, maxZoom: 18 });
   }
 
   // Earth radius in scene units; all geography helpers use this.
@@ -400,26 +436,36 @@
     const scene = baseScene();
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
     const renderer = makeRenderer(container, w, h);
-    const group = new THREE.Group();
+    const group = new THREE.Group();       // the whole molecule
+    const bohrGroup = new THREE.Group();   // the zoomed-in single-atom view
+    bohrGroup.visible = false;
+    scene.add(group);
+    scene.add(bohrGroup);
 
     let atoms = Array.isArray(spec.atoms) ? spec.atoms : [];
     let bonds = Array.isArray(spec.bonds) ? spec.bonds : [];
-    // If the model gave a formula/SMILES but no coordinates, fall back to a
-    // couple of hard-coded common molecules so the feature still shows
-    // something useful rather than an empty box.
     if (!atoms.length) { const fb = fallbackMolecule(spec.formula || spec.name); atoms = fb.atoms; bonds = fb.bonds; }
 
     const center = atoms.reduce((acc, a) => ({ x: acc.x + (a.x || 0), y: acc.y + (a.y || 0), z: acc.z + (a.z || 0) }), { x: 0, y: 0, z: 0 });
     center.x /= (atoms.length || 1); center.y /= (atoms.length || 1); center.z /= (atoms.length || 1);
 
-    atoms.forEach((at) => {
+    // Atom spheres, each tagged with its element and clickable for focus.
+    const atomMeshes = [];
+    atoms.forEach((at, idx) => {
       const el = normalizeEl(at.el);
       const sph = new THREE.Mesh(
-        new THREE.SphereGeometry((RADIUS[el] || RADIUS.default), 28, 20),
+        new THREE.SphereGeometry((RADIUS[el] || RADIUS.default), 32, 24),
         new THREE.MeshPhongMaterial({ color: CPK[el] || CPK.default, shininess: 80 })
       );
       sph.position.set((at.x || 0) - center.x, (at.y || 0) - center.y, (at.z || 0) - center.z);
+      sph.userData = { el, idx };
       group.add(sph);
+      atomMeshes.push(sph);
+
+      // Element-symbol label floating just above each atom.
+      const lab = makeLabelSprite(el, { color: '#ffffff', weight: 800, fontSize: 40, scale: 0.34, depthTest: false });
+      lab.position.copy(sph.position).add(new THREE.Vector3(0, (RADIUS[el] || RADIUS.default) + 0.18, 0));
+      group.add(lab);
     });
 
     bonds.forEach((bd) => {
@@ -427,16 +473,136 @@
       if (!atoms[i] || !atoms[j]) return;
       const p1 = new THREE.Vector3((atoms[i].x || 0) - center.x, (atoms[i].y || 0) - center.y, (atoms[i].z || 0) - center.z);
       const p2 = new THREE.Vector3((atoms[j].x || 0) - center.x, (atoms[j].y || 0) - center.y, (atoms[j].z || 0) - center.z);
-      group.add(bondCylinder(p1, p2));
+      const order = bd[2] || 1;
+      // Draw double/triple bonds as parallel offset cylinders.
+      if (order >= 2) {
+        const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
+        const off = new THREE.Vector3(dir.y, -dir.x, dir.z).normalize().multiplyScalar(0.08);
+        group.add(bondCylinder(p1.clone().add(off), p2.clone().add(off)));
+        group.add(bondCylinder(p1.clone().sub(off), p2.clone().sub(off)));
+        if (order >= 3) group.add(bondCylinder(p1, p2));
+      } else {
+        group.add(bondCylinder(p1, p2));
+      }
     });
 
-    scene.add(group);
     // Frame the molecule.
     const box = new THREE.Box3().setFromObject(group);
     const size = box.getSize(new THREE.Vector3()).length() || 4;
-    camera.position.set(0, 0, size * 1.4 + 2);
+    const homeDist = size * 1.4 + 2;
+    camera.position.set(0, 0, homeDist);
     camera.lookAt(0, 0, 0);
-    return spinLoop(renderer, scene, camera, group, container, 0.004);
+
+    // ---- Focus / Bohr mode ------------------------------------------------
+    let focused = null;   // element currently zoomed into, or null
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+
+    function buildBohr(el) {
+      // Clear any previous atom.
+      while (bohrGroup.children.length) bohrGroup.remove(bohrGroup.children[0]);
+      const info = shellsFor(el);
+      const color = CPK[el] || CPK.default;
+
+      // Nucleus.
+      const nucleus = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 24), new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: 0.3, shininess: 90 }));
+      bohrGroup.add(nucleus);
+
+      // Nucleus label: symbol + atomic number (= protons).
+      const nlab = makeLabelSprite(`${el}  Z=${info.z}`, { color: '#ffffff', weight: 800, fontSize: 44, scale: 0.5, depthTest: false });
+      nlab.position.set(0, 0.85, 0);
+      bohrGroup.add(nlab);
+
+      // Electron shells: a faint ring per shell + electrons spaced around it.
+      // Electrons are stored with their orbit params so tick() can animate them.
+      bohrGroup.userData.electrons = [];
+      const shells = info.shells.length ? info.shells : [Math.min(info.z, 2)];
+      shells.forEach((count, s) => {
+        const r = 1.1 + s * 0.7;
+        // Ring.
+        const ringPts = [];
+        for (let a = 0; a <= 64; a += 1) { const th = (a / 64) * Math.PI * 2; ringPts.push(new THREE.Vector3(Math.cos(th) * r, Math.sin(th) * r, 0)); }
+        bohrGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), new THREE.LineBasicMaterial({ color: 0x8fbfff, transparent: true, opacity: 0.4 })));
+        // Shell electron-count label.
+        const slab = makeLabelSprite(`${count}e⁻`, { color: '#8fbfff', weight: 700, fontSize: 30, scale: 0.34, depthTest: false });
+        slab.position.set(r + 0.15, 0.2, 0);
+        bohrGroup.add(slab);
+        // Electrons.
+        for (let k = 0; k < count; k += 1) {
+          const e = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), new THREE.MeshPhongMaterial({ color: 0x39c0ff, emissive: 0x1a6dbf, emissiveIntensity: 0.5 }));
+          bohrGroup.add(e);
+          bohrGroup.userData.electrons.push({ mesh: e, r, phase: (k / count) * Math.PI * 2, speed: 0.6 - s * 0.12, tilt: s * 0.5 });
+        }
+      });
+
+      // A little valence caption (outermost shell count).
+      const valence = shells[shells.length - 1];
+      const cap = makeLabelSprite(`${info.name} — ${valence} valence e⁻`, { color: '#eaf2ff', weight: 600, fontSize: 30, scale: 0.34, depthTest: false });
+      cap.position.set(0, -(1.1 + (shells.length - 1) * 0.7) - 0.5, 0);
+      bohrGroup.add(cap);
+    }
+
+    function focusAtom(el) {
+      focused = el;
+      buildBohr(el);
+      group.visible = false;
+      bohrGroup.visible = true;
+      backBtn.style.display = '';
+      hint.textContent = 'Scroll to zoom · drag to rotate · Back to molecule';
+    }
+    function unfocus() {
+      focused = null;
+      bohrGroup.visible = false;
+      group.visible = true;
+      backBtn.style.display = 'none';
+      hint.textContent = atoms.length > 1 ? 'Click an atom to zoom into its shells' : 'Scroll to zoom · drag to rotate';
+    }
+
+    // Click an atom -> focus it. (Pointerup without much drag = a click.)
+    let downXY = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { downXY = { x: e.clientX, y: e.clientY }; });
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      if (!downXY || focused) return;
+      const moved = Math.hypot(e.clientX - downXY.x, e.clientY - downXY.y);
+      downXY = null;
+      if (moved > 6) return; // was a drag, not a click
+      const rect = renderer.domElement.getBoundingClientRect();
+      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, camera);
+      const hit = raycaster.intersectObjects(atomMeshes)[0];
+      if (hit) focusAtom(hit.object.userData.el);
+    });
+
+    // Interaction hint + a Back button (hidden until focused).
+    const hint = document.createElement('div');
+    hint.className = 'viz3d-hint';
+    hint.textContent = atoms.length > 1 ? 'Click an atom to zoom into its shells' : 'Scroll to zoom · drag to rotate';
+    container.appendChild(hint);
+
+    const backBtn = document.createElement('button');
+    backBtn.className = 'viz3d-back-btn';
+    backBtn.type = 'button';
+    backBtn.textContent = '← Molecule';
+    backBtn.style.display = 'none';
+    backBtn.addEventListener('click', (e) => { e.stopPropagation(); unfocus(); });
+    container.appendChild(backBtn);
+
+    // Animate orbiting electrons each frame when in Bohr mode.
+    function onFrame() {
+      if (!bohrGroup.visible || !bohrGroup.userData.electrons) return;
+      const t = performance.now() * 0.001;
+      bohrGroup.userData.electrons.forEach((el) => {
+        const a = el.phase + t * el.speed;
+        el.mesh.position.set(Math.cos(a) * el.r, Math.sin(a) * el.r * Math.cos(el.tilt), Math.sin(a) * el.r * Math.sin(el.tilt));
+      });
+    }
+
+    return spinLoop(renderer, scene, camera, group, container, 0.004, {
+      zoom: true, minZoom: 1.5, maxZoom: homeDist * 2.5,
+      spinTarget: () => (bohrGroup.visible ? bohrGroup : group),
+      onFrame
+    });
   }
 
   function bondCylinder(p1, p2) {
@@ -479,6 +645,7 @@
 
   // ---- Shared spin + drag loop -------------------------------------------
   function spinLoop(renderer, scene, camera, group, container, autoSpeed = 0.006, opts = {}) {
+    const target = () => (opts.spinTarget ? opts.spinTarget() : group);
     let raf = 0, dragging = false, lastX = 0, lastY = 0, auto = true, disposed = false;
     const el = renderer.domElement;
     el.style.cursor = 'grab';
@@ -503,9 +670,10 @@
         return;
       }
       if (!dragging) return;
-      group.rotation.y += (e.clientX - lastX) * 0.01;
-      group.rotation.x += (e.clientY - lastY) * 0.01;
-      group.rotation.x = Math.max(-1.3, Math.min(1.3, group.rotation.x));
+      const tg = target();
+      tg.rotation.y += (e.clientX - lastX) * 0.01;
+      tg.rotation.x += (e.clientY - lastY) * 0.01;
+      tg.rotation.x = Math.max(-1.3, Math.min(1.3, tg.rotation.x));
       lastX = e.clientX; lastY = e.clientY;
     };
     const up = (e) => {
@@ -542,7 +710,7 @@
     let frameN = 0;
     function tick() {
       if (disposed) return;
-      if (auto) group.rotation.y += autoSpeed;
+      if (auto) target().rotation.y += autoSpeed;
       // Refresh focus-based labels a few times a second (every 6th frame),
       // not every frame - the label loop is the expensive part and it doesn't
       // need 60fps to look smooth.

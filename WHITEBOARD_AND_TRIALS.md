@@ -714,3 +714,42 @@ shows and the backside/edges always hide, and that declutter keeps
 capitals + high-priority and drops overlaps. Needs a real browser: the exact
 label density that feels right — the cone width and the declutter padding are
 the two knobs to tune if it's still too busy or now too sparse.
+
+---
+
+# v3.0 — richer molecules + zoom/fullscreen on every 3D model
+
+## Zoom + fullscreen everywhere
+Previously only the globe zoomed. Now **all three 3D viewers** — geometric
+solids, molecules, and the Bohr atom view — support mouse-wheel and
+two-finger pinch zoom, and every viewer has the ⛶ maximize/fullscreen
+button (it was already on the globe; solids and molecules now get it too via
+the shared mount path).
+
+## Molecules: labels
+Each atom now carries its element symbol as a floating label, and double /
+triple bonds render as parallel cylinders (previously all bonds looked
+single).
+
+## Molecules: zoom into an atom (Bohr shells)
+Click any atom in a molecule to fly into a Bohr-model view of that element:
+- a coloured nucleus labelled with the symbol and atomic number Z (= protons),
+- one faint ring per electron shell, each labelled with its electron count
+  (e.g. an oxygen atom shows 2e⁻ inner, 6e⁻ outer),
+- animated electrons orbiting on each shell,
+- a caption naming the element and its valence (outer-shell) electron count.
+A "← Molecule" button returns to the full structure.
+
+Electron shell data is a real per-element table (H through Ca, plus Fe, Br,
+I). Verified: every shell configuration sums to the atomic number and the
+valence counts are correct (O = 2,6; Na = 2,8,1; Cl = 2,8,7; etc.).
+
+Drag now rotates whichever is in focus — the molecule, or the single atom
+when zoomed in — because auto-spin and drag route through a spinTarget hook
+rather than always rotating the molecule group.
+
+## Verified vs. needs-your-eyes
+Verified: the electron-shell chemistry, that all three viewers pass zoom
+options, the mount/dispose lifecycle, and asset serving. Needs a real
+browser: how the Bohr animation looks, label legibility, click-to-focus
+feel, and whether the zoom ranges (min/max) feel right per model type.
