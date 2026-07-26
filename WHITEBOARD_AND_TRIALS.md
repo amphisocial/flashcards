@@ -1155,3 +1155,41 @@ the student side, and the feel of the student Analyze button.
 
 Needs a real browser: the header logo at real size and the overall visual
 polish of the rebranded homepage.
+
+---
+
+# v4.2 — flight / ground-school physics sims (6 new, for flight schools)
+
+Six aerodynamics concept demonstrations on the existing physics scaffold, for
+a flight school POC. These build intuition for ground-school theory — they are
+NOT a flight simulator or FAA courseware.
+
+1. **Four forces** — lift/weight/thrust/drag arrows on a plane, one slider
+   each. Lift vs weight → climb/descend; thrust vs drag → speed. Shows the
+   steady-level balance where all four are equal.
+2. **Lift equation** — L = ½ρv²·S·C_L with sliders for airspeed, angle of
+   attack, air density (altitude presets), and wing area. Verified: lift ∝ v²
+   (double speed → 4× lift), thinner air → less lift, and C_L peaks at the
+   ~15° critical angle then COLLAPSES (the stall).
+3. **Drag curve** — parasite (∝v²) + induced (∝W²/v²) drag drawn as live
+   curves with their U-shaped sum; marker tracks airspeed; flags the "back
+   side of the power curve." Verified U-shape with an interior minimum
+   (best-glide), and heavier → higher best-glide speed.
+4. **Stall close-up** — an airfoil at an angle-of-attack slider with
+   streamlines that stay attached below the critical angle and separate
+   (turbulent, red) past it, with the lift arrow collapsing.
+5. **Weight & balance** — load crew/fuel/pax/baggage sliders; CG =
+   Σ(weight×arm)/Σ(weight) shown against a safe envelope, green in-limits /
+   red out. Verified the weighted-average CG shifts correctly with loading.
+6. **Glide ratio** — engine-out glide path; L/D slider (trainer 9:1 vs glider
+   40:1) and height set reachable distance (= height × ratio, verified linear).
+
+All six verified against the real equations, mount + dispose headless without
+crash, share zoom + fullscreen, and the analyze schema routes flight/aero
+questions to them.
+
+Bonus: the same framework already covers driving-school physics (stopping
+distance via projectile/friction, cornering via wall-of-death, collisions) —
+mostly re-skins of existing sims.
+
+Needs a real browser: the look and feel of all six.

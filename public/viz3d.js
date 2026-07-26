@@ -838,6 +838,12 @@
     if (type === 'welldeath' || type === 'wall-of-death') return simWellOfDeath(container, spec, w, h);
     if (type === 'reflection' || type === 'mirror') return simReflection(container, spec, w, h);
     if (type === 'circuit') return simCircuit(container, spec, w, h);
+    if (type === 'fourforces') return simFourForces(container, spec, w, h);
+    if (type === 'lift') return simLift(container, spec, w, h);
+    if (type === 'dragcurve') return simDragCurve(container, spec, w, h);
+    if (type === 'stall') return simStall(container, spec, w, h);
+    if (type === 'weightbalance' || type === 'cg') return simWeightBalance(container, spec, w, h);
+    if (type === 'glide') return simGlide(container, spec, w, h);
     return simFreefall(container, spec, w, h);
   }
 
@@ -1463,6 +1469,376 @@
     S.api.slider('Resistance (Ω)', 1, 12, 0.5, sim.R, (v) => { sim.R = v; readout(); });
     S.api.slider('Capacitance (F)', 0.2, 4, 0.1, sim.C, (v) => { sim.C = v; readout(); });
     readout();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ========================================================================
+  //  FLIGHT / GROUND-SCHOOL SIMS
+  //  These are concept demonstrations for the four forces and basic
+  //  aerodynamics - intuition builders, not a flight simulator.
+  // ========================================================================
+
+  // A simple side-view plane silhouette built from primitives, returned as a
+  // Group so sims can move/rotate it.
+  function planeMesh(color) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.22, 3.4, 16), new THREE.MeshPhongMaterial({ color: color || 0xdfe8f5 }));
+    body.rotation.z = Math.PI / 2; g.add(body);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 16), new THREE.MeshPhongMaterial({ color: color || 0xdfe8f5 }));
+    nose.rotation.z = -Math.PI / 2; nose.position.x = 2.0; g.add(nose);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.12, 3.6), new THREE.MeshPhongMaterial({ color: 0xa9b7c9 }));
+    g.add(wing);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.12), new THREE.MeshPhongMaterial({ color: 0xa9b7c9 }));
+    tail.position.set(-1.5, 0.4, 0); g.add(tail);
+    const htail = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 1.4), new THREE.MeshPhongMaterial({ color: 0xa9b7c9 }));
+    htail.position.set(-1.5, 0, 0); g.add(htail);
+    return g;
+  }
+
+  // Draw / update a labelled force arrow from an origin in a direction, length
+  // proportional to magnitude. Returns an object with an update() method.
+  function forceArrow(scene, color, label) {
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1, 8), new THREE.MeshBasicMaterial({ color }));
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 12), new THREE.MeshBasicMaterial({ color }));
+    scene.add(shaft); scene.add(head);
+    const lab = makeLabelSprite(label, { color: '#eef6ff', weight: 700, fontSize: 26, scale: 0.4, depthTest: false });
+    scene.add(lab);
+    return {
+      shaft, head, lab,
+      // origin [x,y], direction angle (rad, 0 = +x), magnitude -> length
+      update(ox, oy, ang, mag) {
+        const len = Math.max(0.001, mag);
+        shaft.visible = head.visible = lab.visible = mag > 0.05;
+        shaft.scale.y = len;
+        shaft.position.set(ox + Math.cos(ang) * len / 2, oy + Math.sin(ang) * len / 2, 0);
+        shaft.rotation.z = ang - Math.PI / 2;
+        head.position.set(ox + Math.cos(ang) * len, oy + Math.sin(ang) * len, 0);
+        head.rotation.z = ang - Math.PI / 2;
+        lab.position.set(ox + Math.cos(ang) * (len + 0.5), oy + Math.sin(ang) * (len + 0.5), 0);
+      }
+    };
+  }
+
+  // ---- 1. Four forces balance --------------------------------------------
+  function simFourForces(container, spec, w, h) {
+    const sim = { thrust: 5, drag: 5, lift: 5, weight: 5, vx: 0, vy: 0, x: 0, y: 0 };
+    let S, plane, aL, aW, aT, aD;
+    function step(dt) {
+      // Net force -> acceleration (unit mass for the demo) -> drift the plane.
+      const ax = (sim.thrust - sim.drag) * 0.15;
+      const ay = (sim.lift - sim.weight) * 0.15;
+      sim.vx = sim.vx * 0.9 + ax * dt; sim.vy = sim.vy * 0.9 + ay * dt;
+      sim.x += sim.vx; sim.y += sim.vy;
+      // Keep it gently on screen.
+      sim.x = Math.max(-4, Math.min(4, sim.x)); sim.y = Math.max(-2.5, Math.min(2.5, sim.y));
+      plane.position.set(sim.x, sim.y, 0);
+      const ox = sim.x, oy = sim.y;
+      aL.update(ox, oy + 0.3, Math.PI / 2, sim.lift * 0.35);
+      aW.update(ox, oy - 0.3, -Math.PI / 2, sim.weight * 0.35);
+      aT.update(ox + 0.3, oy, 0, sim.thrust * 0.35);
+      aD.update(ox - 0.3, oy, Math.PI, sim.drag * 0.35);
+      readout();
+    }
+    function readout() {
+      const vert = sim.lift > sim.weight ? 'climbing' : sim.lift < sim.weight ? 'descending' : 'level';
+      const horiz = sim.thrust > sim.drag ? 'accelerating' : sim.thrust < sim.drag ? 'slowing' : 'steady speed';
+      S.api.setHud(`<div class="phys-eq">Lift vs Weight → up/down · Thrust vs Drag → speed</div>` +
+        `<div>L=${sim.lift.toFixed(1)} W=${sim.weight.toFixed(1)} T=${sim.thrust.toFixed(1)} D=${sim.drag.toFixed(1)}</div>` +
+        `<div>${vert} · ${horiz}</div>` +
+        `<div class="phys-hint">In steady level flight all four balance: lift = weight, thrust = drag. Tip a pair out of balance and the plane responds.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 0, 16], lookAt: [0, 0, 0] });
+    plane = planeMesh(); S.api.scene.add(plane);
+    aL = forceArrow(S.api.scene, 0x14d9c4, 'Lift');
+    aW = forceArrow(S.api.scene, 0xff6b7a, 'Weight');
+    aT = forceArrow(S.api.scene, 0x5bd0ff, 'Thrust');
+    aD = forceArrow(S.api.scene, 0xffcc66, 'Drag');
+    S.api.slider('Thrust', 0, 10, 0.1, sim.thrust, (v) => { sim.thrust = v; readout(); });
+    S.api.slider('Weight', 0, 10, 0.1, sim.weight, (v) => { sim.weight = v; readout(); });
+    S.api.slider('Lift', 0, 10, 0.1, sim.lift, (v) => { sim.lift = v; readout(); });
+    S.api.slider('Drag', 0, 10, 0.1, sim.drag, (v) => { sim.drag = v; readout(); });
+    S.api.button('⟲ Trim level', () => { sim.thrust = sim.drag = sim.lift = sim.weight = 5; sim.vx = sim.vy = 0; sim.x = sim.y = 0; readout(); });
+    readout();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- 2. Lift equation  L = ½·ρ·v²·S·C_L  (with the stall) ---------------
+  function simLift(container, spec, w, h) {
+    const sim = { v: 50, aoa: 4, rho: 1.0, area: 16 };  // v m/s, aoa deg, rho kg/m3, S m2
+    let S, plane, liftArrow, weightArrow;
+    const WEIGHT = 11000; // N, ~1100 kg trainer, for a reference line
+    // Lift coefficient vs angle of attack: rises ~linearly to the critical
+    // angle (~15°), then STALLS - C_L collapses. This is the key teaching point.
+    function clOf(aoaDeg) {
+      const crit = 15;
+      if (aoaDeg <= crit) return 0.1 + 0.1 * aoaDeg;            // ~0.1 per degree
+      // Past the stall, lift drops off sharply.
+      const over = aoaDeg - crit;
+      return Math.max(0.4, (0.1 + 0.1 * crit) - over * 0.12);
+    }
+    function lift() { return 0.5 * sim.rho * sim.v * sim.v * sim.area * clOf(sim.aoa); }
+    function stalled() { return sim.aoa > 15; }
+    function step() {
+      // Pitch the plane to its angle of attack and scale the lift arrow.
+      plane.rotation.z = sim.aoa * Math.PI / 180;
+      const L = lift();
+      liftArrow.update(0, 0.5, Math.PI / 2, Math.min(6, L / 2500));
+      weightArrow.update(0, -0.5, -Math.PI / 2, WEIGHT / 2500);
+      readout();
+    }
+    function readout() {
+      const L = lift();
+      S.api.setHud(`<div class="phys-eq">L = ½ · ρ · v² · S · C<sub>L</sub></div>` +
+        `<div>v=${sim.v.toFixed(0)} m/s · AoA=${sim.aoa.toFixed(0)}° · ρ=${sim.rho.toFixed(2)} · S=${sim.area} m²</div>` +
+        `<div>lift ≈ ${(L / 1000).toFixed(1)} kN ${stalled() ? '· ⚠ STALLED — lift collapsing' : L > WEIGHT ? '· climbs' : '· not enough to hold ' + (WEIGHT / 1000).toFixed(0) + ' kN'}</div>` +
+        `<div class="phys-hint">Lift grows with the SQUARE of speed. Raising angle of attack adds lift — until ~15°, where the wing stalls and lift drops off a cliff.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 0, 12], lookAt: [0, 0, 0] });
+    plane = planeMesh(); S.api.scene.add(plane);
+    liftArrow = forceArrow(S.api.scene, 0x14d9c4, 'Lift');
+    weightArrow = forceArrow(S.api.scene, 0xff6b7a, 'Weight');
+    S.api.slider('Airspeed (m/s)', 15, 90, 1, sim.v, (v) => { sim.v = v; readout(); });
+    S.api.slider('Angle of attack (°)', 0, 22, 0.5, sim.aoa, (v) => { sim.aoa = v; readout(); });
+    S.api.slider('Air density (altitude)', 0.4, 1.23, 0.01, sim.rho, (v) => { sim.rho = v; readout(); },
+      [{ label: 'Sea level', v: 1.23 }, { label: '10,000 ft', v: 0.9 }, { label: '20,000 ft', v: 0.65 }]);
+    S.api.slider('Wing area (m²)', 8, 30, 1, sim.area, (v) => { sim.area = v; readout(); });
+    readout();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- 3. Drag curve: parasite + induced vs airspeed ----------------------
+  // The famous U-shaped total-drag curve. Parasite drag rises with v²;
+  // induced drag (the cost of making lift) falls as v rises. Their sum has a
+  // minimum - the best-glide / max-endurance speed. Drawn as a live graph.
+  function simDragCurve(container, spec, w, h) {
+    const sim = { v: 50, weight: 11000 };
+    let S, parasiteLine, inducedLine, totalLine, marker, axes;
+    const vMin = 20, vMax = 100;
+    // Coefficients tuned so the curves sit nicely on screen.
+    const kP = 0.9;         // parasite: D_p = kP * v²
+    function dragParasite(v) { return kP * v * v; }
+    function dragInduced(v) { return (sim.weight * sim.weight) / (v * v) * 0.02; } // ∝ W²/v²
+    function dragTotal(v) { return dragParasite(v) + dragInduced(v); }
+    // graph mapping: v in [vMin,vMax] -> x in [-6,6]; drag -> y in [-3,3.5]
+    const X0 = -6, X1 = 6, Y0 = -3, dMax = 12000;
+    function gx(v) { return X0 + (X1 - X0) * (v - vMin) / (vMax - vMin); }
+    function gy(d) { return Y0 + 6 * Math.min(1, d / dMax); }
+    function curve(fn, color) {
+      const pts = [];
+      for (let v = vMin; v <= vMax; v += 2) pts.push(new THREE.Vector3(gx(v), gy(fn(v)), 0));
+      return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color }));
+    }
+    function rebuild() {
+      [parasiteLine, inducedLine, totalLine].forEach((l) => { if (l) S.api.scene.remove(l); });
+      parasiteLine = curve(dragParasite, 0xffcc66); S.api.scene.add(parasiteLine);
+      inducedLine = curve(dragInduced, 0x5bd0ff); S.api.scene.add(inducedLine);
+      totalLine = curve(dragTotal, 0x14d9c4); S.api.scene.add(totalLine);
+      readout();
+    }
+    // Best-glide speed = minimum of total drag (numerically).
+    function bestSpeed() {
+      let best = vMin, bd = Infinity;
+      for (let v = vMin; v <= vMax; v += 0.5) { const d = dragTotal(v); if (d < bd) { bd = d; best = v; } }
+      return best;
+    }
+    function step() {
+      marker.position.set(gx(sim.v), gy(dragTotal(sim.v)), 0);
+    }
+    function readout() {
+      const vb = bestSpeed();
+      S.api.setHud(`<div class="phys-eq">total drag = parasite (∝v²) + induced (∝W²/v²)</div>` +
+        `<div>speed=${sim.v.toFixed(0)} m/s · best-glide ≈ ${vb.toFixed(0)} m/s</div>` +
+        `<div>${sim.v < vb ? '⚠ back side of the curve — slower needs MORE power' : 'front side — normal'}</div>` +
+        `<div class="phys-hint">Yellow = parasite drag, blue = induced drag, teal = their sum. The bottom of the U is your most efficient speed.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 0, 13], lookAt: [0, 0, 0] });
+    // Axes.
+    const axPts = [new THREE.Vector3(X0, Y0, 0), new THREE.Vector3(X1, Y0, 0)];
+    const ayPts = [new THREE.Vector3(X0, Y0, 0), new THREE.Vector3(X0, Y0 + 6, 0)];
+    S.api.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(axPts), new THREE.LineBasicMaterial({ color: 0x9fb2cd })));
+    S.api.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ayPts), new THREE.LineBasicMaterial({ color: 0x9fb2cd })));
+    const xl = makeLabelSprite('airspeed →', { color: '#9fb2cd', weight: 600, fontSize: 22, scale: 0.32, depthTest: false });
+    xl.position.set(3, Y0 - 0.5, 0); S.api.scene.add(xl);
+    const yl = makeLabelSprite('drag ↑', { color: '#9fb2cd', weight: 600, fontSize: 22, scale: 0.32, depthTest: false });
+    yl.position.set(X0 - 0.6, 1, 0); S.api.scene.add(yl);
+    marker = ballMesh(0.2, 0xff6b7a); S.api.scene.add(marker);
+    S.api.slider('Airspeed (m/s)', vMin, vMax, 1, sim.v, (v) => { sim.v = v; readout(); });
+    S.api.slider('Weight (N)', 6000, 16000, 100, sim.weight, (v) => { sim.weight = v; rebuild(); });
+    rebuild();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- 4. Stall / angle of attack close-up (airfoil + streamlines) --------
+  function simStall(container, spec, w, h) {
+    const sim = { aoa: 4 };
+    let S, foil, streams = [], liftArrow;
+    function clOf(a) { const c = 15; return a <= c ? 0.1 + 0.1 * a : Math.max(0.4, (0.1 + 0.1 * c) - (a - c) * 0.12); }
+    function stalled() { return sim.aoa > 15; }
+    function buildStreams() {
+      streams.forEach((s2) => S.api.scene.remove(s2)); streams = [];
+      const a = sim.aoa * Math.PI / 180;
+      for (let i = 0; i < 7; i += 1) {
+        const y0 = -2.5 + i * 0.85;
+        const pts = [];
+        for (let x = -6; x <= 6; x += 0.4) {
+          // Air deflects over the airfoil; past the stall the flow separates
+          // above the wing (turbulent, wavy) instead of following it.
+          let y = y0;
+          const near = Math.exp(-(x * x) / 6);
+          if (y0 > -0.5 && y0 < 1.5) {
+            if (!stalled()) y = y0 + near * 0.8 * Math.sin(a);         // attached, smooth bend
+            else y = y0 + near * (0.5 + 0.4 * Math.sin(x * 3));        // separated, turbulent
+          }
+          pts.push(new THREE.Vector3(x, y - x * Math.sin(a) * 0.15, 0));
+        }
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+          new THREE.LineBasicMaterial({ color: stalled() ? 0xff6b7a : 0x5bd0ff, transparent: true, opacity: 0.7 }));
+        streams.push(line); S.api.scene.add(line);
+      }
+      // Rotate the airfoil to the angle of attack.
+      if (foil) foil.rotation.z = a;
+      liftArrow.update(0, 0.6, Math.PI / 2, Math.min(5, clOf(sim.aoa) * 2.6));
+      readout();
+    }
+    function readout() {
+      S.api.setHud(`<div class="phys-eq">C<sub>L</sub> rises with AoA — until the wing stalls (~15°)</div>` +
+        `<div>angle of attack = ${sim.aoa.toFixed(0)}° · C<sub>L</sub> ≈ ${clOf(sim.aoa).toFixed(2)}</div>` +
+        `<div>${stalled() ? '⚠ STALLED — airflow separated, lift lost' : 'airflow attached — lift rising'}</div>` +
+        `<div class="phys-hint">Below the critical angle the air hugs the wing and lift climbs. Past it the flow breaks away and lift collapses — a stall, at ANY speed.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step: () => {}, camera: [0, 0, 13], lookAt: [0, 0, 0] });
+    // Airfoil: a stretched teardrop.
+    const shape = new THREE.Shape();
+    shape.moveTo(-2, 0); shape.quadraticCurveTo(-0.5, 0.5, 1.5, 0.12);
+    shape.quadraticCurveTo(2, 0, 1.5, -0.05); shape.quadraticCurveTo(-0.5, -0.25, -2, 0);
+    foil = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: 0xdfe8f5 }));
+    S.api.scene.add(foil);
+    liftArrow = forceArrow(S.api.scene, 0x14d9c4, 'Lift');
+    S.api.slider('Angle of attack (°)', 0, 22, 0.5, sim.aoa, (v) => { sim.aoa = v; buildStreams(); });
+    buildStreams();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- 5. Weight & balance / center of gravity ----------------------------
+  // Load stations (crew, fuel, baggage); the CG is the weighted average of
+  // their positions. Show whether the CG stays inside the safe envelope. This
+  // is a required pre-flight check and a real accident cause when done wrong.
+  function simWeightBalance(container, spec, w, h) {
+    // Stations: arm (fore/aft position in "units"), adjustable weight (kg).
+    const sim = {
+      stations: [
+        { name: 'Crew', arm: 0.8, wt: 160, min: 60, max: 220, color: 0x5bd0ff },
+        { name: 'Fuel', arm: 1.1, wt: 120, min: 0, max: 200, color: 0xffcc66 },
+        { name: 'Rear pax', arm: 2.2, wt: 80, min: 0, max: 200, color: 0xa78bfa },
+        { name: 'Baggage', arm: 2.9, wt: 20, min: 0, max: 120, color: 0xff6b7a }
+      ],
+      empty: { arm: 1.4, wt: 700 },   // empty aircraft
+      // Safe CG envelope (arm units).
+      cgFwd: 1.2, cgAft: 1.9
+    };
+    let S, plane, cgMarker, envelope, weightsGroup;
+    function cg() {
+      let m = sim.empty.wt, mom = sim.empty.wt * sim.empty.arm;
+      sim.stations.forEach((st) => { m += st.wt; mom += st.wt * st.arm; });
+      return { cg: mom / m, total: m };
+    }
+    function inEnvelope(c) { return c >= sim.cgFwd && c <= sim.cgAft; }
+    // Map arm [0.5,3.2] -> x [-6,6]
+    function ax(arm) { return -6 + (arm - 0.5) * (12 / 2.7); }
+    function step() {
+      const c = cg();
+      cgMarker.position.x = ax(c.cg);
+      cgMarker.material.color.setHex(inEnvelope(c.cg) ? 0x14d9c4 : 0xff3b5c);
+      readout();
+    }
+    function readout() {
+      const c = cg();
+      S.api.setHud(`<div class="phys-eq">CG = Σ(weight × arm) / Σ(weight)</div>` +
+        `<div>total weight = ${c.total.toFixed(0)} kg · CG arm = ${c.cg.toFixed(2)}</div>` +
+        `<div>${inEnvelope(c.cg) ? '✓ CG inside the safe envelope' : '⚠ CG OUT of limits — unsafe to fly'}</div>` +
+        `<div class="phys-hint">Loading changes where the aircraft balances. Too far forward or aft and it becomes hard or impossible to control — always check before flight.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 0, 13], lookAt: [0, 0, 0] });
+    plane = planeMesh(); plane.scale.set(1.4, 1.4, 1.4); plane.position.y = 1.6; S.api.scene.add(plane);
+    // Safe envelope band.
+    const eGeo = new THREE.PlaneGeometry(ax(sim.cgAft) - ax(sim.cgFwd), 0.7);
+    envelope = new THREE.Mesh(eGeo, new THREE.MeshBasicMaterial({ color: 0x14d9c4, transparent: true, opacity: 0.18 }));
+    envelope.position.set((ax(sim.cgFwd) + ax(sim.cgAft)) / 2, -0.5, 0); S.api.scene.add(envelope);
+    const envLabel = makeLabelSprite('safe CG range', { color: '#14d9c4', weight: 600, fontSize: 20, scale: 0.3, depthTest: false });
+    envLabel.position.set((ax(sim.cgFwd) + ax(sim.cgAft)) / 2, -1.1, 0); S.api.scene.add(envLabel);
+    // A datum line.
+    S.api.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-6, -0.5, 0), new THREE.Vector3(6, -0.5, 0)]), new THREE.LineBasicMaterial({ color: 0x3a4a60 })));
+    cgMarker = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.5, 4), new THREE.MeshBasicMaterial({ color: 0x14d9c4 }));
+    cgMarker.rotation.z = Math.PI; cgMarker.position.y = -0.1; S.api.scene.add(cgMarker);
+    sim.stations.forEach((st) => {
+      S.api.slider(`${st.name} (kg)`, st.min, st.max, 5, st.wt, (v) => { st.wt = v; readout(); });
+    });
+    readout();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- 6. Glide ratio / engine-out ---------------------------------------
+  // Engine fails at altitude. The glide ratio (L/D) sets how far the aircraft
+  // travels forward per unit of height lost. Slider for glide ratio; watch the
+  // reachable distance and the glide path.
+  function simGlide(container, spec, w, h) {
+    const sim = { ratio: 9, altitude: 5, x: -7, y: 5, gliding: false, vx: 0 };
+    let S, plane, path, groundLine, reachLabel;
+    const startX = -7, startY = 5;
+    function reach() { return sim.altitude * sim.ratio; }   // horizontal distance (km-ish units)
+    // Map: altitude 0..6 -> y -3..5 ; distance scaled to x.
+    function drawPath() {
+      if (path) S.api.scene.remove(path);
+      const pts = [];
+      const dist = reach();
+      const scale = 12 / Math.max(dist, 1);   // fit reachable distance across the view
+      for (let i = 0; i <= 30; i += 1) {
+        const t = i / 30;
+        const x = startX + t * dist * scale;
+        const y = startY - t * startY - t * 3;   // descend to below ground line
+        pts.push(new THREE.Vector3(x, Math.max(-3, startY * (1 - t)) - 0.0, 0));
+      }
+      path = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x14d9c4, transparent: true, opacity: 0.6 }));
+      S.api.scene.add(path);
+      readout();
+    }
+    function reset() { sim.x = startX; sim.y = startY; sim.gliding = false; plane.position.set(startX, startY, 0); plane.rotation.z = 0; }
+    function step(dt) {
+      if (!sim.gliding) return;
+      const dist = reach();
+      const scale = 12 / Math.max(dist, 1);
+      sim.x += dt * 3;
+      const t = Math.min(1, (sim.x - startX) / (dist * scale));
+      sim.y = startY * (1 - t);
+      plane.position.set(sim.x, sim.y, 0);
+      plane.rotation.z = -Math.atan2(startY, dist * scale) * 0.6;
+      if (t >= 1) sim.gliding = false;
+      readout();
+    }
+    function readout() {
+      S.api.setHud(`<div class="phys-eq">glide distance = height × glide ratio (L/D)</div>` +
+        `<div>glide ratio = ${sim.ratio.toFixed(0)}:1 · height = ${sim.altitude.toFixed(1)} (units)</div>` +
+        `<div>reaches ≈ ${reach().toFixed(1)} forward per this height</div>` +
+        `<div class="phys-hint">With the engine out, a ${sim.ratio.toFixed(0)}:1 glide ratio means the aircraft travels ${sim.ratio.toFixed(0)} units forward for every 1 unit of height lost. Best-glide speed maximizes this reach.</div>`);
+    }
+    S = physicsScaffold(container, w, h, { step, camera: [0, 1, 15], lookAt: [0, 1, 0] });
+    // Ground.
+    groundLine = new THREE.Mesh(new THREE.BoxGeometry(20, 0.3, 3), new THREE.MeshPhongMaterial({ color: 0x243247 }));
+    groundLine.position.y = -0.2; S.api.scene.add(groundLine);
+    plane = planeMesh(); plane.scale.set(0.7, 0.7, 0.7); S.api.scene.add(plane);
+    reset();
+    S.api.button('▶ Engine out', () => { reset(); sim.gliding = true; });
+    S.api.button('⟲ Reset', reset);
+    S.api.slider('Glide ratio (L/D)', 4, 20, 1, sim.ratio, (v) => { sim.ratio = v; drawPath(); },
+      [{ label: 'Trainer 9:1', v: 9 }, { label: 'Glider 40:1', v: 20 }]);
+    S.api.slider('Height (units)', 1, 6, 0.5, sim.altitude, (v) => { sim.altitude = v; drawPath(); });
+    drawPath();
     S.api.ready();
     return S.handle;
   }
