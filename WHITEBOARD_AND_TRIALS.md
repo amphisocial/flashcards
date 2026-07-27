@@ -1193,3 +1193,29 @@ distance via projectile/friction, cornering via wall-of-death, collisions) —
 mostly re-skins of existing sims.
 
 Needs a real browser: the look and feel of all six.
+
+---
+
+# v4.3 — Course Deviation Indicator (CDI / VOR) sim
+
+A navigation-instrument sim for flight training, prompted by a teacher drawing
+a CDI on the board.
+
+Left: a map view with a VOR station, the selected radial (course line), and a
+movable aircraft. Right: a live CDI instrument face with the deviation needle
+and 5 dots per side. Sliders move the aircraft (E/W, N/S) and turn the OBS
+(selected course).
+
+Aviation-accurate behavior (verified against standard VOR references):
+- Full-scale deflection = 10° off course; 5 dots per side; each dot = 2°.
+- "Fly toward the needle": aircraft right of course → needle deflects LEFT;
+  aircraft left of course → needle deflects RIGHT; on course → centered.
+- TO/FROM flag: FROM on the selected-radial side of the station, TO on the
+  reciprocal side.
+Verified the needle direction, dot/degree scale, full-scale clamp, and TO/FROM
+logic numerically; mounts + disposes headless without crash. Analyze schema
+routes CDI/VOR/OBS/radial questions to it.
+
+Note: this is a conceptual VOR CDI (fixed 10° full-scale). It doesn't model
+ILS localizer sensitivity or GPS distance-based scaling — those are different
+modes a later version could add.

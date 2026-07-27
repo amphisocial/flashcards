@@ -844,6 +844,7 @@
     if (type === 'stall') return simStall(container, spec, w, h);
     if (type === 'weightbalance' || type === 'cg') return simWeightBalance(container, spec, w, h);
     if (type === 'glide') return simGlide(container, spec, w, h);
+    if (type === 'cdi' || type === 'coursedeviation') return simCDI(container, spec, w, h);
     return simFreefall(container, spec, w, h);
   }
 
@@ -1839,6 +1840,123 @@
       [{ label: 'Trainer 9:1', v: 9 }, { label: 'Glider 40:1', v: 20 }]);
     S.api.slider('Height (units)', 1, 6, 0.5, sim.altitude, (v) => { sim.altitude = v; drawPath(); });
     drawPath();
+    S.api.ready();
+    return S.handle;
+  }
+
+  // ---- Course Deviation Indicator (CDI / VOR navigation) -----------------
+  // A VOR station sits at the origin; the pilot selects a course (OBS) and the
+  // instrument shows how far the aircraft is off that course. Standard VOR:
+  // full-scale deflection = 10 degrees off course, 5 dots per side (2 deg/dot).
+  // Rule taught to students: the needle shows which way to fly to get back on
+  // course - "fly toward the needle." A TO/FROM flag shows whether the selected
+  // course leads toward or away from the station.
+  function simCDI(container, spec, w, h) {
+    const sim = { obs: 0, acX: 2.5, acY: 4 }; // obs = selected course (deg), aircraft position (scene units)
+    let S, station, courseLine, aircraft, needle, toFromLab;
+    const R = 6;               // scene radius for the map view
+    const instX = 5, instY = 0; // CDI instrument face centre (declared up front)
+
+    // Bearing FROM the station to the aircraft (deg, 0 = north/up, clockwise).
+    function bearingToAircraft() {
+      const ang = Math.atan2(sim.acX, sim.acY) * 180 / Math.PI; // x=east, y=north
+      return (ang + 360) % 360;
+    }
+    // Angular deviation of the aircraft from the selected radial, signed.
+    function deviationDeg() {
+      let d = bearingToAircraft() - sim.obs;
+      // normalize to [-180,180]
+      while (d > 180) d -= 360; while (d < -180) d += 360;
+      return d;
+    }
+    // TO/FROM: FROM if the aircraft is on the selected-radial side of the
+    // station, TO if it's on the reciprocal side.
+    function toFrom() {
+      const dev = deviationDeg();
+      return Math.abs(dev) <= 90 ? 'FROM' : 'TO';
+    }
+    // Needle deflection clamped to full-scale 10 deg. The needle deflects
+    // OPPOSITE to the aircraft's offset (fly toward the needle).
+    function needleDeg() {
+      let dev = deviationDeg();
+      // On the TO side the sensing flips; fold onto the +/-90 window.
+      if (dev > 90) dev = 180 - dev; if (dev < -90) dev = -180 - dev;
+      return Math.max(-10, Math.min(10, dev));
+    }
+
+    function step() {
+      // Map view: station center, course line along OBS, aircraft dot.
+      aircraft.position.set(sim.acX, sim.acY, 0);
+      const a = sim.obs * Math.PI / 180;
+      // Course line points along the selected radial (from station outward).
+      const ex = Math.sin(a), ey = Math.cos(a);
+      courseLine.geometry.setFromPoints([
+        new THREE.Vector3(-ex * R, -ey * R, 0), new THREE.Vector3(ex * R, ey * R, 0)
+      ]);
+      // Instrument: needle deflects horizontally. Full scale (10 deg) -> +/-1.8 units.
+      const nd = needleDeg();
+      // Aircraft RIGHT of course -> needle deflects LEFT (fly left). So needle
+      // x is opposite the sign of deviation.
+      const nx = -(nd / 10) * 1.8;
+      needle.geometry.setFromPoints([
+        new THREE.Vector3(instX + nx, instY + 1.6, 0), new THREE.Vector3(instX + nx, instY - 1.6, 0)
+      ]);
+      if (toFromLab) toFromLab.text = toFrom();   // (label text is static sprite; TO/FROM shown in HUD)
+      readout();
+    }
+    function readout() {
+      const dev = deviationDeg();
+      const nd = needleDeg();
+      const dots = Math.abs(nd) / 2;
+      const side = nd > 0.1 ? 'aircraft LEFT of course → fly right' : nd < -0.1 ? 'aircraft RIGHT of course → fly left' : 'on course';
+      S.api.setHud(`<div class="phys-eq">full scale = 10° off course · each dot = 2° · fly toward the needle</div>` +
+        `<div>selected course (OBS) = ${sim.obs.toFixed(0)}° · deviation = ${dev.toFixed(1)}° · ${toFrom()}</div>` +
+        `<div>needle: ${Math.abs(nd).toFixed(1)}° (${dots.toFixed(1)} dots) · ${side}</div>` +
+        `<div class="phys-hint">The needle points to the course. If it sits right, the course is to your right — turn toward it. Full deflection means 10°+ off. Move the aircraft or turn the OBS and watch it respond.</div>`);
+    }
+
+    S = physicsScaffold(container, w, h, { step, camera: [0, 0, 16], lookAt: [0, 0, 0] });
+
+    // ----- Left: map view -----
+    const mapGroup = new THREE.Group(); mapGroup.position.set(-4.5, 0, 0); S.api.scene.add(mapGroup);
+    // VOR station (compass rose circle).
+    const rosePts = [];
+    for (let i = 0; i <= 64; i += 1) { const th = (i / 64) * Math.PI * 2; rosePts.push(new THREE.Vector3(Math.cos(th) * R, Math.sin(th) * R, 0)); }
+    mapGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rosePts), new THREE.LineBasicMaterial({ color: 0x3a4a60 })));
+    station = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffcc66 }));
+    mapGroup.add(station);
+    mapGroup.add(makeLabelSprite('VOR', { color: '#ffcc66', weight: 700, fontSize: 22, scale: 0.34, depthTest: false }));
+    courseLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -R, 0), new THREE.Vector3(0, R, 0)]), new THREE.LineBasicMaterial({ color: 0x14d9c4 }));
+    mapGroup.add(courseLine);
+    aircraft = planeMesh(0x5bd0ff); aircraft.scale.set(0.35, 0.35, 0.35); mapGroup.add(aircraft);
+
+    // ----- Right: the CDI instrument face -----
+    // instrument circle
+    const facePts = [];
+    for (let i = 0; i <= 64; i += 1) { const th = (i / 64) * Math.PI * 2; facePts.push(new THREE.Vector3(instX + Math.cos(th) * 2.4, instY + Math.sin(th) * 2.4, 0)); }
+    S.api.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(facePts), new THREE.LineBasicMaterial({ color: 0x9fb2cd })));
+    // dots (5 per side, at +/-2,4,6,8,10 deg -> +/-0.36..1.8)
+    for (let k = -5; k <= 5; k += 1) {
+      if (k === 0) continue;
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.08, 12), new THREE.MeshBasicMaterial({ color: 0x6b7d95 }));
+      dot.position.set(instX + (k / 5) * 1.8, instY, 0);
+      S.api.scene.add(dot);
+    }
+    // center reference
+    const ctr = new THREE.Mesh(new THREE.CircleGeometry(0.12, 16), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    ctr.position.set(instX, instY, 0); S.api.scene.add(ctr);
+    // the deviation needle (vertical bar that slides left/right)
+    needle = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(instX, instY + 1.6, 0), new THREE.Vector3(instX, instY - 1.6, 0)]), new THREE.LineBasicMaterial({ color: 0x14d9c4 }));
+    S.api.scene.add(needle);
+    const cdiLab = makeLabelSprite('CDI', { color: '#eef6ff', weight: 800, fontSize: 24, scale: 0.4, depthTest: false });
+    cdiLab.position.set(instX, instY + 3, 0); S.api.scene.add(cdiLab);
+    toFromLab = makeLabelSprite('FROM', { color: '#14d9c4', weight: 800, fontSize: 22, scale: 0.34, depthTest: false });
+    toFromLab.position.set(instX, instY - 3, 0); S.api.scene.add(toFromLab);
+
+    S.api.slider('Aircraft east/west', -5, 5, 0.1, sim.acX, (v) => { sim.acX = v; readout(); });
+    S.api.slider('Aircraft north/south', -5, 5, 0.1, sim.acY, (v) => { sim.acY = v; readout(); });
+    S.api.slider('Selected course OBS (°)', 0, 359, 1, sim.obs, (v) => { sim.obs = v; readout(); });
+    readout();
     S.api.ready();
     return S.handle;
   }

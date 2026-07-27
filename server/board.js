@@ -394,7 +394,7 @@ function attachBoardRoutes(app, deps) {
     '  "plots": ["any function in the form y = ... that would help, else omit"],',
     '  "viz3d": null OR { "shape": one of "cube","cuboid","sphere","cylinder","cone","pyramid","prism","tetrahedron","earth", "dims": { "a": number, "b": number, "c": number, "r": number, "h": number }, "label": "short caption" },',
     '  "molecule": null OR { "name": "compound name", "formula": "e.g. H2O", "smiles": "SMILES string if known e.g. O for water, CCO for ethanol", "atoms": [{"el":"O","x":0,"y":0,"z":0}], "bonds": [[0,1,1]] },',
-    '  "physicsSim": null OR { "type": one of "freefall","projectile","pendulum","incline","collision","orbit","welldeath","reflection","circuit","fourforces","lift","dragcurve","stall","weightbalance","glide", "g": number (9.8 Earth, 1.6 Moon), "air": true|false } - pick the type that matches the board,',
+    '  "physicsSim": null OR { "type": one of "freefall","projectile","pendulum","incline","collision","orbit","welldeath","reflection","circuit","fourforces","lift","dragcurve","stall","weightbalance","glide","cdi", "g": number (9.8 Earth, 1.6 Moon), "air": true|false } - pick the type that matches the board,',
     '  "warnings": ["anything wrong, ambiguous, or dimensionally inconsistent"]',
     '}',
     'Guidance by kind:',
