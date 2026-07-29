@@ -26,9 +26,15 @@ body[data-page="board"] { overflow: hidden; }
 
 /* ---- Left toolbar ---- */
 .board-toolbar {
-  flex: 0 0 190px; display: flex; flex-direction: column; gap: 14px; padding: 14px 12px;
+  flex: 0 0 160px; display: flex; flex-direction: column; gap: 10px; padding: 12px 10px;
   border-right: 1px solid var(--line); background: rgba(13,27,49,0.7); overflow-y: auto;
 }
+
+/* "More tools" reveal — keeps the primary five uncluttered while leaving the
+   advanced tools one tap away. */
+.more-tools[hidden] { display: none; }
+.tool-btn.more-toggle { font-weight: 900; letter-spacing: 1px; }
+.tool-btn.more-toggle.open { background: var(--panel-strong); border-color: var(--brand-2); color: var(--brand-2); }
 .tool-group { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 .tool-group.stacked { flex-direction: column; align-items: stretch; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .tool-group.ai-group { flex-direction: column; align-items: stretch; gap: 9px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -91,7 +97,7 @@ body[data-page="board"] { overflow: hidden; }
 
 /* ---- Right info panel ---- */
 .info-panel {
-  flex: 0 0 340px; display: flex; flex-direction: column; border-left: 1px solid var(--line);
+  flex: 0 0 312px; display: flex; flex-direction: column; border-left: 1px solid var(--line);
   background: rgba(11,22,40,0.94); transition: flex-basis 0.18s ease;
 }
 .info-panel.collapsed { flex-basis: 0; overflow: hidden; border-left: none; }

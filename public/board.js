@@ -1727,7 +1727,19 @@
     $('#pageLabel').textContent = `Page ${pageIndex + 1} / ${board.pages.length}`;
     $('#templateSelect').value = page().template || 'blank';
     const flowPal = $('#flowPalette');
-    if (flowPal) flowPal.style.display = page().template === 'flowchart' ? '' : 'none';
+    const isFlow = page().template === 'flowchart';
+    if (flowPal) flowPal.style.display = isFlow ? '' : 'none';
+    // Flowcharts need move (✥) and connect (⇢), which live in "More tools" —
+    // reveal them automatically when a flowchart page is active.
+    if (isFlow) {
+      const more = $('#moreTools');
+      const btn = $('#moreToolsToggle');
+      if (more && more.hasAttribute('hidden')) {
+        more.removeAttribute('hidden');
+        btn?.classList.add('open');
+        btn?.setAttribute('aria-expanded', 'true');
+      }
+    }
     $$('.owner-only').forEach((el) => { el.style.display = isOwner ? '' : 'none'; });
   }
   function gotoPage(i, broadcastMove = true) {
@@ -2035,8 +2047,12 @@
 
   function bindUI() {
     $$('.tool-btn').forEach((b) => b.addEventListener('click', () => {
+      // Some buttons share the .tool-btn look without being tools (e.g. the
+      // "⋯ More" reveal). Ignore anything without a data-tool, or clicking it
+      // would blank the active tool.
+      if (!b.dataset.tool) return;
       tool.name = b.dataset.tool;
-      $$('.tool-btn').forEach((x) => x.classList.toggle('active', x === b));
+      $$('.tool-btn[data-tool]').forEach((x) => x.classList.toggle('active', x === b));
       if (tool.name !== 'select') { selectionRect = null; $('#plotSelectionBtn').style.display = 'none'; redraw(); }
     }));
     $$('.swatch').forEach((b) => b.addEventListener('click', () => {
@@ -2161,6 +2177,18 @@
       const collapsed = sect.classList.toggle('collapsed');
       if (body) body.style.display = collapsed ? 'none' : '';
     }));
+
+    // "More tools" reveal — the five advanced tools (pan/move/connect/laser/
+    // note) stay tucked away until asked for, so the default toolbar is calm.
+    $('#moreToolsToggle')?.addEventListener('click', () => {
+      const more = $('#moreTools');
+      const btn = $('#moreToolsToggle');
+      if (!more) return;
+      const show = more.hasAttribute('hidden');
+      if (show) more.removeAttribute('hidden'); else more.setAttribute('hidden', '');
+      btn.classList.toggle('open', show);
+      btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    });
 
     $('#liveAnalyzeBtn')?.addEventListener('click', toggleLiveAnalyze);
 

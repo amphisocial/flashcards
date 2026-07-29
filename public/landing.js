@@ -5,8 +5,14 @@
     if (state.user) { window.location.href = '/app'; }
     else { openAuth('signup'); }
   };
-  $('#ctaStart').addEventListener('click', startFree);
+  $('#ctaStart')?.addEventListener('click', startFree);
   $('#ctaStart2')?.addEventListener('click', startFree);
+  // Founding-30 application: same entry point (signup), tagged so we can
+  // route these signups to the teacher onboarding later.
+  $('#ctaFounding')?.addEventListener('click', () => {
+    try { sessionStorage.setItem('founding30', '1'); } catch (_) {}
+    startFree();
+  });
 
   await initCommon();
 

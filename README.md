@@ -1,8 +1,70 @@
-# Athena Flashcards
+# AthenaBoard
 
-AI-driven flashcards, quizzes, and slide study sets for `flashcards.athenabot.ai`.
+**The AI whiteboard that turns a teacher's explanation into a live simulation.**
 
-This app lets users:
+For **grades 5–9** — Math, Science, Geography and History — aligned to Common
+Core and NGSS. Runs in any browser on the tablets and laptops schools already
+own; no classroom hardware.
+
+Live at `flashcards.athenabot.ai` (legacy host name; the product is AthenaBoard).
+
+## What it does
+
+- **AI whiteboard** — handwrite `y = x² − 3` and it becomes a live graph with
+  semantic sliders (slope, intercept, a/b/c); rough shapes snap clean;
+  flowcharts with auto Y/N branches.
+- **3D science** — rotatable molecules with electron shells, geometric solids
+  with worked surface area/volume, and a teaching globe with real borders,
+  capitals and rivers.
+- **Physics simulations** — free-fall, projectile, pendulum, inclined plane,
+  collisions, orbit, reflection, circuits and more, each driven by the real
+  equations.
+- **Live classroom** — students join on their own screens, react, raise a hand,
+  tap "I'm lost" anonymously, and export the board plus AI notes to PDF.
+- **Notes & study** — scan a page to organized notes and five quiz types with
+  per-student weak-topic tracking.
+
+## Marketing / acquisition pages
+
+The Chalkie-style concept pages (one clean URL per concept teachers search for)
+are generated from a single data file:
+
+```bash
+npm run build:lessons     # writes public/lessons/*.html + slugs.json
+```
+
+Add or edit a page in `scripts/build-lesson-pages.js` and rebuild — the Express
+routes and `sitemap.xml` read `slugs.json`, so nothing else needs touching.
+
+Current pages: `/interactive-newtons-laws-simulation`,
+`/pulley-force-simulation-for-teachers`, `/block-on-wedge-physics-simulation`,
+`/laws-of-reflection-whiteboard`, `/interactive-quadratic-graph`,
+`/3d-molecule-whiteboard`, `/3d-teaching-globe-for-classrooms`,
+`/live-ai-notes-for-classrooms`.
+
+`/robots.txt` and `/sitemap.xml` are served dynamically from `APP_BASE_URL`.
+
+### Testimonials
+
+Testimonial markup includes an explicit "Received free beta access" disclosure.
+Keep it. FTC guidance requires disclosing material connections, and beta access
+given in exchange for a review is one. Never require a positive review for
+access, and only publish a quote the teacher specifically approved.
+
+## Tests
+
+```bash
+npm test              # all three suites
+npm run test:graph    # graph widget math
+npm run test:board    # whiteboard toolbar structure
+npm run test:marketing # boots the server, checks every acquisition route
+```
+
+---
+
+## Legacy notes (study sets, billing, deploy)
+
+This app also lets users:
 
 - sign up with email/password or optional Google OAuth;
 - paste content, upload a document, or use a guided chat coach;

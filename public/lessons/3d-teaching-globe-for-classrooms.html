@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D Teaching Globe for Classrooms — AthenaBoard (Grades 5–9, Geography 5–9)</title>
+  <meta name="description" content="A rotatable globe — real borders, capitals, rivers, the equator and tropics, with labels that appear as you zoom. A live, AI-powered Geography whiteboard lesson for Grades 5–9, aligned to Geography 5–9. Try it free in your browser." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
+  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
+  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
+</head>
+<body data-page="lesson">
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="AthenaBoard home">
+        <span class="brand-mark">AthenaBoard</span>
+        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
+      </a>
+      <nav class="nav-links">
+        <a href="/#subjects">Subjects</a>
+        <a href="/#lessons">Lessons</a>
+        <a href="/#teachers">Teachers</a>
+        <a href="/#pricing">Pricing</a>
+      </nav>
+      <div class="auth-area" id="authArea"></div>
+    </header>
+
+    <main>
+      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Geography</a> › <span>3D Teaching Globe for Classrooms</span></nav>
+
+      <section class="lesson-hero">
+        <div class="lesson-hero-copy">
+          <div class="lesson-meta">
+            <span class="pill grade">Grades 5–9</span>
+            <span class="pill subject">Geography</span>
+            <span class="pill standard">Geography 5–9</span>
+          </div>
+          <h1>3D Teaching Globe for Classrooms</h1>
+          <p class="lesson-tagline">A rotatable globe — real borders, capitals, rivers, the equator and tropics, with labels that appear as you zoom.</p>
+          <div class="hero-actions">
+            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
+            <a class="btn soft large" href="#outline">See the teaching outline</a>
+          </div>
+          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
+        </div>
+        <div class="lesson-hero-visual">
+        <div class="demo3d-frame lesson-demo">
+          <div class="demo3d-holder" id="lessonDemo" data-demo="earth"></div>
+          <div class="demo3d-cap">Drag to spin, scroll to zoom. Toggle satellite and political maps.</div>
+        </div>
+        </div>
+      </section>
+
+      <section class="lesson-intro">
+        <p>A flat map distorts everything; a globe fixes it, but you can only own one and only one student can spin it. AthenaBoard puts a real teaching globe on every screen — satellite or political, with country borders, capitals, rivers, the equator and tropics, and labels that reveal themselves as students zoom in.</p>
+      </section>
+
+      <section class="lesson-outline" id="outline">
+        <div class="pricing-heading">
+          <span class="section-kicker">45-minute outline</span>
+          <h2>How to teach it</h2>
+        </div>
+        <ol class="teach-steps">
+            <li>Orient (5 min): find the equator and the tropics; why are they there?</li>
+            <li>Explore (15 min): students zoom into a continent and read the capitals that appear.</li>
+            <li>Compare (10 min): switch between satellite and political views of the same region.</li>
+            <li>Check (10 min): a quick map-reading check pushed to every device.</li>
+          </ol>
+        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
+      </section>
+
+      <section class="lesson-standard-block">
+        <div class="std-card">
+          <span class="section-kicker">Standard</span>
+          <h3>Geography 5–9</h3>
+          <p>This lesson is built to support Geography 5–9 for Grades 5–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
+        </div>
+      </section>
+
+      <section class="lesson-quote">
+        <figure class="testimonial verified wide">
+          <blockquote>&ldquo;Every kid spinning their own globe beat the one wall map we all used to crowd around.&rdquo;</blockquote>
+          <figcaption>
+            <span class="t-name">Sarah K.</span>
+            <span class="t-role">6th-grade geography · Oregon</span>
+            <span class="t-badge">✔ Verified school educator</span>
+          </figcaption>
+          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
+        </figure>
+      </section>
+
+      <section class="lesson-cta">
+        <h2>Teach 3D Teaching Globe for Classrooms tomorrow.</h2>
+        <p>Open the live board, invite your class, and start.</p>
+        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
+      </section>
+
+      <section class="lesson-related">
+        <div class="pricing-heading center">
+          <span class="section-kicker">More live lessons</span>
+          <h2>Keep going</h2>
+        </div>
+        <div class="rel-grid">
+          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
+          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
+          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="authDialog" class="modal">
+    <form method="dialog" class="modal-card">
+      <button class="modal-close" value="cancel" aria-label="Close">×</button>
+      <h2 id="authTitle">Sign up free</h2>
+      <div class="two-col auth-names" id="authNames">
+        <label>First name<input id="firstName" autocomplete="given-name" /></label>
+        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
+      </div>
+      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
+      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
+      <ul class="pw-hints" id="pwHints" style="display:none">
+        <li data-rule="len">At least 8 characters</li>
+        <li data-rule="num">At least one number</li>
+      </ul>
+      <div class="modal-error" id="authError" role="alert"></div>
+      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
+      <a class="google-link" href="/auth/google">Continue with Google</a>
+      <p class="switch-auth" id="switchAuth"></p>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="/viz3d.js?v=20260726-v23"></script>
+  <script src="/graphdemo.js?v=20260729-v25"></script>
+  <script src="/common.js?v=20260729-v25"></script>
+  <script src="/lesson.js?v=20260729-v25"></script>
+</body>
+</html>

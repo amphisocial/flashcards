@@ -50,17 +50,22 @@
         <section class="tool-section" data-section="tools">
           <button class="tool-section-head" data-target="sec-tools"><span>Tools</span><span class="chev">▾</span></button>
           <div class="tool-section-body" id="sec-tools">
+            <!-- Primary tools: the five a teacher reaches for constantly. -->
             <div class="tool-group" role="group" aria-label="Tools">
               <button class="tool-btn active" data-tool="pen" title="Pen">✏️</button>
               <button class="tool-btn" data-tool="shape" title="Draw &amp; snap shape">◻︎</button>
-              <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
               <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
+              <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
+              <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
+              <button class="tool-btn more-toggle" id="moreToolsToggle" title="More tools" aria-expanded="false">⋯</button>
+            </div>
+            <!-- Secondary tools: available, but not competing for attention. -->
+            <div class="tool-group more-tools" id="moreTools" role="group" aria-label="More tools" hidden>
               <button class="tool-btn" data-tool="pan" title="Pan (or hold Space)">✋</button>
               <button class="tool-btn" data-tool="move" title="Move shapes">✥</button>
               <button class="tool-btn" data-tool="connect" title="Connect two shapes">⇢</button>
               <button class="tool-btn" data-tool="laser" title="Laser pointer (live only)">🔴</button>
               <button class="tool-btn" data-tool="note" title="Sticky note">🗒️</button>
-              <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
             </div>
             <div class="tool-group colors" role="group" aria-label="Color">
               <button class="swatch active" data-color="#eef6ff" style="--sw:#eef6ff"></button>
@@ -73,9 +78,9 @@
           </div>
         </section>
 
-        <section class="tool-section" data-section="page">
+        <section class="tool-section collapsed" data-section="page">
           <button class="tool-section-head" data-target="sec-page"><span>Page</span><span class="chev">▾</span></button>
-          <div class="tool-section-body" id="sec-page">
+          <div class="tool-section-body" id="sec-page" style="display:none">
             <label class="size-label">Template
               <select id="templateSelect">
                 <option value="blank">Blank</option>

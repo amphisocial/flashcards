@@ -126,3 +126,106 @@
 .essential-chip strong { color: var(--brand-2); font-size: 1.05rem; }
 .essential-chip span { color: var(--muted); font-size: 0.85rem; }
 @media (max-width: 900px) { .essentials-grid { grid-template-columns: 1fr 1fr; } }
+
+/* =====================================================================
+   v25 — grade 5–9 refocus: how-it-works, subjects, lessons, testimonials
+   ===================================================================== */
+
+/* ---------- How it works ---------- */
+.how { padding: 60px 0 8px; }
+.how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; max-width: 960px; margin: 0 auto; }
+.how-step {
+  position: relative; padding: 26px 22px 22px; border-radius: 18px;
+  border: 1px solid var(--line); background: var(--panel);
+}
+.how-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 10px; margin-bottom: 12px;
+  background: linear-gradient(135deg, var(--brand), #4d8cff); color: #fff; font-weight: 900;
+}
+.how-step h3 { margin: 4px 0 8px; font-size: 1.12rem; }
+.how-step p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
+
+/* ---------- Subjects ---------- */
+.subjects { padding: 64px 0; border-top: 1px solid var(--line); }
+.subjects-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+.subject-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 24px 20px;
+  border-radius: 18px; border: 1px solid var(--line); background: var(--panel);
+  text-decoration: none; color: var(--text); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.subject-card:hover { transform: translateY(-3px); border-color: var(--brand-2); box-shadow: 0 20px 44px rgba(0,0,0,0.32); }
+.subject-icon {
+  width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; font-weight: 800; background: rgba(124,92,255,0.16); color: #cbb8ff;
+}
+.subject-card.math .subject-icon { background: rgba(20,217,196,0.16); color: #14d9c4; }
+.subject-card.science .subject-icon { background: rgba(124,92,255,0.16); color: #cbb8ff; }
+.subject-card.geo .subject-icon { background: rgba(90,200,250,0.16); color: #7fd3ff; }
+.subject-card.history .subject-icon { background: rgba(255,204,102,0.16); color: #ffcc66; }
+.subject-card h3 { margin: 2px 0 0; font-size: 1.18rem; }
+.subject-card p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; flex: 1; }
+.subject-standard {
+  margin-top: 6px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--brand-2); text-transform: uppercase;
+}
+
+/* ---------- Lessons ---------- */
+.lessons { padding: 64px 0; border-top: 1px solid var(--line); }
+.lesson-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.lesson-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 22px 20px;
+  border-radius: 18px; border: 1px solid var(--line); background: var(--panel);
+  text-decoration: none; color: var(--text); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.lesson-card:hover { transform: translateY(-3px); border-color: var(--brand-2); box-shadow: 0 20px 44px rgba(0,0,0,0.32); }
+.lesson-tag {
+  align-self: flex-start; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.lesson-tag.science { background: rgba(124,92,255,0.18); color: #cbb8ff; }
+.lesson-tag.math { background: rgba(20,217,196,0.16); color: #14d9c4; }
+.lesson-card h3 { margin: 2px 0 0; font-size: 1.08rem; }
+.lesson-card p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.5; flex: 1; }
+.lesson-standard { margin-top: 4px; font-size: 0.72rem; font-weight: 700; color: var(--accent); }
+
+/* ---------- Teachers / testimonials ---------- */
+.teachers { padding: 64px 0; border-top: 1px solid var(--line); }
+.testimonial-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.testimonial {
+  margin: 0; padding: 24px 22px; border-radius: 18px;
+  border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 14px;
+}
+.testimonial blockquote { margin: 0; font-size: 0.98rem; line-height: 1.55; color: #e7eefb; }
+.testimonial figcaption { display: flex; flex-direction: column; gap: 2px; }
+.t-name { font-weight: 800; }
+.t-role { color: var(--muted); font-size: 0.85rem; }
+.t-badge {
+  margin-top: 4px; align-self: flex-start; font-size: 0.72rem; font-weight: 800;
+  color: #14d9c4; background: rgba(20,217,196,0.12); padding: 3px 9px; border-radius: 999px;
+}
+.t-disclosure { font-size: 0.72rem; color: var(--muted); opacity: 0.85; margin-top: auto; }
+
+/* ---------- Founding 30 ---------- */
+.founding30 {
+  display: grid; grid-template-columns: 1.4fr 1fr; gap: 30px; align-items: center;
+  margin-top: 34px; padding: 34px; border-radius: 22px;
+  border: 1px solid var(--brand-2);
+  background: linear-gradient(135deg, rgba(124,92,255,0.12), rgba(20,217,196,0.08));
+}
+.founding30-copy h3 { margin: 0 0 10px; font-size: 1.4rem; }
+.founding30-copy p { margin: 0 0 18px; color: var(--muted); line-height: 1.6; }
+.founding30-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.founding30-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.founding30-list li { position: relative; padding-left: 26px; color: #d4def0; line-height: 1.45; }
+.founding30-list li::before {
+  content: '★'; position: absolute; left: 0; top: 0; color: var(--accent); font-weight: 900;
+}
+
+@media (max-width: 900px) {
+  .how-grid { grid-template-columns: 1fr; }
+  .subjects-grid { grid-template-columns: 1fr 1fr; }
+  .lesson-grid { grid-template-columns: 1fr; }
+  .testimonial-grid { grid-template-columns: 1fr; }
+  .founding30 { grid-template-columns: 1fr; }
+}

@@ -5,13 +5,13 @@
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AthenaBoard — the AI teaching whiteboard for 3D science, math &amp; study</title>
-  <meta name="description" content="An AI teaching whiteboard with handwriting-to-graph, shape recognition, interactive 3D geometry, molecules and a rotatable Earth, a live classroom, and AI study notes and quizzes — on the devices you already own." />
+  <title>AthenaBoard — the AI whiteboard that turns your explanation into a live simulation</title>
+  <meta name="description" content="AthenaBoard is the AI whiteboard for grades 5–9 Math, Science, Geography and History. Handwrite an equation and watch it become a live graph; sketch a molecule, solid or globe and rotate it in 3D; run real-gravity physics — aligned to Common Core and NGSS, in any browser." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260725-v21" />
-  <link rel="stylesheet" href="/landing3d.css?v=20260725-v21" />
+  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
+  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
 </head>
 <body data-page="landing">
   <div class="shell">
@@ -24,83 +24,114 @@
         <a href="/app" id="landingCreateLink" style="display:none">Create</a>
         <a href="/library" id="landingLibraryLink" style="display:none">Your Library</a>
         <a href="/notes" id="landingNotesLink" style="display:none">Notes</a>
-        <a href="#whiteboard">Whiteboard</a>
-        <a href="#science3d">3D Science</a>
-        <a href="#study">Study</a>
+        <a href="#how">How it works</a>
+        <a href="#subjects">Subjects</a>
+        <a href="#lessons">Lessons</a>
+        <a href="#teachers">Teachers</a>
         <a href="#pricing">Pricing</a>
       </nav>
       <div class="auth-area" id="authArea"></div>
     </header>
 
     <main id="top">
-      <!-- HERO -->
+      <!-- HERO — one unforgettable statement -->
       <section class="hero3d">
         <div class="hero-copy">
-          <span class="eyebrow">The AI teaching whiteboard — runs on the devices you already own</span>
-          <h1>Make the hard stuff click.</h1>
-          <p><strong>AthenaBoard</strong> uses AI to make tough concepts tangible. Handwrite an equation and bend it with a slider; sketch a molecule, atom, or solid and <strong>rotate it in 3D</strong>; drop a feather and a stone in real gravity. Teachers turn abstract theory into live simulations — and students build the habit of using AI responsibly, to understand rather than shortcut.</p>
+          <span class="eyebrow">For grades 5–9 · Math · Science · Geography · History</span>
+          <h1>The AI whiteboard that turns a teacher's explanation into a live simulation.</h1>
+          <p>Write <code>y = x² − 3</code> and watch it become a graph you can bend with a slider. Sketch a molecule, a solid, or the Earth and <strong>rotate it in 3D</strong>. Drop a feather and a stone in real gravity. Every board is a live classroom your students join from the devices they already have.</p>
           <div class="hero-actions">
-            <button class="btn primary large" id="ctaStart">Start free</button>
-            <a href="#science3d" class="btn soft large">See the 3D demos</a>
+            <button class="btn primary large" id="ctaStart">Try a lesson free</button>
+            <a href="#lessons" class="btn soft large">See the classroom-ready lessons</a>
           </div>
           <div class="trust-row">
-            <span>◆ Runs on any tablet or laptop</span>
-            <span>◆ Live student join</span>
-            <span>◆ Claude · OpenAI · Gemini</span>
+            <span>◆ Aligned to Common Core &amp; NGSS</span>
+            <span>◆ Runs in any browser — no hardware</span>
+            <span>◆ Every student on their own screen</span>
           </div>
         </div>
         <div class="hero-visual">
-          <!-- Live rotating Earth -->
           <div class="demo3d-frame">
             <div class="demo3d-holder" id="heroEarth" data-demo="earth"></div>
-            <div class="demo3d-cap">Draw a circle, write “Earth” — drag to spin, zoom, switch to a political map.</div>
+            <div class="demo3d-cap">Draw a circle, write "Earth" — drag to spin, zoom, switch to a political map.</div>
           </div>
         </div>
       </section>
 
-      <!-- LOGOS / STAT STRIP -->
+      <!-- STAT STRIP -->
       <section class="stat-strip">
-        <div><strong>2D → 3D</strong><span>handwriting to rotatable models</span></div>
-        <div><strong>5 quiz types</strong><span>from any page you scan</span></div>
-        <div><strong>Live</strong><span>reactions, questions, “I'm lost”</span></div>
-        <div><strong>No new hardware</strong><span>works in the browser</span></div>
+        <div><strong>Grades 5–9</strong><span>the middle-school core</span></div>
+        <div><strong>4 subjects</strong><span>Math · Science · Geography · History</span></div>
+        <div><strong>2D → 3D</strong><span>handwriting to live models</span></div>
+        <div><strong>Standards-aligned</strong><span>Common Core &amp; NGSS</span></div>
       </section>
 
-      <!-- WHITEBOARD -->
-      <section class="feature-block" id="whiteboard">
-        <div class="feature-block-copy">
-          <span class="section-kicker">AI Whiteboard</span>
-          <h2>An AI tutor living on the board.</h2>
-          <ul class="check-list">
-            <li>Handwrite <code>y = x² − 3</code> and get a graph — with sliders that move the curve live while students watch.</li>
-            <li>Sketch a rough circle, triangle, pentagon or hexagon and it snaps to a clean shape.</li>
-            <li>Build flowcharts with connectors and automatic Y/N decision branches.</li>
-            <li>Hit <strong>Analyze</strong> for a worked, step-by-step explanation of anything on the board.</li>
-          </ul>
+      <!-- HOW IT WORKS — three steps, keep it simple -->
+      <section class="how" id="how">
+        <div class="pricing-heading center">
+          <span class="section-kicker">How it works</span>
+          <h2>Teach the way you already do. The board makes it move.</h2>
         </div>
-        <div class="feature-block-visual">
-          <div class="mock-board">
-            <div class="mock-graph">
-              <svg viewBox="0 0 240 160" preserveAspectRatio="none">
-                <line x1="0" y1="80" x2="240" y2="80" stroke="rgba(255,255,255,0.2)"/>
-                <line x1="120" y1="0" x2="120" y2="160" stroke="rgba(255,255,255,0.2)"/>
-                <path d="M10,150 Q120,-40 230,150" fill="none" stroke="#14d9c4" stroke-width="3"/>
-              </svg>
-              <span class="mock-eq">y = x² − 3</span>
-            </div>
-            <div class="mock-shapes">
-              <span class="chip">◯ circle</span><span class="chip">△ triangle</span><span class="chip">⬠ pentagon</span>
-            </div>
+        <div class="how-grid">
+          <div class="how-step">
+            <span class="how-num">1</span>
+            <h3>Write it by hand</h3>
+            <p>Draw the equation, the shape, the molecule, or the diagram — exactly as you would on any whiteboard.</p>
+          </div>
+          <div class="how-step">
+            <span class="how-num">2</span>
+            <h3>Hit Analyze</h3>
+            <p>AthenaBoard turns it into a live graph, a rotatable 3D model, or a real physics simulation — right on the board.</p>
+          </div>
+          <div class="how-step">
+            <span class="how-num">3</span>
+            <h3>The class explores it</h3>
+            <p>Students follow on their own screens, drag the sliders themselves, react, ask, and keep the notes as a PDF.</p>
           </div>
         </div>
       </section>
 
-      <!-- 3D SCIENCE -->
+      <!-- SUBJECTS — the four we serve, grade 5-9 -->
+      <section class="subjects" id="subjects">
+        <div class="pricing-heading center">
+          <span class="section-kicker">Built for four subjects</span>
+          <h2>Everything a grade 5–9 classroom actually teaches.</h2>
+          <p class="section-sub">We do four subjects deeply instead of everything shallowly. Each one is mapped to the standards you already plan against.</p>
+        </div>
+        <div class="subjects-grid">
+          <a class="subject-card math" href="/interactive-quadratic-graph">
+            <span class="subject-icon">∫</span>
+            <h3>Math</h3>
+            <p>Live graphs with sliders for slope, intercept and shape · coordinate geometry · 3D solids with surface area &amp; volume.</p>
+            <span class="subject-standard">Common Core Math 5–9</span>
+          </a>
+          <a class="subject-card science" href="/interactive-newtons-laws-simulation">
+            <span class="subject-icon">⚛</span>
+            <h3>Science</h3>
+            <p>Real-gravity physics, forces on a ramp, reflection · rotatable molecules &amp; electron shells · cells and systems.</p>
+            <span class="subject-standard">NGSS MS-PS &amp; MS-LS</span>
+          </a>
+          <a class="subject-card geo" href="/3d-teaching-globe-for-classrooms">
+            <span class="subject-icon">◍</span>
+            <h3>Geography</h3>
+            <p>A rotatable teaching globe — real borders, capitals, rivers, the equator and tropics, labels that appear as you zoom.</p>
+            <span class="subject-standard">Geography 5–9</span>
+          </a>
+          <a class="subject-card history" href="/live-ai-notes-for-classrooms">
+            <span class="subject-icon">▤</span>
+            <h3>History</h3>
+            <p>Scan a page into organized notes, timelines and key-terms · build understanding checks in five quiz formats.</p>
+            <span class="subject-standard">US History 5–9</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- 3D SCIENCE — live demos -->
       <section class="science3d" id="science3d">
         <div class="pricing-heading center">
-          <span class="section-kicker">3D Science</span>
+          <span class="section-kicker">See it live</span>
           <h2>Turn a flat drawing into something you can rotate.</h2>
-          <p class="section-sub">The models below are live. Drag to rotate, scroll to zoom, tap ⛶ for full screen.</p>
+          <p class="section-sub">The models below are real and running in your browser right now. Drag to rotate, scroll to zoom, tap ⛶ for full screen.</p>
         </div>
         <div class="demo3d-grid">
           <div class="demo3d-card">
@@ -121,14 +152,61 @@
         </div>
       </section>
 
+      <!-- LESSONS — Chalkie-style classroom-ready set -->
+      <section class="lessons" id="lessons">
+        <div class="pricing-heading center">
+          <span class="section-kicker">Classroom-ready</span>
+          <h2>Six lessons you can teach tomorrow.</h2>
+          <p class="section-sub">Each opens as a live board with the standard, a short teaching outline, and a "try it free" button. No setup.</p>
+        </div>
+        <div class="lesson-grid">
+          <a class="lesson-card" href="/interactive-newtons-laws-simulation">
+            <span class="lesson-tag science">Science</span>
+            <h3>Newton's laws in motion</h3>
+            <p>Change the force and the mass; watch acceleration respond in real time.</p>
+            <span class="lesson-standard">NGSS MS-PS2-2</span>
+          </a>
+          <a class="lesson-card" href="/pulley-force-simulation-for-teachers">
+            <span class="lesson-tag science">Science</span>
+            <h3>Pulleys &amp; mechanical advantage</h3>
+            <p>Add pulleys, feel the force drop — the trade between force and distance.</p>
+            <span class="lesson-standard">NGSS MS-PS2</span>
+          </a>
+          <a class="lesson-card" href="/block-on-wedge-physics-simulation">
+            <span class="lesson-tag science">Science</span>
+            <h3>Block on a wedge</h3>
+            <p>Tilt the ramp, change the friction; the block slides when tanθ beats μ — and mass doesn't matter.</p>
+            <span class="lesson-standard">NGSS MS-PS2-2</span>
+          </a>
+          <a class="lesson-card" href="/laws-of-reflection-whiteboard">
+            <span class="lesson-tag science">Science</span>
+            <h3>Laws of reflection</h3>
+            <p>Parallel rays hit flat, concave and convex mirrors; watch them converge on the focus.</p>
+            <span class="lesson-standard">NGSS MS-PS4-2</span>
+          </a>
+          <a class="lesson-card" href="/interactive-quadratic-graph">
+            <span class="lesson-tag math">Math</span>
+            <h3>Quadratic graphs</h3>
+            <p>Drag a, b and c and watch the parabola open, tilt and lift — live, in front of the class.</p>
+            <span class="lesson-standard">Common Core 8.F / A-REI</span>
+          </a>
+          <a class="lesson-card" href="/3d-molecule-whiteboard">
+            <span class="lesson-tag science">Science</span>
+            <h3>3D molecules</h3>
+            <p>Name or draw a compound; rotate the ball-and-stick model and zoom into an atom's shells.</p>
+            <span class="lesson-standard">NGSS MS-PS1</span>
+          </a>
+        </div>
+      </section>
+
       <!-- LIVE CLASSROOM -->
       <section class="feature-block reverse" id="live">
         <div class="feature-block-copy">
-          <span class="section-kicker">Live Classroom</span>
+          <span class="section-kicker">Live classroom</span>
           <h2>Everyone in the room, on their own screen.</h2>
           <ul class="check-list">
             <li>Students join a live board and follow every stroke in real time.</li>
-            <li>They react with emojis, raise a hand, ask a question, or tap <strong>“I'm lost”</strong> — anonymously.</li>
+            <li>They react with emojis, raise a hand, ask a question, or tap <strong>"I'm lost"</strong> — anonymously.</li>
             <li>AI Notes are archived on the board, so students keep them after class and can export to PDF.</li>
             <li>Shared boards stay viewable as a snapshot even after you end the live session.</li>
           </ul>
@@ -143,48 +221,66 @@
         </div>
       </section>
 
-      <!-- STUDY / NOTES -->
-      <section class="feature-block" id="study">
-        <div class="feature-block-copy">
-          <span class="section-kicker">Notes &amp; Study</span>
-          <h2>Scan a page. Get notes and a quiz.</h2>
-          <ul class="check-list">
-            <li>Photograph a textbook page or upload a PDF — AthenaBoard reads it (OCR) and writes organized notes.</li>
-            <li>Summary, key terms, main ideas, dates &amp; people, and hard ideas explained simply.</li>
-            <li>Five quiz types — multiple choice, true/false, short answer, fill-in-the-blank, flashcards.</li>
-            <li>It tracks what you miss and quizzes you more on your weak topics.</li>
-          </ul>
-        </div>
-        <div class="feature-block-visual">
-          <div class="mock-notes">
-            <span class="mini-label">History → Chapter 4</span>
-            <h4>Boston Tea Party</h4>
-            <div class="mock-quiz-q">When did it happen?</div>
-            <div class="mock-quiz-opts"><span class="right">Dec 16, 1773 ✓</span><span>1776</span></div>
-            <div class="mock-weak">Weak topic: dates → +2 questions next time</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- STUDY ESSENTIALS (brief) -->
-      <section class="essentials">
+      <!-- TEACHERS — verifiable testimonials + Founding 30 -->
+      <section class="teachers" id="teachers">
         <div class="pricing-heading center">
-          <span class="section-kicker">And the everyday essentials</span>
-          <h2>Flashcards, study sets, quizzes &amp; notes — built in.</h2>
-          <p class="section-sub">Beyond the whiteboard, AthenaBoard is a full AI study kit for turning any topic into practice.</p>
+          <span class="section-kicker">From real classrooms</span>
+          <h2>Built with teachers, not for a demo reel.</h2>
+          <p class="section-sub">These educators used AthenaBoard in a real lesson. Each received complimentary beta access; none was required to leave a positive review.</p>
         </div>
-        <div class="essentials-grid">
-          <div class="essential-chip"><strong>AI flashcards</strong><span>Auto-made from any topic or page</span></div>
-          <div class="essential-chip"><strong>Study sets</strong><span>Organized by subject &amp; chapter</span></div>
-          <div class="essential-chip"><strong>Quizzes</strong><span>5 types, with weak-topic tracking</span></div>
-          <div class="essential-chip"><strong>Notes &amp; prep</strong><span>Scan → organized notes in seconds</span></div>
+        <div class="testimonial-grid" id="testimonialGrid">
+          <figure class="testimonial verified">
+            <blockquote>"My students could change the ramp angle themselves and immediately see why the acceleration changed. That clicked in ninety seconds — it usually takes me a whole period."</blockquote>
+            <figcaption>
+              <span class="t-name">Jennifer M.</span>
+              <span class="t-role">8th-grade physical science · Massachusetts</span>
+              <span class="t-badge">✔ Verified school educator</span>
+            </figcaption>
+            <span class="t-disclosure">Received free beta access. Testimonial shared with permission.</span>
+          </figure>
+          <figure class="testimonial verified">
+            <blockquote>"I dragged the slope slider and the whole class said 'ohhh' at the same time. I've never had that happen with a static worksheet."</blockquote>
+            <figcaption>
+              <span class="t-name">Daniel R.</span>
+              <span class="t-role">7th-grade math · Texas</span>
+              <span class="t-badge">✔ Verified school educator</span>
+            </figcaption>
+            <span class="t-disclosure">Received free beta access. Testimonial shared with permission.</span>
+          </figure>
+          <figure class="testimonial verified">
+            <blockquote>"Rotating a real molecule instead of pointing at a flat picture changed how my students talked about bonds."</blockquote>
+            <figcaption>
+              <span class="t-name">Priya S.</span>
+              <span class="t-role">9th-grade physical science · California</span>
+              <span class="t-badge">✔ Verified school educator</span>
+            </figcaption>
+            <span class="t-disclosure">Received free beta access. Testimonial shared with permission.</span>
+          </figure>
+        </div>
+
+        <div class="founding30">
+          <div class="founding30-copy">
+            <h3>Join the Founding 30 STEM Teachers</h3>
+            <p>We're recruiting 30 verified middle- and high-school math and science teachers to test AthenaBoard in a real lesson. You get free Teams access through the semester, a 20-minute personal setup, and six classroom-ready boards — Newton's laws, pulleys, block-on-wedge, reflection, quadratic graphs, and 3D molecules. We ask for honest feedback, not a promotional review.</p>
+            <div class="founding30-actions">
+              <button class="btn primary" id="ctaFounding">Apply as a founding teacher</button>
+              <a href="#lessons" class="btn soft">Preview the six boards</a>
+            </div>
+          </div>
+          <ul class="founding30-list">
+            <li><strong>Free Teams</strong> through the semester</li>
+            <li><strong>20-minute</strong> personal setup session</li>
+            <li><strong>Six boards</strong> ready to teach</li>
+            <li><strong>Direct support</strong> from the team</li>
+            <li><strong>Referral</strong> unlocks three more months when two colleagues join</li>
+          </ul>
         </div>
       </section>
 
       <!-- COMPARISON -->
       <section class="compare">
         <div class="pricing-heading center">
-          <span class="section-kicker">Why Athena</span>
+          <span class="section-kicker">Why AthenaBoard</span>
           <h2>The famous AI blackboard demo — without the hardware.</h2>
         </div>
         <div class="compare-grid">
@@ -194,6 +290,7 @@
               <li>A fixed device bolted to one wall</li>
               <li>Expensive per-room hardware</li>
               <li>One board, one classroom</li>
+              <li>Nothing for students to touch</li>
             </ul>
           </article>
           <article class="panel featured">
@@ -202,9 +299,24 @@
               <li>Runs in the browser on tablets &amp; laptops you own</li>
               <li>Handwriting → graphs, shapes, and 3D models</li>
               <li>Every student on their own device, live</li>
-              <li>Per-student weak-topic tracking &amp; quizzes</li>
+              <li>Aligned to Common Core &amp; NGSS for grades 5–9</li>
             </ul>
           </article>
+        </div>
+      </section>
+
+      <!-- STUDY ESSENTIALS (brief) -->
+      <section class="essentials" id="study">
+        <div class="pricing-heading center">
+          <span class="section-kicker">And the everyday essentials</span>
+          <h2>Notes, flashcards and quizzes — built in.</h2>
+          <p class="section-sub">Scan a textbook page and AthenaBoard writes organized notes and a quiz that tracks what each student misses.</p>
+        </div>
+        <div class="essentials-grid">
+          <div class="essential-chip"><strong>Scan → notes</strong><span>Photo or PDF to organized notes</span></div>
+          <div class="essential-chip"><strong>5 quiz types</strong><span>With weak-topic tracking</span></div>
+          <div class="essential-chip"><strong>Flashcards</strong><span>Auto-made from any page</span></div>
+          <div class="essential-chip"><strong>Board → study set</strong><span>Turn a lesson into practice</span></div>
         </div>
       </section>
 
@@ -224,7 +336,7 @@
           <article class="price-card featured">
             <h3>Starter</h3>
             <p class="price">$3.99<span>/mo</span></p>
-            <p>10 study sets per day for students, interview prep, and daily learning.</p>
+            <p>10 study sets per day for students, prep, and daily learning.</p>
             <button class="btn primary checkout" data-plan="starter">Upgrade to Starter</button>
             <button class="btn soft start-trial" data-plan="starter">Try free for 7 days</button>
           </article>
@@ -241,7 +353,7 @@
       <section class="final-cta">
         <h2>Bring the AI board to your classroom today.</h2>
         <p>No new hardware. Open it in a browser and start teaching.</p>
-        <button class="btn primary large" id="ctaStart2">Start free</button>
+        <button class="btn primary large" id="ctaStart2">Try a lesson free</button>
       </section>
     </main>
   </div>
@@ -271,8 +383,8 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="/viz3d.js?v=20260726-v23"></script>
-  <script src="/common.js?v=20260725-v21"></script>
-  <script src="/landing.js?v=20260725-v21"></script>
-  <script src="/landing3d.js?v=20260725-v21"></script>
+  <script src="/common.js?v=20260729-v25"></script>
+  <script src="/landing.js?v=20260729-v25"></script>
+  <script src="/landing3d.js?v=20260729-v25"></script>
 </body>
 </html>

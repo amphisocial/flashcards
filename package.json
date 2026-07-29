@@ -1,12 +1,17 @@
 {
-  "name": "athena-flashcards",
+  "name": "athenaboard",
   "version": "0.1.0",
   "private": true,
-  "description": "AI-driven flashcards, quizzes, and slide study sets for AthenaBot.",
+  "description": "AthenaBoard — the AI whiteboard that turns a teacher's explanation into a live simulation. Grades 5–9 Math, Science, Geography and History.",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "dev": "NODE_ENV=development node server/server.js"
+    "dev": "NODE_ENV=development node server/server.js",
+    "build:lessons": "node scripts/build-lesson-pages.js",
+    "test": "npm run test:graph && npm run test:board && npm run test:marketing",
+    "test:graph": "node scripts/test-graphdemo.js",
+    "test:board": "node scripts/test-board-ui.js",
+    "test:marketing": "node scripts/smoke-marketing.js"
   },
   "engines": {
     "node": ">=18"

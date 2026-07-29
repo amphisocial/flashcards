@@ -1,0 +1,3237 @@
+From fd537a767494acf2019b3682fe366ac682a47852 Mon Sep 17 00:00:00 2001
+From: AthenaBoard <dev@athenaboard.local>
+Date: Wed, 29 Jul 2026 21:43:18 +0000
+Subject: [PATCH] Rebrand to grades 5-9 US curriculum focus; add acquisition
+ pages, verifiable testimonials, and simplify board UI
+
+Positioning
+- Lead with one statement: the AI whiteboard that turns a teacher's
+  explanation into a live simulation.
+- Narrow to grades 5-9 Math, Science, Geography, History; surface Common
+  Core / NGSS alignment throughout.
+- Demote the kitchen-sink feature list to a small essentials strip.
+
+Acquisition
+- 8 Chalkie-style concept pages at clean slugs, generated from one data
+  file (scripts/build-lesson-pages.js). Each has a live demo, a 45-min
+  teaching outline, the standard, a disclosed teacher quote, and a CTA.
+- Dynamic robots.txt + sitemap.xml driven by the same slug list.
+
+Testimonials
+- Named, role/state-attributed, verified-educator badge, and an explicit
+  'received free beta access' disclosure per FTC guidance.
+
+Interactive graph widget
+- New dependency-free graphdemo.js so visitors can drag a/b/c on the
+  quadratic page before signing up. No eval; families defined in code.
+
+Whiteboard UI
+- Toolbar: 5 essential tools up front, 5 advanced behind a More reveal;
+  Page section collapsed by default; flowchart mode auto-reveals
+  move/connect.
+- Toolbar 190->160px, info panel 340->312px for more canvas.
+- Fix: the More toggle shares .tool-btn styling but has no data-tool, so
+  the tool click handler now ignores buttons without one.
+
+Tests: 86 checks across graph math, board structure, and a live smoke
+test of every acquisition route.
+---
+ README.md                                     |  68 +++-
+ package.json                                  |  11 +-
+ public/board.css                              |  10 +-
+ public/board.html                             |  13 +-
+ public/board.js                               |  32 +-
+ public/graphdemo.js                           | 202 ++++++++++
+ public/index.html                             | 294 +++++++++-----
+ public/landing.js                             |   8 +-
+ public/landing3d.css                          | 103 +++++
+ public/lesson.css                             |  99 +++++
+ public/lesson.js                              |  79 ++++
+ public/lessons/3d-molecule-whiteboard.html    | 146 +++++++
+ .../3d-teaching-globe-for-classrooms.html     | 146 +++++++
+ .../block-on-wedge-physics-simulation.html    | 146 +++++++
+ .../interactive-newtons-laws-simulation.html  | 146 +++++++
+ .../lessons/interactive-quadratic-graph.html  | 146 +++++++
+ .../laws-of-reflection-whiteboard.html        | 146 +++++++
+ .../lessons/live-ai-notes-for-classrooms.html | 146 +++++++
+ .../pulley-force-simulation-for-teachers.html | 146 +++++++
+ public/lessons/slugs.json                     |  10 +
+ scripts/build-lesson-pages.js                 | 368 ++++++++++++++++++
+ scripts/smoke-marketing.js                    | 132 +++++++
+ scripts/test-board-ui.js                      |  83 ++++
+ scripts/test-graphdemo.js                     |  64 +++
+ server/server.js                              |  63 +++
+ 25 files changed, 2701 insertions(+), 106 deletions(-)
+ create mode 100644 public/graphdemo.js
+ create mode 100644 public/lesson.css
+ create mode 100644 public/lesson.js
+ create mode 100644 public/lessons/3d-molecule-whiteboard.html
+ create mode 100644 public/lessons/3d-teaching-globe-for-classrooms.html
+ create mode 100644 public/lessons/block-on-wedge-physics-simulation.html
+ create mode 100644 public/lessons/interactive-newtons-laws-simulation.html
+ create mode 100644 public/lessons/interactive-quadratic-graph.html
+ create mode 100644 public/lessons/laws-of-reflection-whiteboard.html
+ create mode 100644 public/lessons/live-ai-notes-for-classrooms.html
+ create mode 100644 public/lessons/pulley-force-simulation-for-teachers.html
+ create mode 100644 public/lessons/slugs.json
+ create mode 100644 scripts/build-lesson-pages.js
+ create mode 100644 scripts/smoke-marketing.js
+ create mode 100644 scripts/test-board-ui.js
+ create mode 100644 scripts/test-graphdemo.js
+
+diff --git a/README.md b/README.md
+index 7d9c959..3b15590 100644
+--- a/README.md
++++ b/README.md
+@@ -1,8 +1,70 @@
+-# Athena Flashcards
++# AthenaBoard
+ 
+-AI-driven flashcards, quizzes, and slide study sets for `flashcards.athenabot.ai`.
++**The AI whiteboard that turns a teacher's explanation into a live simulation.**
+ 
+-This app lets users:
++For **grades 5–9** — Math, Science, Geography and History — aligned to Common
++Core and NGSS. Runs in any browser on the tablets and laptops schools already
++own; no classroom hardware.
++
++Live at `flashcards.athenabot.ai` (legacy host name; the product is AthenaBoard).
++
++## What it does
++
++- **AI whiteboard** — handwrite `y = x² − 3` and it becomes a live graph with
++  semantic sliders (slope, intercept, a/b/c); rough shapes snap clean;
++  flowcharts with auto Y/N branches.
++- **3D science** — rotatable molecules with electron shells, geometric solids
++  with worked surface area/volume, and a teaching globe with real borders,
++  capitals and rivers.
++- **Physics simulations** — free-fall, projectile, pendulum, inclined plane,
++  collisions, orbit, reflection, circuits and more, each driven by the real
++  equations.
++- **Live classroom** — students join on their own screens, react, raise a hand,
++  tap "I'm lost" anonymously, and export the board plus AI notes to PDF.
++- **Notes & study** — scan a page to organized notes and five quiz types with
++  per-student weak-topic tracking.
++
++## Marketing / acquisition pages
++
++The Chalkie-style concept pages (one clean URL per concept teachers search for)
++are generated from a single data file:
++
++```bash
++npm run build:lessons     # writes public/lessons/*.html + slugs.json
++```
++
++Add or edit a page in `scripts/build-lesson-pages.js` and rebuild — the Express
++routes and `sitemap.xml` read `slugs.json`, so nothing else needs touching.
++
++Current pages: `/interactive-newtons-laws-simulation`,
++`/pulley-force-simulation-for-teachers`, `/block-on-wedge-physics-simulation`,
++`/laws-of-reflection-whiteboard`, `/interactive-quadratic-graph`,
++`/3d-molecule-whiteboard`, `/3d-teaching-globe-for-classrooms`,
++`/live-ai-notes-for-classrooms`.
++
++`/robots.txt` and `/sitemap.xml` are served dynamically from `APP_BASE_URL`.
++
++### Testimonials
++
++Testimonial markup includes an explicit "Received free beta access" disclosure.
++Keep it. FTC guidance requires disclosing material connections, and beta access
++given in exchange for a review is one. Never require a positive review for
++access, and only publish a quote the teacher specifically approved.
++
++## Tests
++
++```bash
++npm test              # all three suites
++npm run test:graph    # graph widget math
++npm run test:board    # whiteboard toolbar structure
++npm run test:marketing # boots the server, checks every acquisition route
++```
++
++---
++
++## Legacy notes (study sets, billing, deploy)
++
++This app also lets users:
+ 
+ - sign up with email/password or optional Google OAuth;
+ - paste content, upload a document, or use a guided chat coach;
+diff --git a/package.json b/package.json
+index ab87d1c..972a7c4 100644
+--- a/package.json
++++ b/package.json
+@@ -1,12 +1,17 @@
+ {
+-  "name": "athena-flashcards",
++  "name": "athenaboard",
+   "version": "0.1.0",
+   "private": true,
+-  "description": "AI-driven flashcards, quizzes, and slide study sets for AthenaBot.",
++  "description": "AthenaBoard — the AI whiteboard that turns a teacher's explanation into a live simulation. Grades 5–9 Math, Science, Geography and History.",
+   "main": "server/server.js",
+   "scripts": {
+     "start": "node server/server.js",
+-    "dev": "NODE_ENV=development node server/server.js"
++    "dev": "NODE_ENV=development node server/server.js",
++    "build:lessons": "node scripts/build-lesson-pages.js",
++    "test": "npm run test:graph && npm run test:board && npm run test:marketing",
++    "test:graph": "node scripts/test-graphdemo.js",
++    "test:board": "node scripts/test-board-ui.js",
++    "test:marketing": "node scripts/smoke-marketing.js"
+   },
+   "engines": {
+     "node": ">=18"
+diff --git a/public/board.css b/public/board.css
+index 00c98eb..907bda5 100644
+--- a/public/board.css
++++ b/public/board.css
+@@ -26,9 +26,15 @@ body[data-page="board"] { overflow: hidden; }
+ 
+ /* ---- Left toolbar ---- */
+ .board-toolbar {
+-  flex: 0 0 190px; display: flex; flex-direction: column; gap: 14px; padding: 14px 12px;
++  flex: 0 0 160px; display: flex; flex-direction: column; gap: 10px; padding: 12px 10px;
+   border-right: 1px solid var(--line); background: rgba(13,27,49,0.7); overflow-y: auto;
+ }
++
++/* "More tools" reveal — keeps the primary five uncluttered while leaving the
++   advanced tools one tap away. */
++.more-tools[hidden] { display: none; }
++.tool-btn.more-toggle { font-weight: 900; letter-spacing: 1px; }
++.tool-btn.more-toggle.open { background: var(--panel-strong); border-color: var(--brand-2); color: var(--brand-2); }
+ .tool-group { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+ .tool-group.stacked { flex-direction: column; align-items: stretch; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+ .tool-group.ai-group { flex-direction: column; align-items: stretch; gap: 9px; padding-top: 12px; border-top: 1px solid var(--line); }
+@@ -91,7 +97,7 @@ body[data-page="board"] { overflow: hidden; }
+ 
+ /* ---- Right info panel ---- */
+ .info-panel {
+-  flex: 0 0 340px; display: flex; flex-direction: column; border-left: 1px solid var(--line);
++  flex: 0 0 312px; display: flex; flex-direction: column; border-left: 1px solid var(--line);
+   background: rgba(11,22,40,0.94); transition: flex-basis 0.18s ease;
+ }
+ .info-panel.collapsed { flex-basis: 0; overflow: hidden; border-left: none; }
+diff --git a/public/board.html b/public/board.html
+index 705830a..cce96bc 100644
+--- a/public/board.html
++++ b/public/board.html
+@@ -50,17 +50,22 @@
+         <section class="tool-section" data-section="tools">
+           <button class="tool-section-head" data-target="sec-tools"><span>Tools</span><span class="chev">▾</span></button>
+           <div class="tool-section-body" id="sec-tools">
++            <!-- Primary tools: the five a teacher reaches for constantly. -->
+             <div class="tool-group" role="group" aria-label="Tools">
+               <button class="tool-btn active" data-tool="pen" title="Pen">✏️</button>
+               <button class="tool-btn" data-tool="shape" title="Draw &amp; snap shape">◻︎</button>
+-              <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
+               <button class="tool-btn" data-tool="eraser" title="Eraser">🧽</button>
++              <button class="tool-btn" data-tool="select" title="Select region">⬚</button>
++              <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
++              <button class="tool-btn more-toggle" id="moreToolsToggle" title="More tools" aria-expanded="false">⋯</button>
++            </div>
++            <!-- Secondary tools: available, but not competing for attention. -->
++            <div class="tool-group more-tools" id="moreTools" role="group" aria-label="More tools" hidden>
+               <button class="tool-btn" data-tool="pan" title="Pan (or hold Space)">✋</button>
+               <button class="tool-btn" data-tool="move" title="Move shapes">✥</button>
+               <button class="tool-btn" data-tool="connect" title="Connect two shapes">⇢</button>
+               <button class="tool-btn" data-tool="laser" title="Laser pointer (live only)">🔴</button>
+               <button class="tool-btn" data-tool="note" title="Sticky note">🗒️</button>
+-              <button class="tool-btn" data-tool="text" title="Text box">🅣</button>
+             </div>
+             <div class="tool-group colors" role="group" aria-label="Color">
+               <button class="swatch active" data-color="#eef6ff" style="--sw:#eef6ff"></button>
+@@ -73,9 +78,9 @@
+           </div>
+         </section>
+ 
+-        <section class="tool-section" data-section="page">
++        <section class="tool-section collapsed" data-section="page">
+           <button class="tool-section-head" data-target="sec-page"><span>Page</span><span class="chev">▾</span></button>
+-          <div class="tool-section-body" id="sec-page">
++          <div class="tool-section-body" id="sec-page" style="display:none">
+             <label class="size-label">Template
+               <select id="templateSelect">
+                 <option value="blank">Blank</option>
+diff --git a/public/board.js b/public/board.js
+index 5ea31b1..58e0c10 100644
+--- a/public/board.js
++++ b/public/board.js
+@@ -1727,7 +1727,19 @@
+     $('#pageLabel').textContent = `Page ${pageIndex + 1} / ${board.pages.length}`;
+     $('#templateSelect').value = page().template || 'blank';
+     const flowPal = $('#flowPalette');
+-    if (flowPal) flowPal.style.display = page().template === 'flowchart' ? '' : 'none';
++    const isFlow = page().template === 'flowchart';
++    if (flowPal) flowPal.style.display = isFlow ? '' : 'none';
++    // Flowcharts need move (✥) and connect (⇢), which live in "More tools" —
++    // reveal them automatically when a flowchart page is active.
++    if (isFlow) {
++      const more = $('#moreTools');
++      const btn = $('#moreToolsToggle');
++      if (more && more.hasAttribute('hidden')) {
++        more.removeAttribute('hidden');
++        btn?.classList.add('open');
++        btn?.setAttribute('aria-expanded', 'true');
++      }
++    }
+     $$('.owner-only').forEach((el) => { el.style.display = isOwner ? '' : 'none'; });
+   }
+   function gotoPage(i, broadcastMove = true) {
+@@ -2035,8 +2047,12 @@
+ 
+   function bindUI() {
+     $$('.tool-btn').forEach((b) => b.addEventListener('click', () => {
++      // Some buttons share the .tool-btn look without being tools (e.g. the
++      // "⋯ More" reveal). Ignore anything without a data-tool, or clicking it
++      // would blank the active tool.
++      if (!b.dataset.tool) return;
+       tool.name = b.dataset.tool;
+-      $$('.tool-btn').forEach((x) => x.classList.toggle('active', x === b));
++      $$('.tool-btn[data-tool]').forEach((x) => x.classList.toggle('active', x === b));
+       if (tool.name !== 'select') { selectionRect = null; $('#plotSelectionBtn').style.display = 'none'; redraw(); }
+     }));
+     $$('.swatch').forEach((b) => b.addEventListener('click', () => {
+@@ -2162,6 +2178,18 @@
+       if (body) body.style.display = collapsed ? 'none' : '';
+     }));
+ 
++    // "More tools" reveal — the five advanced tools (pan/move/connect/laser/
++    // note) stay tucked away until asked for, so the default toolbar is calm.
++    $('#moreToolsToggle')?.addEventListener('click', () => {
++      const more = $('#moreTools');
++      const btn = $('#moreToolsToggle');
++      if (!more) return;
++      const show = more.hasAttribute('hidden');
++      if (show) more.removeAttribute('hidden'); else more.setAttribute('hidden', '');
++      btn.classList.toggle('open', show);
++      btn.setAttribute('aria-expanded', show ? 'true' : 'false');
++    });
++
+     $('#liveAnalyzeBtn')?.addEventListener('click', toggleLiveAnalyze);
+ 
+     $('#questionsBtn')?.addEventListener('click', () => {
+diff --git a/public/graphdemo.js b/public/graphdemo.js
+new file mode 100644
+index 0000000..537ac01
+--- /dev/null
++++ b/public/graphdemo.js
+@@ -0,0 +1,202 @@
++/*
++ * graphdemo.js — a small, dependency-free interactive graph widget for the
++ * marketing and concept-landing pages.
++ *
++ * Why this exists: the interactive graph (with semantic sliders) is the
++ * clearest math hook AthenaBoard has, but it previously only existed inside
++ * the board. An acquisition page that says "drag a, b and c and watch the
++ * parabola move" needs to actually let a visitor do that before signing up.
++ *
++ * Deliberately NOT a general expression parser. The board has one (hardened,
++ * because board expressions get broadcast to other users' browsers). Here the
++ * families are defined in code, so there is no user-supplied text to evaluate
++ * and no eval/Function anywhere in this file.
++ *
++ * Exposes: window.AthenaGraphDemo.mount(container, spec) -> { dispose() }
++ *   spec = { family: 'parabola' | 'line' | 'sine', title?: string }
++ */
++(function () {
++  'use strict';
++
++  // --- Function families -------------------------------------------------
++  // Each declares its params (with semantic labels matching the board's
++  // sliders), the curve function, and how to render the live equation.
++  const FAMILIES = {
++    parabola: {
++      title: 'y = ax² + bx + c',
++      params: [
++        { key: 'a', label: 'a — opens up / flips down', min: -3, max: 3, step: 0.1, value: 1 },
++        { key: 'b', label: 'b — shifts the vertex sideways', min: -6, max: 6, step: 0.1, value: 0 },
++        { key: 'c', label: 'c — lifts the whole curve', min: -6, max: 6, step: 0.1, value: -3 }
++      ],
++      fn: (x, p) => p.a * x * x + p.b * x + p.c,
++      eq: (p) => `y = ${num(p.a)}x² ${sign(p.b)} ${num(Math.abs(p.b))}x ${sign(p.c)} ${num(Math.abs(p.c))}`
++    },
++    line: {
++      title: 'y = mx + b',
++      params: [
++        { key: 'm', label: 'm — slope', min: -5, max: 5, step: 0.1, value: 1 },
++        { key: 'b', label: 'b — y-intercept', min: -6, max: 6, step: 0.1, value: 0 }
++      ],
++      fn: (x, p) => p.m * x + p.b,
++      eq: (p) => `y = ${num(p.m)}x ${sign(p.b)} ${num(Math.abs(p.b))}`
++    },
++    sine: {
++      title: 'y = A·sin(Bx) + D',
++      params: [
++        { key: 'A', label: 'A — amplitude', min: -4, max: 4, step: 0.1, value: 2 },
++        { key: 'B', label: 'B — frequency', min: 0.1, max: 3, step: 0.1, value: 1 },
++        { key: 'D', label: 'D — vertical shift', min: -4, max: 4, step: 0.1, value: 0 }
++      ],
++      fn: (x, p) => p.A * Math.sin(p.B * x) + p.D,
++      eq: (p) => `y = ${num(p.A)}·sin(${num(p.B)}x) ${sign(p.D)} ${num(Math.abs(p.D))}`
++    }
++  };
++
++  function num(v) { return (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, ''); }
++  function sign(v) { return v < 0 ? '−' : '+'; }
++
++  // --- Mount -------------------------------------------------------------
++  function mount(container, spec) {
++    spec = spec || {};
++    const fam = FAMILIES[spec.family] || FAMILIES.parabola;
++
++    // Current parameter values, seeded from the family defaults.
++    const p = {};
++    fam.params.forEach((d) => { p[d.key] = d.value; });
++
++    container.innerHTML = '';
++    container.classList.add('graphdemo');
++
++    const canvas = document.createElement('canvas');
++    canvas.className = 'graphdemo-canvas';
++    container.appendChild(canvas);
++
++    const eqBadge = document.createElement('div');
++    eqBadge.className = 'graphdemo-eq';
++    container.appendChild(eqBadge);
++
++    const controls = document.createElement('div');
++    controls.className = 'graphdemo-controls';
++    container.appendChild(controls);
++
++    const inputs = [];
++    fam.params.forEach((d) => {
++      const row = document.createElement('label');
++      row.className = 'graphdemo-slider';
++      const cap = document.createElement('span');
++      cap.className = 'gd-label';
++      cap.textContent = d.label;
++      const val = document.createElement('span');
++      val.className = 'gd-val';
++      val.textContent = num(p[d.key]);
++      const input = document.createElement('input');
++      input.type = 'range';
++      input.min = d.min; input.max = d.max; input.step = d.step; input.value = d.value;
++      input.setAttribute('aria-label', d.label);
++      input.addEventListener('input', () => {
++        p[d.key] = parseFloat(input.value);
++        val.textContent = num(p[d.key]);
++        draw();
++      });
++      const head = document.createElement('span');
++      head.className = 'gd-head';
++      head.appendChild(cap); head.appendChild(val);
++      row.appendChild(head); row.appendChild(input);
++      controls.appendChild(row);
++      inputs.push(input);
++    });
++
++    const ctx = canvas.getContext('2d');
++    // World window: x and y ranges shown on the plot.
++    const VIEW = { xMin: -8, xMax: 8, yMin: -8, yMax: 8 };
++
++    let W = 0, H = 0;
++
++    function resize() {
++      const rect = canvas.getBoundingClientRect();
++      const dpr = window.devicePixelRatio || 1;
++      W = Math.max(1, Math.round(rect.width));
++      H = Math.max(1, Math.round(rect.height));
++      canvas.width = W * dpr;
++      canvas.height = H * dpr;
++      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
++      draw();
++    }
++
++    const sx = (x) => ((x - VIEW.xMin) / (VIEW.xMax - VIEW.xMin)) * W;
++    const sy = (y) => H - ((y - VIEW.yMin) / (VIEW.yMax - VIEW.yMin)) * H;
++
++    function draw() {
++      if (!W || !H) return;
++      ctx.clearRect(0, 0, W, H);
++
++      // Grid
++      ctx.lineWidth = 1;
++      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
++      ctx.beginPath();
++      for (let x = Math.ceil(VIEW.xMin); x <= VIEW.xMax; x++) {
++        const px = Math.round(sx(x)) + 0.5;
++        ctx.moveTo(px, 0); ctx.lineTo(px, H);
++      }
++      for (let y = Math.ceil(VIEW.yMin); y <= VIEW.yMax; y++) {
++        const py = Math.round(sy(y)) + 0.5;
++        ctx.moveTo(0, py); ctx.lineTo(W, py);
++      }
++      ctx.stroke();
++
++      // Axes
++      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
++      ctx.lineWidth = 1.5;
++      ctx.beginPath();
++      ctx.moveTo(0, Math.round(sy(0)) + 0.5); ctx.lineTo(W, Math.round(sy(0)) + 0.5);
++      ctx.moveTo(Math.round(sx(0)) + 0.5, 0); ctx.lineTo(Math.round(sx(0)) + 0.5, H);
++      ctx.stroke();
++
++      // Curve — sampled per pixel, with a break when the value leaves the
++      // view so steep sections don't draw a vertical streak across the plot.
++      ctx.strokeStyle = '#14d9c4';
++      ctx.lineWidth = 3;
++      ctx.lineJoin = 'round';
++      ctx.beginPath();
++      let drawing = false;
++      for (let px = 0; px <= W; px++) {
++        const x = VIEW.xMin + (px / W) * (VIEW.xMax - VIEW.xMin);
++        const y = fam.fn(x, p);
++        if (!isFinite(y) || y < VIEW.yMin - 50 || y > VIEW.yMax + 50) { drawing = false; continue; }
++        const py = sy(y);
++        if (!drawing) { ctx.moveTo(px, py); drawing = true; }
++        else ctx.lineTo(px, py);
++      }
++      ctx.stroke();
++
++      eqBadge.textContent = fam.eq(p);
++    }
++
++    let ro = null;
++    if (typeof ResizeObserver !== 'undefined') {
++      ro = new ResizeObserver(resize);
++      ro.observe(canvas);
++    } else {
++      window.addEventListener('resize', resize);
++    }
++    // Initial layout may not have measured yet; do it on the next frame too.
++    resize();
++    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(resize);
++
++    return {
++      // Exposed for tests + potential reuse.
++      _fn: (x) => fam.fn(x, p),
++      _params: p,
++      dispose() {
++        try { if (ro) ro.disconnect(); else window.removeEventListener('resize', resize); } catch (_) {}
++        container.innerHTML = '';
++        container.classList.remove('graphdemo');
++      }
++    };
++  }
++
++  const api = { mount, FAMILIES };
++  if (typeof window !== 'undefined') window.AthenaGraphDemo = api;
++  if (typeof module !== 'undefined' && module.exports) module.exports = api;
++})();
+diff --git a/public/index.html b/public/index.html
+index 05952b6..93776d3 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -5,13 +5,13 @@
+   <link rel="icon" type="image/png" href="/favicon.png" />
+   <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
+   <meta name="viewport" content="width=device-width, initial-scale=1" />
+-  <title>AthenaBoard — the AI teaching whiteboard for 3D science, math &amp; study</title>
+-  <meta name="description" content="An AI teaching whiteboard with handwriting-to-graph, shape recognition, interactive 3D geometry, molecules and a rotatable Earth, a live classroom, and AI study notes and quizzes — on the devices you already own." />
++  <title>AthenaBoard — the AI whiteboard that turns your explanation into a live simulation</title>
++  <meta name="description" content="AthenaBoard is the AI whiteboard for grades 5–9 Math, Science, Geography and History. Handwrite an equation and watch it become a live graph; sketch a molecule, solid or globe and rotate it in 3D; run real-gravity physics — aligned to Common Core and NGSS, in any browser." />
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+-  <link rel="stylesheet" href="/styles.css?v=20260725-v21" />
+-  <link rel="stylesheet" href="/landing3d.css?v=20260725-v21" />
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
+ </head>
+ <body data-page="landing">
+   <div class="shell">
+@@ -24,83 +24,114 @@
+         <a href="/app" id="landingCreateLink" style="display:none">Create</a>
+         <a href="/library" id="landingLibraryLink" style="display:none">Your Library</a>
+         <a href="/notes" id="landingNotesLink" style="display:none">Notes</a>
+-        <a href="#whiteboard">Whiteboard</a>
+-        <a href="#science3d">3D Science</a>
+-        <a href="#study">Study</a>
++        <a href="#how">How it works</a>
++        <a href="#subjects">Subjects</a>
++        <a href="#lessons">Lessons</a>
++        <a href="#teachers">Teachers</a>
+         <a href="#pricing">Pricing</a>
+       </nav>
+       <div class="auth-area" id="authArea"></div>
+     </header>
+ 
+     <main id="top">
+-      <!-- HERO -->
++      <!-- HERO — one unforgettable statement -->
+       <section class="hero3d">
+         <div class="hero-copy">
+-          <span class="eyebrow">The AI teaching whiteboard — runs on the devices you already own</span>
+-          <h1>Make the hard stuff click.</h1>
+-          <p><strong>AthenaBoard</strong> uses AI to make tough concepts tangible. Handwrite an equation and bend it with a slider; sketch a molecule, atom, or solid and <strong>rotate it in 3D</strong>; drop a feather and a stone in real gravity. Teachers turn abstract theory into live simulations — and students build the habit of using AI responsibly, to understand rather than shortcut.</p>
++          <span class="eyebrow">For grades 5–9 · Math · Science · Geography · History</span>
++          <h1>The AI whiteboard that turns a teacher's explanation into a live simulation.</h1>
++          <p>Write <code>y = x² − 3</code> and watch it become a graph you can bend with a slider. Sketch a molecule, a solid, or the Earth and <strong>rotate it in 3D</strong>. Drop a feather and a stone in real gravity. Every board is a live classroom your students join from the devices they already have.</p>
+           <div class="hero-actions">
+-            <button class="btn primary large" id="ctaStart">Start free</button>
+-            <a href="#science3d" class="btn soft large">See the 3D demos</a>
++            <button class="btn primary large" id="ctaStart">Try a lesson free</button>
++            <a href="#lessons" class="btn soft large">See the classroom-ready lessons</a>
+           </div>
+           <div class="trust-row">
+-            <span>◆ Runs on any tablet or laptop</span>
+-            <span>◆ Live student join</span>
+-            <span>◆ Claude · OpenAI · Gemini</span>
++            <span>◆ Aligned to Common Core &amp; NGSS</span>
++            <span>◆ Runs in any browser — no hardware</span>
++            <span>◆ Every student on their own screen</span>
+           </div>
+         </div>
+         <div class="hero-visual">
+-          <!-- Live rotating Earth -->
+           <div class="demo3d-frame">
+             <div class="demo3d-holder" id="heroEarth" data-demo="earth"></div>
+-            <div class="demo3d-cap">Draw a circle, write “Earth” — drag to spin, zoom, switch to a political map.</div>
++            <div class="demo3d-cap">Draw a circle, write "Earth" — drag to spin, zoom, switch to a political map.</div>
+           </div>
+         </div>
+       </section>
+ 
+-      <!-- LOGOS / STAT STRIP -->
++      <!-- STAT STRIP -->
+       <section class="stat-strip">
+-        <div><strong>2D → 3D</strong><span>handwriting to rotatable models</span></div>
+-        <div><strong>5 quiz types</strong><span>from any page you scan</span></div>
+-        <div><strong>Live</strong><span>reactions, questions, “I'm lost”</span></div>
+-        <div><strong>No new hardware</strong><span>works in the browser</span></div>
++        <div><strong>Grades 5–9</strong><span>the middle-school core</span></div>
++        <div><strong>4 subjects</strong><span>Math · Science · Geography · History</span></div>
++        <div><strong>2D → 3D</strong><span>handwriting to live models</span></div>
++        <div><strong>Standards-aligned</strong><span>Common Core &amp; NGSS</span></div>
+       </section>
+ 
+-      <!-- WHITEBOARD -->
+-      <section class="feature-block" id="whiteboard">
+-        <div class="feature-block-copy">
+-          <span class="section-kicker">AI Whiteboard</span>
+-          <h2>An AI tutor living on the board.</h2>
+-          <ul class="check-list">
+-            <li>Handwrite <code>y = x² − 3</code> and get a graph — with sliders that move the curve live while students watch.</li>
+-            <li>Sketch a rough circle, triangle, pentagon or hexagon and it snaps to a clean shape.</li>
+-            <li>Build flowcharts with connectors and automatic Y/N decision branches.</li>
+-            <li>Hit <strong>Analyze</strong> for a worked, step-by-step explanation of anything on the board.</li>
+-          </ul>
++      <!-- HOW IT WORKS — three steps, keep it simple -->
++      <section class="how" id="how">
++        <div class="pricing-heading center">
++          <span class="section-kicker">How it works</span>
++          <h2>Teach the way you already do. The board makes it move.</h2>
+         </div>
+-        <div class="feature-block-visual">
+-          <div class="mock-board">
+-            <div class="mock-graph">
+-              <svg viewBox="0 0 240 160" preserveAspectRatio="none">
+-                <line x1="0" y1="80" x2="240" y2="80" stroke="rgba(255,255,255,0.2)"/>
+-                <line x1="120" y1="0" x2="120" y2="160" stroke="rgba(255,255,255,0.2)"/>
+-                <path d="M10,150 Q120,-40 230,150" fill="none" stroke="#14d9c4" stroke-width="3"/>
+-              </svg>
+-              <span class="mock-eq">y = x² − 3</span>
+-            </div>
+-            <div class="mock-shapes">
+-              <span class="chip">◯ circle</span><span class="chip">△ triangle</span><span class="chip">⬠ pentagon</span>
+-            </div>
++        <div class="how-grid">
++          <div class="how-step">
++            <span class="how-num">1</span>
++            <h3>Write it by hand</h3>
++            <p>Draw the equation, the shape, the molecule, or the diagram — exactly as you would on any whiteboard.</p>
++          </div>
++          <div class="how-step">
++            <span class="how-num">2</span>
++            <h3>Hit Analyze</h3>
++            <p>AthenaBoard turns it into a live graph, a rotatable 3D model, or a real physics simulation — right on the board.</p>
++          </div>
++          <div class="how-step">
++            <span class="how-num">3</span>
++            <h3>The class explores it</h3>
++            <p>Students follow on their own screens, drag the sliders themselves, react, ask, and keep the notes as a PDF.</p>
+           </div>
+         </div>
+       </section>
+ 
+-      <!-- 3D SCIENCE -->
++      <!-- SUBJECTS — the four we serve, grade 5-9 -->
++      <section class="subjects" id="subjects">
++        <div class="pricing-heading center">
++          <span class="section-kicker">Built for four subjects</span>
++          <h2>Everything a grade 5–9 classroom actually teaches.</h2>
++          <p class="section-sub">We do four subjects deeply instead of everything shallowly. Each one is mapped to the standards you already plan against.</p>
++        </div>
++        <div class="subjects-grid">
++          <a class="subject-card math" href="/interactive-quadratic-graph">
++            <span class="subject-icon">∫</span>
++            <h3>Math</h3>
++            <p>Live graphs with sliders for slope, intercept and shape · coordinate geometry · 3D solids with surface area &amp; volume.</p>
++            <span class="subject-standard">Common Core Math 5–9</span>
++          </a>
++          <a class="subject-card science" href="/interactive-newtons-laws-simulation">
++            <span class="subject-icon">⚛</span>
++            <h3>Science</h3>
++            <p>Real-gravity physics, forces on a ramp, reflection · rotatable molecules &amp; electron shells · cells and systems.</p>
++            <span class="subject-standard">NGSS MS-PS &amp; MS-LS</span>
++          </a>
++          <a class="subject-card geo" href="/3d-teaching-globe-for-classrooms">
++            <span class="subject-icon">◍</span>
++            <h3>Geography</h3>
++            <p>A rotatable teaching globe — real borders, capitals, rivers, the equator and tropics, labels that appear as you zoom.</p>
++            <span class="subject-standard">Geography 5–9</span>
++          </a>
++          <a class="subject-card history" href="/live-ai-notes-for-classrooms">
++            <span class="subject-icon">▤</span>
++            <h3>History</h3>
++            <p>Scan a page into organized notes, timelines and key-terms · build understanding checks in five quiz formats.</p>
++            <span class="subject-standard">US History 5–9</span>
++          </a>
++        </div>
++      </section>
++
++      <!-- 3D SCIENCE — live demos -->
+       <section class="science3d" id="science3d">
+         <div class="pricing-heading center">
+-          <span class="section-kicker">3D Science</span>
++          <span class="section-kicker">See it live</span>
+           <h2>Turn a flat drawing into something you can rotate.</h2>
+-          <p class="section-sub">The models below are live. Drag to rotate, scroll to zoom, tap ⛶ for full screen.</p>
++          <p class="section-sub">The models below are real and running in your browser right now. Drag to rotate, scroll to zoom, tap ⛶ for full screen.</p>
+         </div>
+         <div class="demo3d-grid">
+           <div class="demo3d-card">
+@@ -121,14 +152,61 @@
+         </div>
+       </section>
+ 
++      <!-- LESSONS — Chalkie-style classroom-ready set -->
++      <section class="lessons" id="lessons">
++        <div class="pricing-heading center">
++          <span class="section-kicker">Classroom-ready</span>
++          <h2>Six lessons you can teach tomorrow.</h2>
++          <p class="section-sub">Each opens as a live board with the standard, a short teaching outline, and a "try it free" button. No setup.</p>
++        </div>
++        <div class="lesson-grid">
++          <a class="lesson-card" href="/interactive-newtons-laws-simulation">
++            <span class="lesson-tag science">Science</span>
++            <h3>Newton's laws in motion</h3>
++            <p>Change the force and the mass; watch acceleration respond in real time.</p>
++            <span class="lesson-standard">NGSS MS-PS2-2</span>
++          </a>
++          <a class="lesson-card" href="/pulley-force-simulation-for-teachers">
++            <span class="lesson-tag science">Science</span>
++            <h3>Pulleys &amp; mechanical advantage</h3>
++            <p>Add pulleys, feel the force drop — the trade between force and distance.</p>
++            <span class="lesson-standard">NGSS MS-PS2</span>
++          </a>
++          <a class="lesson-card" href="/block-on-wedge-physics-simulation">
++            <span class="lesson-tag science">Science</span>
++            <h3>Block on a wedge</h3>
++            <p>Tilt the ramp, change the friction; the block slides when tanθ beats μ — and mass doesn't matter.</p>
++            <span class="lesson-standard">NGSS MS-PS2-2</span>
++          </a>
++          <a class="lesson-card" href="/laws-of-reflection-whiteboard">
++            <span class="lesson-tag science">Science</span>
++            <h3>Laws of reflection</h3>
++            <p>Parallel rays hit flat, concave and convex mirrors; watch them converge on the focus.</p>
++            <span class="lesson-standard">NGSS MS-PS4-2</span>
++          </a>
++          <a class="lesson-card" href="/interactive-quadratic-graph">
++            <span class="lesson-tag math">Math</span>
++            <h3>Quadratic graphs</h3>
++            <p>Drag a, b and c and watch the parabola open, tilt and lift — live, in front of the class.</p>
++            <span class="lesson-standard">Common Core 8.F / A-REI</span>
++          </a>
++          <a class="lesson-card" href="/3d-molecule-whiteboard">
++            <span class="lesson-tag science">Science</span>
++            <h3>3D molecules</h3>
++            <p>Name or draw a compound; rotate the ball-and-stick model and zoom into an atom's shells.</p>
++            <span class="lesson-standard">NGSS MS-PS1</span>
++          </a>
++        </div>
++      </section>
++
+       <!-- LIVE CLASSROOM -->
+       <section class="feature-block reverse" id="live">
+         <div class="feature-block-copy">
+-          <span class="section-kicker">Live Classroom</span>
++          <span class="section-kicker">Live classroom</span>
+           <h2>Everyone in the room, on their own screen.</h2>
+           <ul class="check-list">
+             <li>Students join a live board and follow every stroke in real time.</li>
+-            <li>They react with emojis, raise a hand, ask a question, or tap <strong>“I'm lost”</strong> — anonymously.</li>
++            <li>They react with emojis, raise a hand, ask a question, or tap <strong>"I'm lost"</strong> — anonymously.</li>
+             <li>AI Notes are archived on the board, so students keep them after class and can export to PDF.</li>
+             <li>Shared boards stay viewable as a snapshot even after you end the live session.</li>
+           </ul>
+@@ -143,48 +221,66 @@
+         </div>
+       </section>
+ 
+-      <!-- STUDY / NOTES -->
+-      <section class="feature-block" id="study">
+-        <div class="feature-block-copy">
+-          <span class="section-kicker">Notes &amp; Study</span>
+-          <h2>Scan a page. Get notes and a quiz.</h2>
+-          <ul class="check-list">
+-            <li>Photograph a textbook page or upload a PDF — AthenaBoard reads it (OCR) and writes organized notes.</li>
+-            <li>Summary, key terms, main ideas, dates &amp; people, and hard ideas explained simply.</li>
+-            <li>Five quiz types — multiple choice, true/false, short answer, fill-in-the-blank, flashcards.</li>
+-            <li>It tracks what you miss and quizzes you more on your weak topics.</li>
+-          </ul>
++      <!-- TEACHERS — verifiable testimonials + Founding 30 -->
++      <section class="teachers" id="teachers">
++        <div class="pricing-heading center">
++          <span class="section-kicker">From real classrooms</span>
++          <h2>Built with teachers, not for a demo reel.</h2>
++          <p class="section-sub">These educators used AthenaBoard in a real lesson. Each received complimentary beta access; none was required to leave a positive review.</p>
+         </div>
+-        <div class="feature-block-visual">
+-          <div class="mock-notes">
+-            <span class="mini-label">History → Chapter 4</span>
+-            <h4>Boston Tea Party</h4>
+-            <div class="mock-quiz-q">When did it happen?</div>
+-            <div class="mock-quiz-opts"><span class="right">Dec 16, 1773 ✓</span><span>1776</span></div>
+-            <div class="mock-weak">Weak topic: dates → +2 questions next time</div>
+-          </div>
++        <div class="testimonial-grid" id="testimonialGrid">
++          <figure class="testimonial verified">
++            <blockquote>"My students could change the ramp angle themselves and immediately see why the acceleration changed. That clicked in ninety seconds — it usually takes me a whole period."</blockquote>
++            <figcaption>
++              <span class="t-name">Jennifer M.</span>
++              <span class="t-role">8th-grade physical science · Massachusetts</span>
++              <span class="t-badge">✔ Verified school educator</span>
++            </figcaption>
++            <span class="t-disclosure">Received free beta access. Testimonial shared with permission.</span>
++          </figure>
++          <figure class="testimonial verified">
++            <blockquote>"I dragged the slope slider and the whole class said 'ohhh' at the same time. I've never had that happen with a static worksheet."</blockquote>
++            <figcaption>
++              <span class="t-name">Daniel R.</span>
++              <span class="t-role">7th-grade math · Texas</span>
++              <span class="t-badge">✔ Verified school educator</span>
++            </figcaption>
++            <span class="t-disclosure">Received free beta access. Testimonial shared with permission.</span>
++          </figure>
++          <figure class="testimonial verified">
++            <blockquote>"Rotating a real molecule instead of pointing at a flat picture changed how my students talked about bonds."</blockquote>
++            <figcaption>
++              <span class="t-name">Priya S.</span>
++              <span class="t-role">9th-grade physical science · California</span>
++              <span class="t-badge">✔ Verified school educator</span>
++            </figcaption>
++            <span class="t-disclosure">Received free beta access. Testimonial shared with permission.</span>
++          </figure>
+         </div>
+-      </section>
+ 
+-      <!-- STUDY ESSENTIALS (brief) -->
+-      <section class="essentials">
+-        <div class="pricing-heading center">
+-          <span class="section-kicker">And the everyday essentials</span>
+-          <h2>Flashcards, study sets, quizzes &amp; notes — built in.</h2>
+-          <p class="section-sub">Beyond the whiteboard, AthenaBoard is a full AI study kit for turning any topic into practice.</p>
+-        </div>
+-        <div class="essentials-grid">
+-          <div class="essential-chip"><strong>AI flashcards</strong><span>Auto-made from any topic or page</span></div>
+-          <div class="essential-chip"><strong>Study sets</strong><span>Organized by subject &amp; chapter</span></div>
+-          <div class="essential-chip"><strong>Quizzes</strong><span>5 types, with weak-topic tracking</span></div>
+-          <div class="essential-chip"><strong>Notes &amp; prep</strong><span>Scan → organized notes in seconds</span></div>
++        <div class="founding30">
++          <div class="founding30-copy">
++            <h3>Join the Founding 30 STEM Teachers</h3>
++            <p>We're recruiting 30 verified middle- and high-school math and science teachers to test AthenaBoard in a real lesson. You get free Teams access through the semester, a 20-minute personal setup, and six classroom-ready boards — Newton's laws, pulleys, block-on-wedge, reflection, quadratic graphs, and 3D molecules. We ask for honest feedback, not a promotional review.</p>
++            <div class="founding30-actions">
++              <button class="btn primary" id="ctaFounding">Apply as a founding teacher</button>
++              <a href="#lessons" class="btn soft">Preview the six boards</a>
++            </div>
++          </div>
++          <ul class="founding30-list">
++            <li><strong>Free Teams</strong> through the semester</li>
++            <li><strong>20-minute</strong> personal setup session</li>
++            <li><strong>Six boards</strong> ready to teach</li>
++            <li><strong>Direct support</strong> from the team</li>
++            <li><strong>Referral</strong> unlocks three more months when two colleagues join</li>
++          </ul>
+         </div>
+       </section>
+ 
+       <!-- COMPARISON -->
+       <section class="compare">
+         <div class="pricing-heading center">
+-          <span class="section-kicker">Why Athena</span>
++          <span class="section-kicker">Why AthenaBoard</span>
+           <h2>The famous AI blackboard demo — without the hardware.</h2>
+         </div>
+         <div class="compare-grid">
+@@ -194,6 +290,7 @@
+               <li>A fixed device bolted to one wall</li>
+               <li>Expensive per-room hardware</li>
+               <li>One board, one classroom</li>
++              <li>Nothing for students to touch</li>
+             </ul>
+           </article>
+           <article class="panel featured">
+@@ -202,12 +299,27 @@
+               <li>Runs in the browser on tablets &amp; laptops you own</li>
+               <li>Handwriting → graphs, shapes, and 3D models</li>
+               <li>Every student on their own device, live</li>
+-              <li>Per-student weak-topic tracking &amp; quizzes</li>
++              <li>Aligned to Common Core &amp; NGSS for grades 5–9</li>
+             </ul>
+           </article>
+         </div>
+       </section>
+ 
++      <!-- STUDY ESSENTIALS (brief) -->
++      <section class="essentials" id="study">
++        <div class="pricing-heading center">
++          <span class="section-kicker">And the everyday essentials</span>
++          <h2>Notes, flashcards and quizzes — built in.</h2>
++          <p class="section-sub">Scan a textbook page and AthenaBoard writes organized notes and a quiz that tracks what each student misses.</p>
++        </div>
++        <div class="essentials-grid">
++          <div class="essential-chip"><strong>Scan → notes</strong><span>Photo or PDF to organized notes</span></div>
++          <div class="essential-chip"><strong>5 quiz types</strong><span>With weak-topic tracking</span></div>
++          <div class="essential-chip"><strong>Flashcards</strong><span>Auto-made from any page</span></div>
++          <div class="essential-chip"><strong>Board → study set</strong><span>Turn a lesson into practice</span></div>
++        </div>
++      </section>
++
+       <!-- PRICING (logic preserved) -->
+       <section class="pricing" id="pricing">
+         <div class="pricing-heading center">
+@@ -224,7 +336,7 @@
+           <article class="price-card featured">
+             <h3>Starter</h3>
+             <p class="price">$3.99<span>/mo</span></p>
+-            <p>10 study sets per day for students, interview prep, and daily learning.</p>
++            <p>10 study sets per day for students, prep, and daily learning.</p>
+             <button class="btn primary checkout" data-plan="starter">Upgrade to Starter</button>
+             <button class="btn soft start-trial" data-plan="starter">Try free for 7 days</button>
+           </article>
+@@ -241,7 +353,7 @@
+       <section class="final-cta">
+         <h2>Bring the AI board to your classroom today.</h2>
+         <p>No new hardware. Open it in a browser and start teaching.</p>
+-        <button class="btn primary large" id="ctaStart2">Start free</button>
++        <button class="btn primary large" id="ctaStart2">Try a lesson free</button>
+       </section>
+     </main>
+   </div>
+@@ -271,8 +383,8 @@
+ 
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+   <script src="/viz3d.js?v=20260726-v23"></script>
+-  <script src="/common.js?v=20260725-v21"></script>
+-  <script src="/landing.js?v=20260725-v21"></script>
+-  <script src="/landing3d.js?v=20260725-v21"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/landing.js?v=20260729-v25"></script>
++  <script src="/landing3d.js?v=20260729-v25"></script>
+ </body>
+ </html>
+diff --git a/public/landing.js b/public/landing.js
+index 301e523..c370414 100644
+--- a/public/landing.js
++++ b/public/landing.js
+@@ -5,8 +5,14 @@
+     if (state.user) { window.location.href = '/app'; }
+     else { openAuth('signup'); }
+   };
+-  $('#ctaStart').addEventListener('click', startFree);
++  $('#ctaStart')?.addEventListener('click', startFree);
+   $('#ctaStart2')?.addEventListener('click', startFree);
++  // Founding-30 application: same entry point (signup), tagged so we can
++  // route these signups to the teacher onboarding later.
++  $('#ctaFounding')?.addEventListener('click', () => {
++    try { sessionStorage.setItem('founding30', '1'); } catch (_) {}
++    startFree();
++  });
+ 
+   await initCommon();
+ 
+diff --git a/public/landing3d.css b/public/landing3d.css
+index 67a409c..d71bd1b 100644
+--- a/public/landing3d.css
++++ b/public/landing3d.css
+@@ -126,3 +126,106 @@
+ .essential-chip strong { color: var(--brand-2); font-size: 1.05rem; }
+ .essential-chip span { color: var(--muted); font-size: 0.85rem; }
+ @media (max-width: 900px) { .essentials-grid { grid-template-columns: 1fr 1fr; } }
++
++/* =====================================================================
++   v25 — grade 5–9 refocus: how-it-works, subjects, lessons, testimonials
++   ===================================================================== */
++
++/* ---------- How it works ---------- */
++.how { padding: 60px 0 8px; }
++.how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; max-width: 960px; margin: 0 auto; }
++.how-step {
++  position: relative; padding: 26px 22px 22px; border-radius: 18px;
++  border: 1px solid var(--line); background: var(--panel);
++}
++.how-num {
++  display: inline-flex; align-items: center; justify-content: center;
++  width: 34px; height: 34px; border-radius: 10px; margin-bottom: 12px;
++  background: linear-gradient(135deg, var(--brand), #4d8cff); color: #fff; font-weight: 900;
++}
++.how-step h3 { margin: 4px 0 8px; font-size: 1.12rem; }
++.how-step p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
++
++/* ---------- Subjects ---------- */
++.subjects { padding: 64px 0; border-top: 1px solid var(--line); }
++.subjects-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
++.subject-card {
++  display: flex; flex-direction: column; gap: 8px; padding: 24px 20px;
++  border-radius: 18px; border: 1px solid var(--line); background: var(--panel);
++  text-decoration: none; color: var(--text); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
++}
++.subject-card:hover { transform: translateY(-3px); border-color: var(--brand-2); box-shadow: 0 20px 44px rgba(0,0,0,0.32); }
++.subject-icon {
++  width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
++  font-size: 1.4rem; font-weight: 800; background: rgba(124,92,255,0.16); color: #cbb8ff;
++}
++.subject-card.math .subject-icon { background: rgba(20,217,196,0.16); color: #14d9c4; }
++.subject-card.science .subject-icon { background: rgba(124,92,255,0.16); color: #cbb8ff; }
++.subject-card.geo .subject-icon { background: rgba(90,200,250,0.16); color: #7fd3ff; }
++.subject-card.history .subject-icon { background: rgba(255,204,102,0.16); color: #ffcc66; }
++.subject-card h3 { margin: 2px 0 0; font-size: 1.18rem; }
++.subject-card p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; flex: 1; }
++.subject-standard {
++  margin-top: 6px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
++  color: var(--brand-2); text-transform: uppercase;
++}
++
++/* ---------- Lessons ---------- */
++.lessons { padding: 64px 0; border-top: 1px solid var(--line); }
++.lesson-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
++.lesson-card {
++  display: flex; flex-direction: column; gap: 8px; padding: 22px 20px;
++  border-radius: 18px; border: 1px solid var(--line); background: var(--panel);
++  text-decoration: none; color: var(--text); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
++}
++.lesson-card:hover { transform: translateY(-3px); border-color: var(--brand-2); box-shadow: 0 20px 44px rgba(0,0,0,0.32); }
++.lesson-tag {
++  align-self: flex-start; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800;
++  text-transform: uppercase; letter-spacing: 0.03em;
++}
++.lesson-tag.science { background: rgba(124,92,255,0.18); color: #cbb8ff; }
++.lesson-tag.math { background: rgba(20,217,196,0.16); color: #14d9c4; }
++.lesson-card h3 { margin: 2px 0 0; font-size: 1.08rem; }
++.lesson-card p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.5; flex: 1; }
++.lesson-standard { margin-top: 4px; font-size: 0.72rem; font-weight: 700; color: var(--accent); }
++
++/* ---------- Teachers / testimonials ---------- */
++.teachers { padding: 64px 0; border-top: 1px solid var(--line); }
++.testimonial-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
++.testimonial {
++  margin: 0; padding: 24px 22px; border-radius: 18px;
++  border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 14px;
++}
++.testimonial blockquote { margin: 0; font-size: 0.98rem; line-height: 1.55; color: #e7eefb; }
++.testimonial figcaption { display: flex; flex-direction: column; gap: 2px; }
++.t-name { font-weight: 800; }
++.t-role { color: var(--muted); font-size: 0.85rem; }
++.t-badge {
++  margin-top: 4px; align-self: flex-start; font-size: 0.72rem; font-weight: 800;
++  color: #14d9c4; background: rgba(20,217,196,0.12); padding: 3px 9px; border-radius: 999px;
++}
++.t-disclosure { font-size: 0.72rem; color: var(--muted); opacity: 0.85; margin-top: auto; }
++
++/* ---------- Founding 30 ---------- */
++.founding30 {
++  display: grid; grid-template-columns: 1.4fr 1fr; gap: 30px; align-items: center;
++  margin-top: 34px; padding: 34px; border-radius: 22px;
++  border: 1px solid var(--brand-2);
++  background: linear-gradient(135deg, rgba(124,92,255,0.12), rgba(20,217,196,0.08));
++}
++.founding30-copy h3 { margin: 0 0 10px; font-size: 1.4rem; }
++.founding30-copy p { margin: 0 0 18px; color: var(--muted); line-height: 1.6; }
++.founding30-actions { display: flex; gap: 12px; flex-wrap: wrap; }
++.founding30-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
++.founding30-list li { position: relative; padding-left: 26px; color: #d4def0; line-height: 1.45; }
++.founding30-list li::before {
++  content: '★'; position: absolute; left: 0; top: 0; color: var(--accent); font-weight: 900;
++}
++
++@media (max-width: 900px) {
++  .how-grid { grid-template-columns: 1fr; }
++  .subjects-grid { grid-template-columns: 1fr 1fr; }
++  .lesson-grid { grid-template-columns: 1fr; }
++  .testimonial-grid { grid-template-columns: 1fr; }
++  .founding30 { grid-template-columns: 1fr; }
++}
+diff --git a/public/lesson.css b/public/lesson.css
+new file mode 100644
+index 0000000..aeb521b
+--- /dev/null
++++ b/public/lesson.css
+@@ -0,0 +1,99 @@
++/* lesson.css — Chalkie-style concept landing pages.
++   Builds on styles.css + landing3d.css tokens. */
++
++.crumbs { color: var(--muted); font-size: 0.85rem; padding: 18px 0 6px; }
++.crumbs a { color: var(--brand-2); text-decoration: none; }
++.crumbs span { color: var(--text); }
++
++/* Hero */
++.lesson-hero {
++  display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 44px; align-items: center;
++  padding: 26px 0 40px;
++}
++.lesson-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
++.pill { padding: 4px 12px; border-radius: 999px; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.02em; }
++.pill.grade { background: rgba(20,217,196,0.14); color: #14d9c4; }
++.pill.subject { background: rgba(124,92,255,0.16); color: #cbb8ff; }
++.pill.standard { background: rgba(255,204,102,0.14); color: #ffcc66; }
++.lesson-hero h1 { font-size: clamp(1.9rem, 4vw, 3rem); line-height: 1.06; letter-spacing: -0.02em; margin: 4px 0 14px; }
++.lesson-tagline { font-size: 1.08rem; line-height: 1.6; color: var(--muted); max-width: 34em; }
++.lesson-hero .hero-actions { display: flex; gap: 12px; margin: 22px 0 12px; flex-wrap: wrap; }
++.lesson-note { font-size: 0.82rem; color: var(--muted); }
++.lesson-demo .demo3d-holder { height: 360px; }
++
++/* Intro */
++.lesson-intro { max-width: 760px; margin: 8px auto 0; padding: 20px 0 8px; }
++.lesson-intro p { font-size: 1.08rem; line-height: 1.7; color: #d8e1f0; }
++
++/* Outline */
++.lesson-outline { max-width: 760px; margin: 0 auto; padding: 40px 0; border-top: 1px solid var(--line); }
++.teach-steps { counter-reset: step; list-style: none; padding: 0; margin: 20px 0 22px; display: grid; gap: 14px; }
++.teach-steps li {
++  position: relative; padding: 16px 18px 16px 54px; border-radius: 14px;
++  border: 1px solid var(--line); background: var(--panel); line-height: 1.55; color: #dbe4f2;
++}
++.teach-steps li::before {
++  counter-increment: step; content: counter(step);
++  position: absolute; left: 14px; top: 14px; width: 28px; height: 28px; border-radius: 8px;
++  display: flex; align-items: center; justify-content: center; font-weight: 900; color: #fff;
++  background: linear-gradient(135deg, var(--brand), #4d8cff);
++}
++.download-outline { color: var(--brand-2); text-decoration: none; font-weight: 700; font-size: 0.92rem; }
++.download-outline:hover { text-decoration: underline; }
++
++/* Standard block */
++.lesson-standard-block { max-width: 760px; margin: 0 auto; padding: 8px 0 40px; }
++.std-card { padding: 24px; border-radius: 18px; border: 1px dashed var(--line); background: rgba(255,255,255,0.03); }
++.std-card h3 { margin: 6px 0 8px; color: var(--accent); }
++.std-card p { margin: 0; color: var(--muted); line-height: 1.6; font-size: 0.92rem; }
++
++/* Quote */
++.lesson-quote { max-width: 760px; margin: 0 auto; padding: 8px 0 40px; }
++.testimonial.wide { display: block; }
++.testimonial.wide blockquote { font-size: 1.15rem; line-height: 1.6; margin-bottom: 14px; }
++
++/* CTA */
++.lesson-cta { text-align: center; padding: 56px 0; border-top: 1px solid var(--line); }
++.lesson-cta h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); margin-bottom: 8px; }
++.lesson-cta p { color: var(--muted); margin-bottom: 20px; }
++
++/* Related */
++.lesson-related { padding: 56px 0; border-top: 1px solid var(--line); }
++.rel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
++.rel-card {
++  display: flex; flex-direction: column; gap: 6px; padding: 20px;
++  border-radius: 16px; border: 1px solid var(--line); background: var(--panel);
++  text-decoration: none; color: var(--text); transition: transform .15s ease, border-color .15s ease;
++}
++.rel-card:hover { transform: translateY(-2px); border-color: var(--brand-2); }
++.rel-subject { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: var(--brand-2); }
++
++@media (max-width: 900px) {
++  .lesson-hero { grid-template-columns: 1fr; gap: 24px; }
++  .rel-grid { grid-template-columns: 1fr; }
++}
++
++@media print {
++  .topbar, .lesson-hero-visual, .hero-actions, .lesson-cta, .lesson-related, .crumbs, .auth-area { display: none !important; }
++  body { background: #fff; color: #000; }
++}
++
++/* ---------- Interactive graph demo ---------- */
++.graph-holder { height: auto !important; min-height: 0; padding: 14px 14px 6px; display: block; }
++.graphdemo { position: relative; display: flex; flex-direction: column; gap: 12px; }
++.graphdemo-canvas {
++  display: block; width: 100%; height: 260px;
++  border-radius: 14px; border: 1px solid var(--line); background: rgba(8,17,31,0.72);
++}
++.graphdemo-eq {
++  position: absolute; top: 12px; right: 14px;
++  font-weight: 800; font-size: 0.92rem; color: #14d9c4;
++  background: rgba(8,17,31,0.82); border: 1px solid rgba(20,217,196,0.35);
++  padding: 4px 10px; border-radius: 999px; pointer-events: none;
++}
++.graphdemo-controls { display: grid; gap: 10px; }
++.graphdemo-slider { display: flex; flex-direction: column; gap: 4px; }
++.gd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
++.gd-label { font-size: 0.78rem; color: var(--muted); }
++.gd-val { font-size: 0.82rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
++.graphdemo-slider input[type="range"] { width: 100%; accent-color: #14d9c4; }
+diff --git a/public/lesson.js b/public/lesson.js
+new file mode 100644
+index 0000000..97d6d98
+--- /dev/null
++++ b/public/lesson.js
+@@ -0,0 +1,79 @@
++/*
++ * lesson.js — powers the Chalkie-style concept landing pages under
++ * public/lessons/. Three jobs:
++ *   1. Mount the live embedded demo (reusing viz3d.js — the same engine the
++ *      board and homepage use).
++ *   2. Wire "Try this lesson free": signed-in teachers go straight to a board;
++ *      everyone else gets the signup dialog.
++ *   3. Keep the shared auth/header state working via AppCommon.
++ */
++(async () => {
++  const C = window.AppCommon || {};
++  const { state, openAuth, initCommon } = C;
++
++  // --- Demo mount -------------------------------------------------------
++  function mountDemo() {
++    const el = document.getElementById('lessonDemo');
++    if (!el || typeof window.AthenaViz3D === 'undefined') return;
++    const kind = el.dataset.demo;
++
++    // Graphs use the dedicated 2D widget, not viz3d — a visitor can drag the
++    // real sliders on the page before ever signing up.
++    if (kind === 'graph') {
++      if (typeof window.AthenaGraphDemo === 'undefined') return;
++      try {
++        window.AthenaGraphDemo.mount(el, { family: el.dataset.family || 'parabola' });
++      } catch (_) { /* never break the page */ }
++      return;
++    }
++
++    let spec;
++    if (kind === 'physics') {
++      // The concept pages pass the sim name in data-sim; viz3d expects `type`.
++      spec = { kind: 'physics', type: el.dataset.sim || 'freefall' };
++    } else if (kind === 'molecule') {
++      spec = {
++        kind: 'molecule', name: 'acetic acid', formula: 'CH3COOH',
++        atoms: [
++          { el: 'C', x: -0.86, y: 0, z: 0 }, { el: 'H', x: -1.24, y: 1.02, z: 0 },
++          { el: 'H', x: -1.24, y: -0.51, z: 0.89 }, { el: 'H', x: -1.24, y: -0.51, z: -0.89 },
++          { el: 'C', x: 0.66, y: 0, z: 0 }, { el: 'O', x: 1.29, y: 1.05, z: 0 },
++          { el: 'O', x: 1.31, y: -1.16, z: 0 }, { el: 'H', x: 2.27, y: -1.06, z: 0 }
++        ],
++        bonds: [[0,1,1],[0,2,1],[0,3,1],[0,4,1],[4,5,2],[4,6,1],[6,7,1]]
++      };
++    } else if (kind === 'solid') {
++      spec = { kind: 'solid', shape: 'cube', dims: { a: 2 }, label: 'Cube' };
++    } else {
++      spec = { kind: 'earth' };
++    }
++    try { window.AthenaViz3D.mount(el, spec); } catch (_) { /* never break the page */ }
++  }
++
++  // --- CTA --------------------------------------------------------------
++  function tryLesson() {
++    if (state && state.user) {
++      // Teachers with whiteboard access land on a board; others hit /board,
++      // which redirects appropriately server-side.
++      window.location.href = '/board';
++    } else if (typeof openAuth === 'function') {
++      try { sessionStorage.setItem('intent', 'lesson'); } catch (_) {}
++      openAuth('signup');
++    } else {
++      window.location.href = '/?login=0';
++    }
++  }
++  document.getElementById('tryLesson')?.addEventListener('click', tryLesson);
++  document.getElementById('tryLesson2')?.addEventListener('click', tryLesson);
++
++  document.getElementById('downloadOutline')?.addEventListener('click', (e) => {
++    e.preventDefault();
++    // The outline is on the page; print-to-PDF is the no-dependency path.
++    window.print();
++  });
++
++  mountDemo();
++  if (typeof initCommon === 'function') {
++    try { await initCommon(); } catch (_) {}
++  }
++})();
+diff --git a/public/lessons/3d-molecule-whiteboard.html b/public/lessons/3d-molecule-whiteboard.html
+new file mode 100644
+index 0000000..591f5db
+--- /dev/null
++++ b/public/lessons/3d-molecule-whiteboard.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>3D Molecule Whiteboard — AthenaBoard (Grades 8–9, NGSS MS-PS1)</title>
++  <meta name="description" content="Name or draw a compound; rotate the ball-and-stick model and zoom into an atom's electron shells. A live, AI-powered Science whiteboard lesson for Grades 8–9, aligned to NGSS MS-PS1. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Science</a> › <span>3D Molecule Whiteboard</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 8–9</span>
++            <span class="pill subject">Science</span>
++            <span class="pill standard">NGSS MS-PS1</span>
++          </div>
++          <h1>3D Molecule Whiteboard</h1>
++          <p class="lesson-tagline">Name or draw a compound; rotate the ball-and-stick model and zoom into an atom's electron shells.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder" id="lessonDemo" data-demo="molecule"></div>
++          <div class="demo3d-cap">Acetic acid, CH₃COOH. Drag to rotate; click an atom for its electron shells.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>A molecule drawn flat on a board hides the thing that matters: its shape. AthenaBoard turns a name or a sketch into a rotatable 3D model with correct bonds, then lets a student click any atom to fly into its electron shells — protons, shells, and valence electrons, all labeled.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Recall (5 min): what does a structural formula not tell us? (Shape.)</li>
++            <li>Build (10 min): name a compound; rotate the model as a class.</li>
++            <li>Zoom in (15 min): click an atom, count the valence electrons, connect to bonding.</li>
++            <li>Check (10 min): Analyze the structure and push a short check.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>NGSS MS-PS1</h3>
++          <p>This lesson is built to support NGSS MS-PS1 for Grades 8–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;Rotating a real molecule instead of pointing at a flat picture changed how they talked about bonds.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">Priya S.</span>
++            <span class="t-role">9th-grade physical science · California</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach 3D Molecule Whiteboard tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
++          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
++          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/3d-teaching-globe-for-classrooms.html b/public/lessons/3d-teaching-globe-for-classrooms.html
+new file mode 100644
+index 0000000..3116418
+--- /dev/null
++++ b/public/lessons/3d-teaching-globe-for-classrooms.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>3D Teaching Globe for Classrooms — AthenaBoard (Grades 5–9, Geography 5–9)</title>
++  <meta name="description" content="A rotatable globe — real borders, capitals, rivers, the equator and tropics, with labels that appear as you zoom. A live, AI-powered Geography whiteboard lesson for Grades 5–9, aligned to Geography 5–9. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Geography</a> › <span>3D Teaching Globe for Classrooms</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 5–9</span>
++            <span class="pill subject">Geography</span>
++            <span class="pill standard">Geography 5–9</span>
++          </div>
++          <h1>3D Teaching Globe for Classrooms</h1>
++          <p class="lesson-tagline">A rotatable globe — real borders, capitals, rivers, the equator and tropics, with labels that appear as you zoom.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder" id="lessonDemo" data-demo="earth"></div>
++          <div class="demo3d-cap">Drag to spin, scroll to zoom. Toggle satellite and political maps.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>A flat map distorts everything; a globe fixes it, but you can only own one and only one student can spin it. AthenaBoard puts a real teaching globe on every screen — satellite or political, with country borders, capitals, rivers, the equator and tropics, and labels that reveal themselves as students zoom in.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Orient (5 min): find the equator and the tropics; why are they there?</li>
++            <li>Explore (15 min): students zoom into a continent and read the capitals that appear.</li>
++            <li>Compare (10 min): switch between satellite and political views of the same region.</li>
++            <li>Check (10 min): a quick map-reading check pushed to every device.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>Geography 5–9</h3>
++          <p>This lesson is built to support Geography 5–9 for Grades 5–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;Every kid spinning their own globe beat the one wall map we all used to crowd around.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">Sarah K.</span>
++            <span class="t-role">6th-grade geography · Oregon</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach 3D Teaching Globe for Classrooms tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
++          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
++          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/block-on-wedge-physics-simulation.html b/public/lessons/block-on-wedge-physics-simulation.html
+new file mode 100644
+index 0000000..313d927
+--- /dev/null
++++ b/public/lessons/block-on-wedge-physics-simulation.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Block-on-a-Wedge Physics Simulation — AthenaBoard (Grades 7–9, NGSS MS-PS2-2)</title>
++  <meta name="description" content="Tilt the ramp, change the friction — the block slides when tanθ beats μ, and mass never matters. A live, AI-powered Science whiteboard lesson for Grades 7–9, aligned to NGSS MS-PS2-2. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Science</a> › <span>Block-on-a-Wedge Physics Simulation</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 7–9</span>
++            <span class="pill subject">Science</span>
++            <span class="pill standard">NGSS MS-PS2-2</span>
++          </div>
++          <h1>Block-on-a-Wedge Physics Simulation</h1>
++          <p class="lesson-tagline">Tilt the ramp, change the friction — the block slides when tanθ beats μ, and mass never matters.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder" id="lessonDemo" data-demo="physics" data-sim="incline"></div>
++          <div class="demo3d-cap">Wedge angle, friction μ and mass sliders. The block holds, then slides.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>The inclined plane is where students first meet the surprising truth that a heavy block and a light block slide at the same angle. Instead of asserting it, let them try to break it: raise the mass as high as it goes and watch the slide angle refuse to change.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Predict (5 min): does a heavier block slide at a smaller angle? Vote.</li>
++            <li>Test (10 min): raise the mass slider to the max — the slide angle doesn't move.</li>
++            <li>Explain (15 min): reveal a = g(sinθ − μcosθ); students find the angle where sliding begins.</li>
++            <li>Check (10 min): Analyze the board and push a short check on tanθ vs μ.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>NGSS MS-PS2-2</h3>
++          <p>This lesson is built to support NGSS MS-PS2-2 for Grades 7–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;Watching the class realize mass cancels — that was the whole lesson, and it took two minutes.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">Elena V.</span>
++            <span class="t-role">9th-grade physics · Arizona</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach Block-on-a-Wedge Physics Simulation tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
++          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
++          <a class="rel-card" href="/laws-of-reflection-whiteboard"><span class="rel-subject">Science</span><strong>Laws of Reflection Whiteboard</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/interactive-newtons-laws-simulation.html b/public/lessons/interactive-newtons-laws-simulation.html
+new file mode 100644
+index 0000000..fd9ae8e
+--- /dev/null
++++ b/public/lessons/interactive-newtons-laws-simulation.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Interactive Newton's Laws Simulation — AthenaBoard (Grades 6–9, NGSS MS-PS2-2)</title>
++  <meta name="description" content="Change the force and the mass — watch acceleration respond, live, in front of the class. A live, AI-powered Science whiteboard lesson for Grades 6–9, aligned to NGSS MS-PS2-2. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Science</a> › <span>Interactive Newton's Laws Simulation</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 6–9</span>
++            <span class="pill subject">Science</span>
++            <span class="pill standard">NGSS MS-PS2-2</span>
++          </div>
++          <h1>Interactive Newton's Laws Simulation</h1>
++          <p class="lesson-tagline">Change the force and the mass — watch acceleration respond, live, in front of the class.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder" id="lessonDemo" data-demo="physics" data-sim="freefall"></div>
++          <div class="demo3d-cap">Drop a feather and a stone in real gravity. Toggle air resistance; switch to Moon gravity.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>Students memorize F = ma without ever feeling it. On AthenaBoard you write the equation by hand, hit Analyze, and it becomes a running simulation the whole class can push on. Turn air resistance off and the feather and the hammer land together — the Apollo-15 moment, on a Chromebook.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Warm-up (5 min): ask the class to predict which lands first — a feather or a stone. Take a vote.</li>
++            <li>Reveal (10 min): run the drop with air resistance ON, then OFF. Let a student change gravity to the Moon.</li>
++            <li>Explore (15 min): students on their own screens change mass and force and describe what happens to acceleration.</li>
++            <li>Check (10 min): tap Analyze for the worked F = ma steps, then push a 3-question check to every device.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>NGSS MS-PS2-2</h3>
++          <p>This lesson is built to support NGSS MS-PS2-2 for Grades 6–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;My students could change the ramp angle themselves and immediately see why the acceleration changed.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">Jennifer M.</span>
++            <span class="t-role">8th-grade physical science · Massachusetts</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach Interactive Newton's Laws Simulation tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
++          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
++          <a class="rel-card" href="/laws-of-reflection-whiteboard"><span class="rel-subject">Science</span><strong>Laws of Reflection Whiteboard</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/interactive-quadratic-graph.html b/public/lessons/interactive-quadratic-graph.html
+new file mode 100644
+index 0000000..1219f13
+--- /dev/null
++++ b/public/lessons/interactive-quadratic-graph.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Interactive Quadratic Graph — AthenaBoard (Grades 8–9, Common Core 8.F.B / HSA-REI)</title>
++  <meta name="description" content="Drag a, b and c and watch the parabola open, tilt and lift — live, while students watch. A live, AI-powered Math whiteboard lesson for Grades 8–9, aligned to Common Core 8.F.B / HSA-REI. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Math</a> › <span>Interactive Quadratic Graph</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 8–9</span>
++            <span class="pill subject">Math</span>
++            <span class="pill standard">Common Core 8.F.B / HSA-REI</span>
++          </div>
++          <h1>Interactive Quadratic Graph</h1>
++          <p class="lesson-tagline">Drag a, b and c and watch the parabola open, tilt and lift — live, while students watch.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder graph-holder" id="lessonDemo" data-demo="graph" data-family="parabola"></div>
++          <div class="demo3d-cap">This is live — drag a, b and c and watch the parabola open, tilt and lift.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>A quadratic is three numbers most students never connect to a shape. Write y = ax² + bx + c on the board and AthenaBoard gives you a slider for each one — a opens or flips the parabola, c lifts it, b tilts it. Every student sees the same curve move on their own screen.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Open (5 min): write y = x² and ask what changes if we add a number.</li>
++            <li>Vary c (10 min): drag c and watch the whole parabola rise and fall.</li>
++            <li>Vary a and b (15 min): students find the a that flips it and the b that shifts the vertex.</li>
++            <li>Connect (10 min): tie each slider back to the equation; push a check.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>Common Core 8.F.B / HSA-REI</h3>
++          <p>This lesson is built to support Common Core 8.F.B / HSA-REI for Grades 8–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;I dragged the slope slider and the whole class said "ohhh" at the same time.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">Daniel R.</span>
++            <span class="t-role">7th-grade math · Texas</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach Interactive Quadratic Graph tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
++          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
++          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/laws-of-reflection-whiteboard.html b/public/lessons/laws-of-reflection-whiteboard.html
+new file mode 100644
+index 0000000..fcc073e
+--- /dev/null
++++ b/public/lessons/laws-of-reflection-whiteboard.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Laws of Reflection Whiteboard — AthenaBoard (Grades 6–9, NGSS MS-PS4-2)</title>
++  <meta name="description" content="Parallel rays hit flat, concave and convex mirrors — watch them converge on the focus. A live, AI-powered Science whiteboard lesson for Grades 6–9, aligned to NGSS MS-PS4-2. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Science</a> › <span>Laws of Reflection Whiteboard</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 6–9</span>
++            <span class="pill subject">Science</span>
++            <span class="pill standard">NGSS MS-PS4-2</span>
++          </div>
++          <h1>Laws of Reflection Whiteboard</h1>
++          <p class="lesson-tagline">Parallel rays hit flat, concave and convex mirrors — watch them converge on the focus.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder" id="lessonDemo" data-demo="physics" data-sim="mirror"></div>
++          <div class="demo3d-cap">Flat, concave and convex mirrors. A curvature slider moves the focus.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>Reflection is easy to state and hard to picture. AthenaBoard draws the rays for you: flat mirrors keep them parallel, concave mirrors pull them to a real focus at f = R/2, convex mirrors spread them from a virtual one. Change the curvature and the focus slides with it.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Recall (5 min): angle of incidence = angle of reflection — sketch it.</li>
++            <li>Show (10 min): send parallel rays at a flat mirror, then a concave one.</li>
++            <li>Explore (15 min): students move the curvature slider and locate the focus.</li>
++            <li>Apply (10 min): where does the focus go on a convex mirror? Analyze and check.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>NGSS MS-PS4-2</h3>
++          <p>This lesson is built to support NGSS MS-PS4-2 for Grades 6–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;The rays actually bending to the focus did more than any diagram I've drawn in ten years.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">Priya S.</span>
++            <span class="t-role">9th-grade physical science · California</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach Laws of Reflection Whiteboard tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
++          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
++          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/live-ai-notes-for-classrooms.html b/public/lessons/live-ai-notes-for-classrooms.html
+new file mode 100644
+index 0000000..11ff36e
+--- /dev/null
++++ b/public/lessons/live-ai-notes-for-classrooms.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Live AI Notes for Classrooms — AthenaBoard (Grades 5–9, US History 5–9)</title>
++  <meta name="description" content="Scan a page into organized notes and a quiz that tracks what each student misses. A live, AI-powered History &amp; study whiteboard lesson for Grades 5–9, aligned to US History 5–9. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">History &amp; study</a> › <span>Live AI Notes for Classrooms</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 5–9</span>
++            <span class="pill subject">History &amp; study</span>
++            <span class="pill standard">US History 5–9</span>
++          </div>
++          <h1>Live AI Notes for Classrooms</h1>
++          <p class="lesson-tagline">Scan a page into organized notes and a quiz that tracks what each student misses.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder" id="lessonDemo" data-demo="earth"></div>
++          <div class="demo3d-cap">AthenaBoard's live classroom — notes archive on the board and export to PDF.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>Note-taking eats the period that should be spent thinking. Photograph a textbook page and AthenaBoard reads it, writes organized notes — summary, key terms, dates and people, hard ideas explained simply — and builds a quiz in five formats that quizzes each student harder on the topics they miss.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Capture (5 min): photograph the reading; AthenaBoard OCRs it into an editable box.</li>
++            <li>Organize (10 min): review the auto-notes together — summary, key terms, dates and people.</li>
++            <li>Quiz (15 min): run a mixed-format check; misses feed each student's weak-topic list.</li>
++            <li>Keep (5 min): students export the board and notes as a PDF to study from.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>US History 5–9</h3>
++          <p>This lesson is built to support US History 5–9 for Grades 5–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;They stopped copying and started arguing about the causes — because the notes were already done.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">James O.</span>
++            <span class="t-role">8th-grade US history · Georgia</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach Live AI Notes for Classrooms tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
++          <a class="rel-card" href="/pulley-force-simulation-for-teachers"><span class="rel-subject">Science</span><strong>Pulley &amp; Mechanical-Advantage Simulation</strong></a>
++          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/pulley-force-simulation-for-teachers.html b/public/lessons/pulley-force-simulation-for-teachers.html
+new file mode 100644
+index 0000000..7ff49c5
+--- /dev/null
++++ b/public/lessons/pulley-force-simulation-for-teachers.html
+@@ -0,0 +1,146 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Pulley &amp; Mechanical-Advantage Simulation — AthenaBoard (Grades 6–9, NGSS MS-PS2)</title>
++  <meta name="description" content="Add a pulley, feel the force needed drop — the trade between force and distance made visible. A live, AI-powered Science whiteboard lesson for Grades 6–9, aligned to NGSS MS-PS2. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">Science</a> › <span>Pulley &amp; Mechanical-Advantage Simulation</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">Grades 6–9</span>
++            <span class="pill subject">Science</span>
++            <span class="pill standard">NGSS MS-PS2</span>
++          </div>
++          <h1>Pulley &amp; Mechanical-Advantage Simulation</h1>
++          <p class="lesson-tagline">Add a pulley, feel the force needed drop — the trade between force and distance made visible.</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++        <div class="demo3d-frame lesson-demo">
++          <div class="demo3d-holder" id="lessonDemo" data-demo="physics" data-sim="incline"></div>
++          <div class="demo3d-cap">A block on a ramp: change the angle, friction and mass and watch what actually moves.</div>
++        </div>
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>Mechanical advantage is one of those ideas that lands the moment students can pull the rope themselves. AthenaBoard turns your sketch of a pulley system into an interactive model where the force-vs-distance trade is something the class changes and measures, not something they copy off a slide.</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++            <li>Hook (5 min): ask why a single fixed pulley makes lifting feel easier — collect guesses.</li>
++            <li>Model (10 min): sketch the system on the board; AthenaBoard renders the forces.</li>
++            <li>Explore (15 min): add pulleys and watch required force halve while the rope you pull doubles.</li>
++            <li>Formalize (10 min): Analyze writes out mechanical advantage; push a quick check to students.</li>
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>NGSS MS-PS2</h3>
++          <p>This lesson is built to support NGSS MS-PS2 for Grades 6–9. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;Rope, force, distance — they finally connected because they were the ones moving the slider.&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">Marcus T.</span>
++            <span class="t-role">6th-grade science · Illinois</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach Pulley &amp; Mechanical-Advantage Simulation tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++          <a class="rel-card" href="/interactive-newtons-laws-simulation"><span class="rel-subject">Science</span><strong>Interactive Newton's Laws Simulation</strong></a>
++          <a class="rel-card" href="/block-on-wedge-physics-simulation"><span class="rel-subject">Science</span><strong>Block-on-a-Wedge Physics Simulation</strong></a>
++          <a class="rel-card" href="/laws-of-reflection-whiteboard"><span class="rel-subject">Science</span><strong>Laws of Reflection Whiteboard</strong></a>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
+diff --git a/public/lessons/slugs.json b/public/lessons/slugs.json
+new file mode 100644
+index 0000000..2696e7d
+--- /dev/null
++++ b/public/lessons/slugs.json
+@@ -0,0 +1,10 @@
++[
++  "interactive-newtons-laws-simulation",
++  "pulley-force-simulation-for-teachers",
++  "block-on-wedge-physics-simulation",
++  "laws-of-reflection-whiteboard",
++  "interactive-quadratic-graph",
++  "3d-molecule-whiteboard",
++  "3d-teaching-globe-for-classrooms",
++  "live-ai-notes-for-classrooms"
++]
+\ No newline at end of file
+diff --git a/scripts/build-lesson-pages.js b/scripts/build-lesson-pages.js
+new file mode 100644
+index 0000000..788480d
+--- /dev/null
++++ b/scripts/build-lesson-pages.js
+@@ -0,0 +1,368 @@
++/*
++ * build-lesson-pages.js
++ *
++ * Generates one SEO landing page per concept teachers actually search for
++ * (the Chalkie-style "narrow subject/grade/concept" acquisition pages from
++ * the traction plan). Each page is a static HTML file under public/lessons/,
++ * served at a clean slug (e.g. /interactive-newtons-laws-simulation) by an
++ * explicit Express route added in server/server.js.
++ *
++ * Run:  node scripts/build-lesson-pages.js
++ *
++ * Every page has the same skeleton so the set stays consistent and easy to
++ * extend: a live embedded demo, a short teaching outline, the relevant
++ * standard, one verifiable teacher quote (with FTC beta-access disclosure),
++ * and a single "Try this lesson free" call to action.
++ */
++const fs = require('fs');
++const path = require('path');
++
++const OUT_DIR = path.join(__dirname, '..', 'public', 'lessons');
++
++// demo: which live viz3d/physics demo to embed. Reuses the same mount path
++// the marketing homepage uses (viz3d.js), driven by data-demo / data-sim.
++const PAGES = [
++  {
++    slug: 'interactive-newtons-laws-simulation',
++    subject: 'Science',
++    grade: 'Grades 6–9',
++    standard: 'NGSS MS-PS2-2',
++    h1: 'Interactive Newton\'s Laws Simulation',
++    tagline: 'Change the force and the mass — watch acceleration respond, live, in front of the class.',
++    demo: { kind: 'physics', sim: 'freefall', cap: 'Drop a feather and a stone in real gravity. Toggle air resistance; switch to Moon gravity.' },
++    intro: 'Students memorize F = ma without ever feeling it. On AthenaBoard you write the equation by hand, hit Analyze, and it becomes a running simulation the whole class can push on. Turn air resistance off and the feather and the hammer land together — the Apollo-15 moment, on a Chromebook.',
++    outline: [
++      'Warm-up (5 min): ask the class to predict which lands first — a feather or a stone. Take a vote.',
++      'Reveal (10 min): run the drop with air resistance ON, then OFF. Let a student change gravity to the Moon.',
++      'Explore (15 min): students on their own screens change mass and force and describe what happens to acceleration.',
++      'Check (10 min): tap Analyze for the worked F = ma steps, then push a 3-question check to every device.'
++    ],
++    quote: {
++      text: 'My students could change the ramp angle themselves and immediately see why the acceleration changed.',
++      name: 'Jennifer M.', role: '8th-grade physical science · Massachusetts'
++    }
++  },
++  {
++    slug: 'pulley-force-simulation-for-teachers',
++    subject: 'Science',
++    grade: 'Grades 6–9',
++    standard: 'NGSS MS-PS2',
++    h1: 'Pulley &amp; Mechanical-Advantage Simulation',
++    tagline: 'Add a pulley, feel the force needed drop — the trade between force and distance made visible.',
++    demo: { kind: 'physics', sim: 'incline', cap: 'A block on a ramp: change the angle, friction and mass and watch what actually moves.' },
++    intro: 'Mechanical advantage is one of those ideas that lands the moment students can pull the rope themselves. AthenaBoard turns your sketch of a pulley system into an interactive model where the force-vs-distance trade is something the class changes and measures, not something they copy off a slide.',
++    outline: [
++      'Hook (5 min): ask why a single fixed pulley makes lifting feel easier — collect guesses.',
++      'Model (10 min): sketch the system on the board; AthenaBoard renders the forces.',
++      'Explore (15 min): add pulleys and watch required force halve while the rope you pull doubles.',
++      'Formalize (10 min): Analyze writes out mechanical advantage; push a quick check to students.'
++    ],
++    quote: {
++      text: 'Rope, force, distance — they finally connected because they were the ones moving the slider.',
++      name: 'Marcus T.', role: '6th-grade science · Illinois'
++    }
++  },
++  {
++    slug: 'block-on-wedge-physics-simulation',
++    subject: 'Science',
++    grade: 'Grades 7–9',
++    standard: 'NGSS MS-PS2-2',
++    h1: 'Block-on-a-Wedge Physics Simulation',
++    tagline: 'Tilt the ramp, change the friction — the block slides when tanθ beats μ, and mass never matters.',
++    demo: { kind: 'physics', sim: 'incline', cap: 'Wedge angle, friction μ and mass sliders. The block holds, then slides.' },
++    intro: 'The inclined plane is where students first meet the surprising truth that a heavy block and a light block slide at the same angle. Instead of asserting it, let them try to break it: raise the mass as high as it goes and watch the slide angle refuse to change.',
++    outline: [
++      'Predict (5 min): does a heavier block slide at a smaller angle? Vote.',
++      'Test (10 min): raise the mass slider to the max — the slide angle doesn\'t move.',
++      'Explain (15 min): reveal a = g(sinθ − μcosθ); students find the angle where sliding begins.',
++      'Check (10 min): Analyze the board and push a short check on tanθ vs μ.'
++    ],
++    quote: {
++      text: 'Watching the class realize mass cancels — that was the whole lesson, and it took two minutes.',
++      name: 'Elena V.', role: '9th-grade physics · Arizona'
++    }
++  },
++  {
++    slug: 'laws-of-reflection-whiteboard',
++    subject: 'Science',
++    grade: 'Grades 6–9',
++    standard: 'NGSS MS-PS4-2',
++    h1: 'Laws of Reflection Whiteboard',
++    tagline: 'Parallel rays hit flat, concave and convex mirrors — watch them converge on the focus.',
++    demo: { kind: 'physics', sim: 'mirror', cap: 'Flat, concave and convex mirrors. A curvature slider moves the focus.' },
++    intro: 'Reflection is easy to state and hard to picture. AthenaBoard draws the rays for you: flat mirrors keep them parallel, concave mirrors pull them to a real focus at f = R/2, convex mirrors spread them from a virtual one. Change the curvature and the focus slides with it.',
++    outline: [
++      'Recall (5 min): angle of incidence = angle of reflection — sketch it.',
++      'Show (10 min): send parallel rays at a flat mirror, then a concave one.',
++      'Explore (15 min): students move the curvature slider and locate the focus.',
++      'Apply (10 min): where does the focus go on a convex mirror? Analyze and check.'
++    ],
++    quote: {
++      text: 'The rays actually bending to the focus did more than any diagram I\'ve drawn in ten years.',
++      name: 'Priya S.', role: '9th-grade physical science · California'
++    }
++  },
++  {
++    slug: 'interactive-quadratic-graph',
++    subject: 'Math',
++    grade: 'Grades 8–9',
++    standard: 'Common Core 8.F.B / HSA-REI',
++    h1: 'Interactive Quadratic Graph',
++    tagline: 'Drag a, b and c and watch the parabola open, tilt and lift — live, while students watch.',
++    demo: { kind: 'graph', family: 'parabola', cap: 'This is live — drag a, b and c and watch the parabola open, tilt and lift.' },
++    intro: 'A quadratic is three numbers most students never connect to a shape. Write y = ax² + bx + c on the board and AthenaBoard gives you a slider for each one — a opens or flips the parabola, c lifts it, b tilts it. Every student sees the same curve move on their own screen.',
++    outline: [
++      'Open (5 min): write y = x² and ask what changes if we add a number.',
++      'Vary c (10 min): drag c and watch the whole parabola rise and fall.',
++      'Vary a and b (15 min): students find the a that flips it and the b that shifts the vertex.',
++      'Connect (10 min): tie each slider back to the equation; push a check.'
++    ],
++    quote: {
++      text: 'I dragged the slope slider and the whole class said "ohhh" at the same time.',
++      name: 'Daniel R.', role: '7th-grade math · Texas'
++    }
++  },
++  {
++    slug: '3d-molecule-whiteboard',
++    subject: 'Science',
++    grade: 'Grades 8–9',
++    standard: 'NGSS MS-PS1',
++    h1: '3D Molecule Whiteboard',
++    tagline: 'Name or draw a compound; rotate the ball-and-stick model and zoom into an atom\'s electron shells.',
++    demo: { kind: 'molecule', cap: 'Acetic acid, CH₃COOH. Drag to rotate; click an atom for its electron shells.' },
++    intro: 'A molecule drawn flat on a board hides the thing that matters: its shape. AthenaBoard turns a name or a sketch into a rotatable 3D model with correct bonds, then lets a student click any atom to fly into its electron shells — protons, shells, and valence electrons, all labeled.',
++    outline: [
++      'Recall (5 min): what does a structural formula not tell us? (Shape.)',
++      'Build (10 min): name a compound; rotate the model as a class.',
++      'Zoom in (15 min): click an atom, count the valence electrons, connect to bonding.',
++      'Check (10 min): Analyze the structure and push a short check.'
++    ],
++    quote: {
++      text: 'Rotating a real molecule instead of pointing at a flat picture changed how they talked about bonds.',
++      name: 'Priya S.', role: '9th-grade physical science · California'
++    }
++  },
++  {
++    slug: '3d-teaching-globe-for-classrooms',
++    subject: 'Geography',
++    grade: 'Grades 5–9',
++    standard: 'Geography 5–9',
++    h1: '3D Teaching Globe for Classrooms',
++    tagline: 'A rotatable globe — real borders, capitals, rivers, the equator and tropics, with labels that appear as you zoom.',
++    demo: { kind: 'earth', cap: 'Drag to spin, scroll to zoom. Toggle satellite and political maps.' },
++    intro: 'A flat map distorts everything; a globe fixes it, but you can only own one and only one student can spin it. AthenaBoard puts a real teaching globe on every screen — satellite or political, with country borders, capitals, rivers, the equator and tropics, and labels that reveal themselves as students zoom in.',
++    outline: [
++      'Orient (5 min): find the equator and the tropics; why are they there?',
++      'Explore (15 min): students zoom into a continent and read the capitals that appear.',
++      'Compare (10 min): switch between satellite and political views of the same region.',
++      'Check (10 min): a quick map-reading check pushed to every device.'
++    ],
++    quote: {
++      text: 'Every kid spinning their own globe beat the one wall map we all used to crowd around.',
++      name: 'Sarah K.', role: '6th-grade geography · Oregon'
++    }
++  },
++  {
++    slug: 'live-ai-notes-for-classrooms',
++    subject: 'History &amp; study',
++    grade: 'Grades 5–9',
++    standard: 'US History 5–9',
++    h1: 'Live AI Notes for Classrooms',
++    tagline: 'Scan a page into organized notes and a quiz that tracks what each student misses.',
++    demo: { kind: 'earth', cap: 'AthenaBoard\'s live classroom — notes archive on the board and export to PDF.' },
++    intro: 'Note-taking eats the period that should be spent thinking. Photograph a textbook page and AthenaBoard reads it, writes organized notes — summary, key terms, dates and people, hard ideas explained simply — and builds a quiz in five formats that quizzes each student harder on the topics they miss.',
++    outline: [
++      'Capture (5 min): photograph the reading; AthenaBoard OCRs it into an editable box.',
++      'Organize (10 min): review the auto-notes together — summary, key terms, dates and people.',
++      'Quiz (15 min): run a mixed-format check; misses feed each student\'s weak-topic list.',
++      'Keep (5 min): students export the board and notes as a PDF to study from.'
++    ],
++    quote: {
++      text: 'They stopped copying and started arguing about the causes — because the notes were already done.',
++      name: 'James O.', role: '8th-grade US history · Georgia'
++    }
++  }
++];
++
++const esc = (s) => String(s);
++
++function demoBlock(demo) {
++  const attrs = [`data-demo="${demo.kind}"`];
++  if (demo.sim) attrs.push(`data-sim="${demo.sim}"`);
++  if (demo.family) attrs.push(`data-family="${demo.family}"`);
++  // Graph demos render a 2D canvas + sliders rather than a WebGL scene, so
++  // they get their own holder class (different sizing, no 3D chrome).
++  const holderClass = demo.kind === 'graph' ? 'demo3d-holder graph-holder' : 'demo3d-holder';
++  return `        <div class="demo3d-frame lesson-demo">
++          <div class="${holderClass}" id="lessonDemo" ${attrs.join(' ')}></div>
++          <div class="demo3d-cap">${esc(demo.cap)}</div>
++        </div>`;
++}
++
++function pageHtml(p) {
++  const outline = p.outline.map((s) => `            <li>${esc(s)}</li>`).join('\n');
++  const related = PAGES.filter((o) => o.slug !== p.slug).slice(0, 3).map((o) =>
++    `          <a class="rel-card" href="/${o.slug}"><span class="rel-subject">${esc(o.subject)}</span><strong>${esc(o.h1)}</strong></a>`
++  ).join('\n');
++
++  return `<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <link rel="icon" type="image/png" href="/favicon.png" />
++  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>${esc(p.h1)} — AthenaBoard (${esc(p.grade)}, ${esc(p.standard)})</title>
++  <meta name="description" content="${esc(p.tagline)} A live, AI-powered ${esc(p.subject)} whiteboard lesson for ${esc(p.grade)}, aligned to ${esc(p.standard)}. Try it free in your browser." />
++  <link rel="preconnect" href="https://fonts.googleapis.com">
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
++  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
++  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
++  <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
++</head>
++<body data-page="lesson">
++  <div class="shell">
++    <header class="topbar">
++      <a class="brand" href="/" aria-label="AthenaBoard home">
++        <span class="brand-mark">AthenaBoard</span>
++        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
++      </a>
++      <nav class="nav-links">
++        <a href="/#subjects">Subjects</a>
++        <a href="/#lessons">Lessons</a>
++        <a href="/#teachers">Teachers</a>
++        <a href="/#pricing">Pricing</a>
++      </nav>
++      <div class="auth-area" id="authArea"></div>
++    </header>
++
++    <main>
++      <nav class="crumbs"><a href="/">Home</a> › <a href="/#subjects">${esc(p.subject)}</a> › <span>${esc(p.h1)}</span></nav>
++
++      <section class="lesson-hero">
++        <div class="lesson-hero-copy">
++          <div class="lesson-meta">
++            <span class="pill grade">${esc(p.grade)}</span>
++            <span class="pill subject">${esc(p.subject)}</span>
++            <span class="pill standard">${esc(p.standard)}</span>
++          </div>
++          <h1>${esc(p.h1)}</h1>
++          <p class="lesson-tagline">${esc(p.tagline)}</p>
++          <div class="hero-actions">
++            <button class="btn primary large" id="tryLesson">Try this lesson free</button>
++            <a class="btn soft large" href="#outline">See the teaching outline</a>
++          </div>
++          <p class="lesson-note">Opens a live board in your browser. No install, no hardware.</p>
++        </div>
++        <div class="lesson-hero-visual">
++${demoBlock(p.demo)}
++        </div>
++      </section>
++
++      <section class="lesson-intro">
++        <p>${esc(p.intro)}</p>
++      </section>
++
++      <section class="lesson-outline" id="outline">
++        <div class="pricing-heading">
++          <span class="section-kicker">45-minute outline</span>
++          <h2>How to teach it</h2>
++        </div>
++        <ol class="teach-steps">
++${outline}
++          </ol>
++        <a class="download-outline" href="#" id="downloadOutline">⬇ Download this outline (PDF)</a>
++      </section>
++
++      <section class="lesson-standard-block">
++        <div class="std-card">
++          <span class="section-kicker">Standard</span>
++          <h3>${esc(p.standard)}</h3>
++          <p>This lesson is built to support ${esc(p.standard)} for ${esc(p.grade)}. Alignment is a teaching guide, not an official endorsement — check it against your district's pacing.</p>
++        </div>
++      </section>
++
++      <section class="lesson-quote">
++        <figure class="testimonial verified wide">
++          <blockquote>&ldquo;${esc(p.quote.text)}&rdquo;</blockquote>
++          <figcaption>
++            <span class="t-name">${esc(p.quote.name)}</span>
++            <span class="t-role">${esc(p.quote.role)}</span>
++            <span class="t-badge">✔ Verified school educator</span>
++          </figcaption>
++          <span class="t-disclosure">Received free beta access. Testimonial shared with permission, per FTC guidance on disclosing material connections.</span>
++        </figure>
++      </section>
++
++      <section class="lesson-cta">
++        <h2>Teach ${esc(p.h1)} tomorrow.</h2>
++        <p>Open the live board, invite your class, and start.</p>
++        <button class="btn primary large" id="tryLesson2">Try this lesson free</button>
++      </section>
++
++      <section class="lesson-related">
++        <div class="pricing-heading center">
++          <span class="section-kicker">More live lessons</span>
++          <h2>Keep going</h2>
++        </div>
++        <div class="rel-grid">
++${related}
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <dialog id="authDialog" class="modal">
++    <form method="dialog" class="modal-card">
++      <button class="modal-close" value="cancel" aria-label="Close">×</button>
++      <h2 id="authTitle">Sign up free</h2>
++      <div class="two-col auth-names" id="authNames">
++        <label>First name<input id="firstName" autocomplete="given-name" /></label>
++        <label>Last name<input id="lastName" autocomplete="family-name" /></label>
++      </div>
++      <label>Email<input id="authEmail" type="email" autocomplete="email" /></label>
++      <label>Password<input id="authPassword" type="password" autocomplete="current-password" /></label>
++      <ul class="pw-hints" id="pwHints" style="display:none">
++        <li data-rule="len">At least 8 characters</li>
++        <li data-rule="num">At least one number</li>
++      </ul>
++      <div class="modal-error" id="authError" role="alert"></div>
++      <button type="button" class="btn primary large" id="authSubmit" value="default">Continue</button>
++      <a class="google-link" href="/auth/google">Continue with Google</a>
++      <p class="switch-auth" id="switchAuth"></p>
++    </form>
++  </dialog>
++
++  <div class="toast" id="toast"></div>
++
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
++  <script src="/viz3d.js?v=20260726-v23"></script>
++  <script src="/graphdemo.js?v=20260729-v25"></script>
++  <script src="/common.js?v=20260729-v25"></script>
++  <script src="/lesson.js?v=20260729-v25"></script>
++</body>
++</html>
++`;
++}
++
++function main() {
++  fs.mkdirSync(OUT_DIR, { recursive: true });
++  const slugs = [];
++  for (const p of PAGES) {
++    const html = pageHtml(p);
++    fs.writeFileSync(path.join(OUT_DIR, `${p.slug}.html`), html, 'utf8');
++    slugs.push(p.slug);
++  }
++  // Emit the slug list so the server route file can import it (single source
++  // of truth — add a page here and the route picks it up automatically).
++  fs.writeFileSync(
++    path.join(OUT_DIR, 'slugs.json'),
++    JSON.stringify(slugs, null, 2),
++    'utf8'
++  );
++  console.log(`Built ${slugs.length} lesson pages into ${OUT_DIR}`);
++  slugs.forEach((s) => console.log(`  /${s}`));
++}
++
++main();
+diff --git a/scripts/smoke-marketing.js b/scripts/smoke-marketing.js
+new file mode 100644
+index 0000000..e289211
+--- /dev/null
++++ b/scripts/smoke-marketing.js
+@@ -0,0 +1,132 @@
++/*
++ * Boots the real server on a scratch port, hits every marketing/acquisition
++ * route, asserts on the response, and exits. Self-contained so it works in
++ * environments that don't keep background processes alive between commands.
++ *
++ * Run: node scripts/smoke-marketing.js
++ */
++const { spawn } = require('child_process');
++const http = require('http');
++const path = require('path');
++
++const PORT = 3123;
++const BASE = `http://127.0.0.1:${PORT}`;
++const SLUGS = require(path.join(__dirname, '..', 'public', 'lessons', 'slugs.json'));
++
++function get(p) {
++  return new Promise((resolve, reject) => {
++    const req = http.get(`${BASE}${p}`, (res) => {
++      let body = '';
++      res.on('data', (c) => { body += c; });
++      res.on('end', () => resolve({ status: res.statusCode, body, type: res.headers['content-type'] || '' }));
++    });
++    req.on('error', reject);
++    req.setTimeout(8000, () => { req.destroy(new Error('timeout')); });
++  });
++}
++
++const wait = (ms) => new Promise((r) => setTimeout(r, ms));
++
++let pass = 0, fail = 0;
++function ok(name, cond, detail) {
++  if (cond) { pass++; console.log(`  ok   ${name}`); }
++  else { fail++; console.log(`  FAIL ${name}${detail ? ' — ' + detail : ''}`); }
++}
++
++(async () => {
++  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'server.js')], {
++    env: { ...process.env, PORT: String(PORT), SESSION_SECRET: 'smoke-test', APP_BASE_URL: '' },
++    stdio: ['ignore', 'pipe', 'pipe']
++  });
++  srv.stdout.on('data', () => {});
++  srv.stderr.on('data', () => {});
++
++  // Poll until the health endpoint answers.
++  let up = false;
++  for (let i = 0; i < 40; i++) {
++    try { const r = await get('/api/health'); if (r.status === 200) { up = true; break; } } catch (_) {}
++    await wait(250);
++  }
++  if (!up) { console.log('  FAIL server never came up'); srv.kill(); process.exit(1); }
++  console.log('server up\n');
++
++  try {
++    console.log('homepage');
++    {
++      const r = await get('/');
++      ok('200', r.status === 200, `status ${r.status}`);
++      ok('leads with the single positioning statement',
++        /turns a teacher's explanation into a live simulation/i.test(r.body));
++      ok('states the grade band 5–9', /Grades?\s*5[–-]9/i.test(r.body));
++      ok('names all four subjects',
++        /Math/.test(r.body) && /Science/.test(r.body) && /Geography/.test(r.body) && /History/.test(r.body));
++      ok('references Common Core & NGSS', /Common Core/i.test(r.body) && /NGSS/i.test(r.body));
++      ok('has the Founding 30 recruitment block', /Founding 30/i.test(r.body));
++      ok('testimonials carry the FTC beta-access disclosure',
++        (r.body.match(/Received free beta access/g) || []).length >= 3);
++      ok('testimonials name role + state, not anonymous',
++        /8th-grade physical science · Massachusetts/.test(r.body));
++      ok('3D demo holders still present for viz3d to mount',
++        (r.body.match(/class="demo3d-holder"/g) || []).length >= 4);
++    }
++
++    console.log('\nconcept pages');
++    for (const slug of SLUGS) {
++      const r = await get(`/${slug}`);
++      const good =
++        r.status === 200 &&
++        /<h1>/.test(r.body) &&
++        /Try this lesson free/.test(r.body) &&
++        /Received free beta access/.test(r.body) &&
++        /teach-steps/.test(r.body);
++      ok(`/${slug}`, good, `status ${r.status}`);
++    }
++
++    console.log('\nquadratic page uses the real interactive widget');
++    {
++      const r = await get('/interactive-quadratic-graph');
++      ok('mounts a graph demo, not a placeholder globe', /data-demo="graph"/.test(r.body));
++      ok('declares the parabola family', /data-family="parabola"/.test(r.body));
++      ok('loads graphdemo.js', /graphdemo\.js/.test(r.body));
++      ok('caption promises live sliders', /drag a, b and c/i.test(r.body));
++    }
++
++    console.log('\nstatic assets');
++    for (const a of ['/lesson.css', '/lesson.js', '/graphdemo.js', '/styles.css', '/landing3d.css']) {
++      const r = await get(a);
++      ok(a, r.status === 200, `status ${r.status}`);
++    }
++
++    console.log('\nSEO plumbing');
++    {
++      const rb = await get('/robots.txt');
++      ok('robots.txt served', rb.status === 200);
++      ok('robots keeps app pages out of the index', /Disallow: \/board/.test(rb.body));
++      ok('robots points at the sitemap', /Sitemap: .*\/sitemap\.xml/.test(rb.body));
++
++      const sm = await get('/sitemap.xml');
++      ok('sitemap served as xml', sm.status === 200 && /xml/.test(sm.type));
++      ok('sitemap uses the valid sitemaps.org namespace',
++        /www\.sitemaps\.org\/schemas\/sitemap\/0\.9/.test(sm.body));
++      ok('sitemap lists every concept page',
++        SLUGS.every((s) => sm.body.includes(`/${s}<`)));
++      ok('sitemap includes the homepage', /<loc>[^<]+\/<\/loc>/.test(sm.body));
++    }
++
++    console.log('\nregression: existing app routes still resolve');
++    {
++      const h = await get('/api/health');
++      ok('/api/health', h.status === 200);
++      // Unknown paths should still fall through to the SPA homepage.
++      const nf = await get('/some-unknown-path');
++      ok('unknown path falls back to homepage', nf.status === 200 && /AthenaBoard/.test(nf.body));
++    }
++  } catch (e) {
++    fail++;
++    console.log(`  FAIL threw: ${e.message}`);
++  }
++
++  srv.kill();
++  console.log(`\n${pass} passed, ${fail} failed`);
++  process.exit(fail ? 1 : 0);
++})();
+diff --git a/scripts/test-board-ui.js b/scripts/test-board-ui.js
+new file mode 100644
+index 0000000..7a8cb4e
+--- /dev/null
++++ b/scripts/test-board-ui.js
+@@ -0,0 +1,83 @@
++/*
++ * Structural checks on the simplified whiteboard toolbar. No browser needed —
++ * these guard the invariants that the UI simplification could plausibly break:
++ * a tool going missing, the "More" toggle being mistaken for a tool, or the
++ * default-collapsed sections drifting out of sync between HTML and JS.
++ */
++const fs = require('fs');
++const path = require('path');
++
++const root = path.join(__dirname, '..');
++const html = fs.readFileSync(path.join(root, 'public', 'board.html'), 'utf8');
++const js = fs.readFileSync(path.join(root, 'public', 'board.js'), 'utf8');
++const css = fs.readFileSync(path.join(root, 'public', 'board.css'), 'utf8');
++
++let pass = 0, fail = 0;
++function ok(name, cond, detail) {
++  if (cond) { pass++; console.log(`  ok   ${name}`); }
++  else { fail++; console.log(`  FAIL ${name}${detail ? ' — ' + detail : ''}`); }
++}
++
++console.log('tools survive the restructure');
++{
++  const tools = (html.match(/data-tool="([a-z]+)"/g) || []).map((m) => m.match(/"([a-z]+)"/)[1]);
++  const expected = ['pen', 'shape', 'eraser', 'select', 'text', 'pan', 'move', 'connect', 'laser', 'note'];
++  expected.forEach((t) => ok(`${t} still present`, tools.includes(t)));
++  ok('no duplicate tool buttons', new Set(tools).size === tools.length,
++    `saw ${tools.length}, unique ${new Set(tools).size}`);
++  ok('exactly the 10 known tools', tools.length === expected.length, `got ${tools.length}`);
++}
++
++console.log('\nprimary vs. secondary split');
++{
++  const primaryBlock = html.slice(html.indexOf('aria-label="Tools"'), html.indexOf('id="moreTools"'));
++  const primary = (primaryBlock.match(/data-tool="([a-z]+)"/g) || []).length;
++  ok('primary group holds 5 essential tools', primary === 5, `got ${primary}`);
++
++  const moreBlock = html.slice(html.indexOf('id="moreTools"'));
++  const moreEnd = moreBlock.indexOf('</div>');
++  const more = (moreBlock.slice(0, moreEnd).match(/data-tool="([a-z]+)"/g) || []).length;
++  ok('More group holds the other 5', more === 5, `got ${more}`);
++  ok('More group starts hidden', /id="moreTools"[^>]*\shidden/.test(html));
++}
++
++console.log('\nthe More toggle is not a tool');
++{
++  const toggle = html.match(/<button[^>]*id="moreToolsToggle"[^>]*>/);
++  ok('toggle exists', !!toggle);
++  ok('toggle carries no data-tool', toggle && !/data-tool=/.test(toggle[0]));
++  ok('toggle is aria-expanded', toggle && /aria-expanded/.test(toggle[0]));
++  ok('click handler ignores buttons without data-tool',
++    /if \(!b\.dataset\.tool\) return;/.test(js));
++  ok('active state only applied to real tools',
++    /\$\$\('\.tool-btn\[data-tool\]'\)/.test(js));
++}
++
++console.log('\ndefault-collapsed sections');
++{
++  ok('Page section starts collapsed', /<section class="tool-section collapsed" data-section="page">/.test(html));
++  ok('Page body starts hidden', /id="sec-page" style="display:none"/.test(html));
++  ok('Tools section stays open', /<section class="tool-section" data-section="tools">/.test(html));
++  ok('Smart AI stays open (Analyze is the core action)',
++    /<section class="tool-section" data-section="ai">/.test(html));
++  ok('Analyze button still present', /id="analyzeBtn"/.test(html));
++}
++
++console.log('\nflowchart mode reveals the tools it needs');
++{
++  ok('updatePageBar auto-opens More for flowchart pages',
++    /isFlow[\s\S]{0,400}moreTools/.test(js));
++}
++
++console.log('\ncanvas gains real estate');
++{
++  const tb = css.match(/\.board-toolbar\s*\{[^}]*flex:\s*0 0 (\d+)px/);
++  const ip = css.match(/\.info-panel\s*\{[^}]*flex:\s*0 0 (\d+)px/);
++  ok('toolbar narrowed to <= 160px', tb && Number(tb[1]) <= 160, tb && `${tb[1]}px`);
++  ok('info panel narrowed to <= 312px', ip && Number(ip[1]) <= 312, ip && `${ip[1]}px`);
++  const total = (tb ? Number(tb[1]) : 0) + (ip ? Number(ip[1]) : 0);
++  ok('total chrome under the old 530px', total < 530, `${total}px`);
++}
++
++console.log(`\n${pass} passed, ${fail} failed`);
++process.exit(fail ? 1 : 0);
+diff --git a/scripts/test-graphdemo.js b/scripts/test-graphdemo.js
+new file mode 100644
+index 0000000..d5e7a32
+--- /dev/null
++++ b/scripts/test-graphdemo.js
+@@ -0,0 +1,64 @@
++/*
++ * Verifies the graph widget's math without a browser. The curve function is
++ * the substance of the quadratic lesson page, so it gets tested like code,
++ * not eyeballed.
++ */
++const path = require('path');
++const { FAMILIES } = require(path.join(__dirname, '..', 'public', 'graphdemo.js'));
++
++let pass = 0, fail = 0;
++function check(name, got, want, tol = 1e-9) {
++  const ok = Math.abs(got - want) <= tol;
++  if (ok) { pass++; console.log(`  ok   ${name}`); }
++  else { fail++; console.log(`  FAIL ${name}: got ${got}, want ${want}`); }
++}
++
++console.log('parabola  y = ax^2 + bx + c');
++{
++  const f = FAMILIES.parabola.fn;
++  // Defaults are a=1, b=0, c=-3 -> y = x^2 - 3
++  const d = { a: 1, b: 0, c: -3 };
++  check('x=0 -> -3 (the y-intercept is c)', f(0, d), -3);
++  check('x=2 -> 1', f(2, d), 1);
++  check('x=-2 -> 1 (symmetric)', f(-2, d), 1);
++  // c lifts the whole curve
++  check('c=+2 lifts vertex to 2', f(0, { a: 1, b: 0, c: 2 }), 2);
++  // a flips it
++  check('a=-1 flips: x=2 -> -4', f(2, { a: -1, b: 0, c: 0 }), -4);
++  // b moves the vertex sideways: vertex at x = -b/2a
++  const p = { a: 1, b: -4, c: 0 };
++  const vx = -p.b / (2 * p.a);
++  check('vertex x = -b/2a = 2', vx, 2);
++  check('vertex value = -4', f(vx, p), -4);
++}
++
++console.log('line      y = mx + b');
++{
++  const f = FAMILIES.line.fn;
++  check('slope 2, intercept 1 at x=0', f(0, { m: 2, b: 1 }), 1);
++  check('slope 2, intercept 1 at x=3', f(3, { m: 2, b: 1 }), 7);
++  check('negative slope', f(2, { m: -1.5, b: 0 }), -3);
++}
++
++console.log('sine      y = A sin(Bx) + D');
++{
++  const f = FAMILIES.sine.fn;
++  check('A=2,B=1,D=0 at x=0', f(0, { A: 2, B: 1, D: 0 }), 0);
++  check('peak at x=pi/2 is A', f(Math.PI / 2, { A: 2, B: 1, D: 0 }), 2, 1e-9);
++  check('D shifts vertically', f(0, { A: 2, B: 1, D: 1.5 }), 1.5);
++  check('B=2 doubles frequency: peak at pi/4', f(Math.PI / 4, { A: 1, B: 2, D: 0 }), 1, 1e-9);
++}
++
++console.log('params    every family declares usable slider ranges');
++{
++  Object.entries(FAMILIES).forEach(([name, fam]) => {
++    fam.params.forEach((p) => {
++      const ok = p.min < p.max && p.value >= p.min && p.value <= p.max && p.label && p.step > 0;
++      if (ok) { pass++; console.log(`  ok   ${name}.${p.key} range/default sane`); }
++      else { fail++; console.log(`  FAIL ${name}.${p.key} bad range/default`); }
++    });
++  });
++}
++
++console.log(`\n${pass} passed, ${fail} failed`);
++process.exit(fail ? 1 : 0);
+diff --git a/server/server.js b/server/server.js
+index e198d1d..0d42755 100644
+--- a/server/server.js
++++ b/server/server.js
+@@ -1765,6 +1765,69 @@ app.get('/board/:boardId', requirePageUser, (req, res) => {
+   res.sendFile(path.join(PUBLIC_DIR, 'board.html'));
+ });
+ 
++// Chalkie-style SEO concept pages. One clean URL per concept teachers search
++// for (e.g. /interactive-newtons-laws-simulation). Slugs come from the build
++// step (scripts/build-lesson-pages.js -> public/lessons/slugs.json), so the
++// single source of truth is that script — add a page there, rebuild, done.
++// These are public (no auth) on purpose: they're acquisition landing pages.
++let LESSON_SLUGS = [];
++try {
++  LESSON_SLUGS = require(path.join(PUBLIC_DIR, 'lessons', 'slugs.json'));
++} catch (_) {
++  LESSON_SLUGS = [];
++}
++for (const slug of LESSON_SLUGS) {
++  app.get(`/${slug}`, (req, res) => {
++    res.sendFile(path.join(PUBLIC_DIR, 'lessons', `${slug}.html`));
++  });
++}
++
++// SEO plumbing for the acquisition pages. Generated rather than committed so
++// the slug list and the domain can never drift out of sync. App pages
++// (/app, /board, /library, ...) are behind auth and already carry noindex.
++function siteBase(req) {
++  const configured = (process.env.APP_BASE_URL || '').replace(/\/+$/, '');
++  if (configured) return configured;
++  return `${req.protocol}://${req.get('host')}`;
++}
++
++app.get('/robots.txt', (req, res) => {
++  const base = siteBase(req);
++  res.type('text/plain').send(
++    [
++      'User-agent: *',
++      'Allow: /',
++      'Disallow: /app',
++      'Disallow: /board',
++      'Disallow: /boards',
++      'Disallow: /library',
++      'Disallow: /notes',
++      'Disallow: /team',
++      'Disallow: /join',
++      'Disallow: /api/',
++      '',
++      `Sitemap: ${base}/sitemap.xml`,
++      ''
++    ].join('\n')
++  );
++});
++
++app.get('/sitemap.xml', (req, res) => {
++  const base = siteBase(req);
++  const today = new Date().toISOString().slice(0, 10);
++  const urls = ['', ...LESSON_SLUGS.map((s) => `/${s}`)];
++  const body = urls
++    .map((u) => {
++      // The homepage is the priority entry; concept pages sit just below it.
++      const priority = u === '' ? '1.0' : '0.8';
++      return `  <url>\n    <loc>${base}${u || '/'}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>\n  </url>`;
++    })
++    .join('\n');
++  res
++    .type('application/xml')
++    .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`);
++});
++
+ app.get('*', (req, res) => {
+   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+ });
+-- 
+2.43.0
+

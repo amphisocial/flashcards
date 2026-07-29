@@ -1765,6 +1765,69 @@ app.get('/board/:boardId', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'board.html'));
 });
 
+// Chalkie-style SEO concept pages. One clean URL per concept teachers search
+// for (e.g. /interactive-newtons-laws-simulation). Slugs come from the build
+// step (scripts/build-lesson-pages.js -> public/lessons/slugs.json), so the
+// single source of truth is that script — add a page there, rebuild, done.
+// These are public (no auth) on purpose: they're acquisition landing pages.
+let LESSON_SLUGS = [];
+try {
+  LESSON_SLUGS = require(path.join(PUBLIC_DIR, 'lessons', 'slugs.json'));
+} catch (_) {
+  LESSON_SLUGS = [];
+}
+for (const slug of LESSON_SLUGS) {
+  app.get(`/${slug}`, (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'lessons', `${slug}.html`));
+  });
+}
+
+// SEO plumbing for the acquisition pages. Generated rather than committed so
+// the slug list and the domain can never drift out of sync. App pages
+// (/app, /board, /library, ...) are behind auth and already carry noindex.
+function siteBase(req) {
+  const configured = (process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+  if (configured) return configured;
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+app.get('/robots.txt', (req, res) => {
+  const base = siteBase(req);
+  res.type('text/plain').send(
+    [
+      'User-agent: *',
+      'Allow: /',
+      'Disallow: /app',
+      'Disallow: /board',
+      'Disallow: /boards',
+      'Disallow: /library',
+      'Disallow: /notes',
+      'Disallow: /team',
+      'Disallow: /join',
+      'Disallow: /api/',
+      '',
+      `Sitemap: ${base}/sitemap.xml`,
+      ''
+    ].join('\n')
+  );
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const base = siteBase(req);
+  const today = new Date().toISOString().slice(0, 10);
+  const urls = ['', ...LESSON_SLUGS.map((s) => `/${s}`)];
+  const body = urls
+    .map((u) => {
+      // The homepage is the priority entry; concept pages sit just below it.
+      const priority = u === '' ? '1.0' : '0.8';
+      return `  <url>\n    <loc>${base}${u || '/'}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>\n  </url>`;
+    })
+    .join('\n');
+  res
+    .type('application/xml')
+    .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`);
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
