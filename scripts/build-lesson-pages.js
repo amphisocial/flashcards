@@ -219,6 +219,7 @@ function pageHtml(p) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
   <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
+  <link rel="stylesheet" href="/viz3d.css?v=20260729-v26" />
   <link rel="stylesheet" href="/lesson.css?v=20260729-v25" />
 </head>
 <body data-page="lesson">

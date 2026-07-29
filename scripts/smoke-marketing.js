@@ -92,9 +92,35 @@ function ok(name, cond, detail) {
     }
 
     console.log('\nstatic assets');
-    for (const a of ['/lesson.css', '/lesson.js', '/graphdemo.js', '/styles.css', '/landing3d.css']) {
+    for (const a of ['/lesson.css', '/lesson.js', '/graphdemo.js', '/viz3d.css', '/viz3d.js', '/styles.css', '/landing3d.css']) {
       const r = await get(a);
       ok(a, r.status === 200, `status ${r.status}`);
+    }
+
+    console.log('\n3D/physics viewer chrome is styled off the whiteboard');
+    {
+      // The physics HUD, control bar, and fullscreen button are built by
+      // viz3d.js and positioned absolutely; without viz3d.css on these pages
+      // they render as unstyled text that overlaps the caption (the reported
+      // bug). Assert the stylesheet is linked and actually defines the
+      // classes the JS emits.
+      const page = await get('/interactive-newtons-laws-simulation');
+      ok('lesson page links viz3d.css', /viz3d\.css/.test(page.body));
+      const home = await get('/');
+      ok('homepage links viz3d.css', /viz3d\.css/.test(home.body));
+
+      const css = await get('/viz3d.css');
+      const needed = ['.phys-hud', '.phys-controls', '.phys-btn', '.phys-slider',
+        '.phys-toggle', '.phys-presets', '.viz3d-fs-btn', '.viz3d-mode-btn', '.viz3d-back-btn'];
+      needed.forEach((sel) => ok(`viz3d.css defines ${sel}`, css.body.includes(sel)));
+      ok('phys-controls is absolutely positioned (won\'t spill onto caption)',
+        /\.phys-controls\s*\{[^}]*position:\s*absolute/.test(css.body));
+      ok('phys-hud height-capped so it can\'t overlap the control bar',
+        /\.phys-hud\s*\{[^}]*max-height/.test(css.body));
+      ok('the run button is visually primary',
+        /\.phys-controls \.phys-btn:first-of-type/.test(css.body));
+      ok('fullscreen button is large/visible (>=42px)',
+        /\.viz3d-fs-btn\s*\{[^}]*width:\s*42px/.test(css.body));
     }
 
     console.log('\nSEO plumbing');

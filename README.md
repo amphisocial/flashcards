@@ -33,8 +33,15 @@ are generated from a single data file:
 npm run build:lessons     # writes public/lessons/*.html + slugs.json
 ```
 
-Add or edit a page in `scripts/build-lesson-pages.js` and rebuild — the Express
-routes and `sitemap.xml` read `slugs.json`, so nothing else needs touching.
+Add or edit a page in `scripts/build-lesson-pages.js` and rebuild.
+
+**Editing** an existing page's copy = rebuild only; the HTML is served from
+disk, so the change is live immediately.
+
+**Adding a new slug** = rebuild **and restart** (`pm2 restart flashcards`).
+`slugs.json` is `require`d once at boot and the routes are registered at
+startup, so a brand-new URL 404s (falls through to the homepage) until the
+process restarts.
 
 Current pages: `/interactive-newtons-laws-simulation`,
 `/pulley-force-simulation-for-teachers`, `/block-on-wedge-physics-simulation`,

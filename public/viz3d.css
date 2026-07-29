@@ -1,0 +1,138 @@
+/*
+ * viz3d.css — styling for the shared 3D/physics viewer (viz3d.js) OUTSIDE the
+ * whiteboard. The board already carries an equivalent copy inside board.css;
+ * the marketing homepage and the concept-landing pages didn't, so the physics
+ * HUD, control bar, and fullscreen button rendered as unstyled, unpositioned
+ * block text that spilled over the caption. This file fixes that and, on these
+ * acquisition pages, makes the Play / Reset / Fullscreen controls deliberately
+ * prominent — a visitor should never have to hunt for "how do I run it."
+ *
+ * Load AFTER landing3d.css (which sets .demo3d-holder { position: relative }),
+ * so the absolutely-positioned children anchor to the holder.
+ */
+
+/* ---------- Fullscreen (⛶) button — made very visible here ---------- */
+.viz3d-fs-btn {
+  position: absolute; top: 12px; right: 12px; z-index: 6;
+  width: 42px; height: 42px; border-radius: 12px;
+  border: 1px solid rgba(20,217,196,0.55);
+  background: rgba(8,17,31,0.9); color: #eef6ff;
+  font-size: 20px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  transition: background .15s ease, transform .1s ease, border-color .15s ease;
+}
+.viz3d-fs-btn:hover { background: rgba(20,217,196,0.28); border-color: #14d9c4; transform: translateY(-1px); }
+.viz3d-fs-btn:active { transform: translateY(0); }
+
+/* Interaction hint (shown on Earth/globe) */
+.viz3d-hint {
+  position: absolute; top: 12px; left: 12px; z-index: 4;
+  font-size: 0.7rem; color: var(--muted);
+  background: rgba(8,17,31,0.7); padding: 4px 10px; border-radius: 999px;
+  pointer-events: none;
+}
+
+/* Globe political/satellite toggle */
+.viz3d-mode-btn {
+  position: absolute; top: 12px; right: 62px; z-index: 6;
+  height: 42px; padding: 0 14px; border-radius: 12px;
+  border: 1px solid rgba(20,217,196,0.5); background: rgba(8,17,31,0.9);
+  color: #eef6ff; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+.viz3d-mode-btn:hover { background: rgba(20,217,196,0.28); border-color: #14d9c4; }
+.viz3d-mode-btn.active { border-color: var(--brand-2); color: var(--brand-2); }
+
+/* Molecule "back to molecule" button */
+.viz3d-back-btn {
+  position: absolute; top: 12px; left: 12px; z-index: 7;
+  height: 42px; padding: 0 16px; border-radius: 12px;
+  border: 1px solid rgba(20,217,196,0.5); background: rgba(8,17,31,0.92);
+  color: #eef6ff; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+.viz3d-back-btn:hover { background: rgba(20,217,196,0.28); border-color: #14d9c4; }
+
+/* ---------- Native + iOS-safe fullscreen ---------- */
+.demo3d-holder.viz3d-fullscreen,
+.viz3d-holder.viz3d-fullscreen {
+  height: 100vh !important; width: 100vw !important;
+  border-radius: 0; border: 0; margin: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(20,30,60,0.6), #050a14);
+}
+.demo3d-holder.viz3d-pseudo-fullscreen,
+.viz3d-holder.viz3d-pseudo-fullscreen {
+  position: fixed !important; top: 0; left: 0; right: 0; bottom: 0;
+  width: 100vw !important; height: 100vh !important; height: 100dvh !important;
+  z-index: 9999; border-radius: 0; border: 0; margin: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(20,30,60,0.6), #050a14);
+  padding-top: env(safe-area-inset-top);
+}
+body.viz3d-pseudo-lock { overflow: hidden; }
+/* Bigger controls once maximized. */
+.viz3d-fullscreen .viz3d-fs-btn,
+.viz3d-pseudo-fullscreen .viz3d-fs-btn { width: 50px; height: 50px; font-size: 24px; top: 18px; right: 18px; }
+.viz3d-fullscreen .phys-controls,
+.viz3d-pseudo-fullscreen .phys-controls { bottom: 18px; left: 18px; right: 18px; }
+
+/* ---------- Physics HUD (formula + readout) ---------- */
+/* Anchored top-left, capped width and height so it can never grow into the
+   control bar or spill past the holder onto the page caption. */
+.phys-hud {
+  position: absolute; top: 12px; left: 12px; z-index: 5;
+  background: rgba(8,17,31,0.86); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 14px; font-size: 0.8rem; color: #dfe8f5;
+  max-width: min(60%, 340px); max-height: 44%; overflow: auto;
+  line-height: 1.45; box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+.phys-hud .phys-eq { color: #14d9c4; font-weight: 800; margin-bottom: 5px; }
+.phys-hud .phys-hint { color: #9fb2cd; margin-top: 6px; font-style: italic; }
+
+/* ---------- Physics control bar (Play / Reset / sliders) ---------- */
+.phys-controls {
+  position: absolute; bottom: 12px; left: 12px; right: 12px; z-index: 6;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: rgba(8,17,31,0.9); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 14px; padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+
+/* The action buttons (▶ Drop, ⟲ Reset) — the thing the user said was hidden.
+   Made large, high-contrast, and unmissable. The first button (Play/Drop/Go)
+   gets the primary gradient; Reset and the rest are clearly secondary. */
+.phys-btn {
+  padding: 9px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08); color: #eef6ff; font-weight: 800; font-size: 0.9rem;
+  cursor: pointer; transition: background .15s ease, transform .1s ease, border-color .15s ease;
+}
+.phys-btn:hover { background: rgba(124,92,255,0.4); border-color: var(--brand); transform: translateY(-1px); }
+.phys-btn:active { transform: translateY(0); }
+/* First control = the primary "run" action. */
+.phys-controls .phys-btn:first-of-type {
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  border-color: transparent; color: #08111f;
+  box-shadow: 0 8px 22px rgba(20,217,196,0.32);
+}
+.phys-controls .phys-btn:first-of-type:hover { filter: brightness(1.08); }
+
+.phys-toggle { font-size: 0.84rem; color: #dfe8f5; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.phys-toggle input { width: 16px; height: 16px; accent-color: var(--brand-2); }
+.phys-slider { font-size: 0.8rem; color: #cdd9ec; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 190px; }
+.phys-slider input[type=range] { flex: 1; accent-color: var(--brand-2); }
+.phys-slider .pg-out { color: #14d9c4; font-weight: 800; min-width: 2.5em; text-align: right; }
+.phys-presets { display: flex; gap: 5px; }
+.phys-presets button {
+  padding: 3px 9px; border-radius: 7px; border: 1px solid var(--line);
+  background: rgba(255,255,255,0.06); color: #cdd9ec; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+}
+.phys-presets button:hover { background: rgba(20,217,196,0.24); border-color: var(--brand-2); color: #eef6ff; }
+
+/* On a phone the control bar can get tall; keep it scrollable rather than
+   letting it eat the whole scene. */
+@media (max-width: 640px) {
+  .phys-controls { max-height: 46%; overflow-y: auto; }
+  .phys-slider { min-width: 140px; }
+  .phys-hud { max-width: 72%; font-size: 0.74rem; }
+}
