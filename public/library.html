@@ -5,12 +5,12 @@
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Your Library | AthenaBoard</title>
+  <title>AI Workbench | AthenaBoard</title>
   <meta name="robots" content="noindex" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260725-v21" />
+  <link rel="stylesheet" href="/styles.css?v=20260729-v26" />
 </head>
 <body data-page="library">
   <div class="shell">
@@ -34,25 +34,35 @@
       <section class="panel library-panel">
         <div class="panel-header">
           <div>
-            <span class="section-kicker">Library</span>
-            <h2>Your Library</h2>
+            <span class="section-kicker">AI Workbench</span>
+            <h2>Your study material</h2>
           </div>
-          <button class="btn soft" id="refreshLibrary">Refresh</button>
+          <div class="boards-controls">
+            <div class="seg-toggle" id="workbenchToggle" role="tablist" aria-label="Which material">
+              <button class="seg-btn active" data-scope="mine" role="tab">Yours</button>
+              <button class="seg-btn" data-scope="shared" role="tab">Shared with you</button>
+            </div>
+            <a class="btn primary" href="/app">+ New study set</a>
+            <a class="btn soft" href="/notes">+ New notes</a>
+          </div>
         </div>
-        <div class="library-columns">
-          <div>
-            <h3>Created by you</h3>
-            <div class="set-list" id="mySets"></div>
-          </div>
-          <div>
-            <h3>Shared with you</h3>
-            <div class="set-list" id="sharedSets"></div>
-          </div>
+        <p class="boards-hint" id="workbenchHint" style="color:var(--muted); margin-bottom:16px;">
+          Everything you've created — flashcards, quizzes, slide sets and notes. Start something new with the buttons above, or open a set to study it.
+        </p>
+
+        <!-- Yours: sets you created -->
+        <div id="mineScope">
+          <div class="set-list" id="mySets"></div>
         </div>
 
-        <div id="sharedBoardsWrap" style="display:none; margin-top:26px;">
-          <h3>Whiteboards shared with you</h3>
-          <div class="set-list" id="sharedBoards"></div>
+        <!-- Shared: sets + whiteboards shared with you -->
+        <div id="sharedScope" style="display:none;">
+          <h3>Study sets shared with you</h3>
+          <div class="set-list" id="sharedSets"></div>
+          <div id="sharedBoardsWrap" style="display:none; margin-top:26px;">
+            <h3>Whiteboards shared with you</h3>
+            <div class="set-list" id="sharedBoards"></div>
+          </div>
         </div>
       </section>
     </main>
@@ -60,7 +70,7 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/common.js?v=20260725-v21"></script>
-  <script src="/library.js?v=20260725-v21"></script>
+  <script src="/common.js?v=20260729-v26"></script>
+  <script src="/library.js?v=20260729-v26"></script>
 </body>
 </html>

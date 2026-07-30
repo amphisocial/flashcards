@@ -174,22 +174,38 @@
 
   async function init() {
     await initCommon();
-    const hasTeam = Boolean(state.user && state.user.limits && state.user.limits.whiteboard);
-    $('#teacherView').style.display = hasTeam ? 'block' : 'none';
-    $('#viewerView').style.display = hasTeam ? 'none' : 'block';
+    if (!state.user) { window.location.href = '/?login=1'; return; }
 
-    if (hasTeam) {
-      $('#newBoardBtn').addEventListener('click', openNewBoard);
+    const canCreate = Boolean(state.user.limits && state.user.limits.whiteboard);
+
+    // Everyone now uses the unified boards view with a Yours / Shared toggle.
+    // The old viewer-only and upgrade-only views are retired.
+    $('#teacherView').style.display = 'block';
+    $('#viewerView').style.display = 'none';
+    $('#upgradeView').style.display = 'none';
+
+    // New Board (and its modal) only for users who can create boards.
+    const newBtn = $('#newBoardBtn');
+    if (canCreate) {
+      newBtn.style.display = '';
+      newBtn.addEventListener('click', openNewBoard);
       $('#createBoardBtn').addEventListener('click', createBoard);
       $('#templateClose').addEventListener('click', () => $('#templateDialog').close());
       $('#newBoardName').addEventListener('keydown', (e) => { if (e.key === 'Enter') createBoard(); });
-      $('#boardsToggle').querySelectorAll('.seg-btn').forEach((b) =>
-        b.addEventListener('click', () => switchScope(b.dataset.scope)));
-      await loadTeacherBoards();
     } else {
-      $('#refreshLive').addEventListener('click', loadLiveBoards);
-      await loadLiveBoards();
+      newBtn.style.display = 'none';
+      // A free/Pro student can't create boards, so their "Yours" is always
+      // empty. Hide the Yours tab and show only what's shared with them.
+      const yoursTab = $('#boardsToggle').querySelector('[data-scope="mine"]');
+      if (yoursTab) yoursTab.style.display = 'none';
     }
+
+    $('#boardsToggle').querySelectorAll('.seg-btn').forEach((b) =>
+      b.addEventListener('click', () => switchScope(b.dataset.scope)));
+
+    // Default scope: Yours if they can create boards (paid Teams/founder/admin),
+    // otherwise Shared-with-you (students land on what their teacher shared).
+    switchScope(canCreate ? 'mine' : 'shared');
   }
 
   init().catch((error) => setStatus(error.message, 'error'));

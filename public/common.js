@@ -260,9 +260,26 @@ window.AppCommon = (() => {
       });
       state.user = data.user;
       dialog.close();
+
+      // If they arrived via "Apply as a founding teacher", submit the
+      // application now (this emails ADMIN_EMAIL with their name + email) and
+      // send them to the pricing page with a confirmation.
+      let foundingApplied = false;
+      try {
+        if (sessionStorage.getItem('founding30') === '1') {
+          sessionStorage.removeItem('founding30');
+          await api('/api/founder/apply', { method: 'POST', body: JSON.stringify({}) });
+          foundingApplied = true;
+        }
+      } catch (_) { /* don't block signup if the application call fails */ }
+
       if (document.body.dataset.page === 'landing') {
         // refreshMe so access flags are populated before choosing a landing page
         await refreshMe();
+        if (foundingApplied) {
+          window.location.href = '/pricing?founding=applied';
+          return;
+        }
         window.location.href = homePathFor(state.user);
         return;
       }

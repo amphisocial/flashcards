@@ -10,6 +10,14 @@
   await initCommon();
   if (!state.user) { window.location.href = '/?login=1'; return; }
 
+  // Confirmation after applying to the Founding 30 from the homepage.
+  if (new URLSearchParams(location.search).get('founding') === 'applied') {
+    const banner = document.createElement('div');
+    banner.className = 'founding-applied-banner';
+    banner.textContent = 'Thanks for applying to the Founding 30 — we\'ve received your application and will be in touch to set up your onboarding.';
+    document.querySelector('.pricing-page').prepend(banner);
+  }
+
   const PLAN_NAMES = { free: 'Free', starter: 'Pro', team: 'Teams' };
 
   // Feature matrix: label -> which effective plans include it.

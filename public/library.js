@@ -50,7 +50,7 @@
   function renderSetList(target, sets, owned) {
     const node = $(target);
     if (!sets.length) {
-      node.innerHTML = emptyText(owned ? 'No sets created yet. Head to Create to build your first one.' : 'No shared sets yet.');
+      node.innerHTML = emptyText(owned ? 'Nothing yet. Use “New study set” or “New notes” above to create your first.' : 'No shared sets yet.');
       return;
     }
     node.innerHTML = sets.map((set) => `
@@ -101,15 +101,24 @@
     }
   }
 
+  function switchScope(scope) {
+    $('#workbenchToggle').querySelectorAll('.seg-btn').forEach((b) =>
+      b.classList.toggle('active', b.dataset.scope === scope));
+    const mine = scope === 'mine';
+    $('#mineScope').style.display = mine ? '' : 'none';
+    $('#sharedScope').style.display = mine ? 'none' : '';
+    $('#workbenchHint').style.display = mine ? '' : 'none';
+  }
+
   async function init() {
-    $('#refreshLibrary').addEventListener('click', loadLibrary);
     await initCommon();
+    if (!state.user) { window.location.href = '/?login=1'; return; }
+    $('#workbenchToggle').querySelectorAll('.seg-btn').forEach((b) =>
+      b.addEventListener('click', () => switchScope(b.dataset.scope)));
+    // Yours first for everyone — students can create Notes and study sets too.
+    switchScope('mine');
     await loadLibrary();
     await loadSharedBoards();
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('whiteboard') === 'upgrade') {
-      setStatus('The whiteboard is a Teams plan feature — start a free 7-day trial from Pricing to try it.', '');
-    }
   }
 
   init().catch((error) => setStatus(error.message, 'error'));

@@ -97,9 +97,28 @@ function ok(name, cond, detail) {
     }
 
     console.log('\nstatic assets');
-    for (const a of ['/lesson.css', '/lesson.js', '/graphdemo.js', '/viz3d.css', '/viz3d.js', '/styles.css', '/landing3d.css']) {
+    for (const a of ['/lesson.css', '/lesson.js', '/graphdemo.js', '/viz3d.css', '/viz3d.js', '/styles.css', '/landing3d.css', '/board-templates.js', '/pricing.css', '/pricing.js']) {
       const r = await get(a);
       ok(a, r.status === 200, `status ${r.status}`);
+    }
+
+    console.log('\nAI Workbench + boards + founder-apply wiring');
+    {
+      // Founder button on the homepage must carry the founding flag + wire.
+      const home = await get('/');
+      ok('homepage has an "Apply as a founding teacher" button', /ctaFounding/.test(home.body) || /founding teacher/i.test(home.body));
+      const landingJs = await get('/landing.js');
+      ok('founder button sets the founding30 flag before signup', /founding30/.test(landingJs.body));
+      const commonJs = await get('/common.js');
+      ok('signup submits the founder application when flagged',
+        /\/api\/founder\/apply/.test(commonJs.body) && /founding30/.test(commonJs.body));
+
+      const libJs = await get('/library.js');
+      ok('workbench has a Yours/Shared scope switch',
+        /workbenchToggle/.test(libJs.body) && /switchScope/.test(libJs.body));
+      const boardJs = await get('/board-list.js');
+      ok('boards default scope keys off create ability',
+        /canCreate \? 'mine' : 'shared'/.test(boardJs.body));
     }
 
     console.log('\n3D/physics viewer chrome is styled off the whiteboard');
