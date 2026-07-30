@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260725-v21" />
+  <link rel="stylesheet" href="/styles.css?v=20260729-v26" />
 </head>
 <body data-page="board-list">
   <div class="shell">
@@ -38,13 +38,20 @@
             <span class="section-kicker">Whiteboard</span>
             <h2>Your boards</h2>
           </div>
-          <button class="btn primary" id="newBoardBtn">+ New board</button>
+          <div class="boards-controls">
+            <div class="seg-toggle" id="boardsToggle" role="tablist" aria-label="Which boards">
+              <button class="seg-btn active" data-scope="mine" role="tab">Yours</button>
+              <button class="seg-btn" data-scope="shared" role="tab">Shared with you</button>
+            </div>
+            <button class="btn primary" id="newBoardBtn">+ New board</button>
+          </div>
         </div>
-        <p style="color:var(--muted); margin-bottom:16px;">
+        <p class="boards-hint" id="boardsHint" style="color:var(--muted); margin-bottom:16px;">
           You can save several boards but only broadcast one at a time — going live on a board
           automatically takes any other board off live.
         </p>
         <div id="teacherBoardList"></div>
+        <div id="sharedBoardList" style="display:none;"></div>
       </section>
 
       <!-- Non-teacher view: find a currently-live shared board -->
@@ -52,7 +59,7 @@
         <div class="panel-header">
           <div>
             <span class="section-kicker">Whiteboard</span>
-            <h2>Live boards</h2>
+            <h2>Boards shared with you</h2>
           </div>
           <button class="btn ghost" id="refreshLive">Refresh</button>
         </div>
@@ -68,14 +75,31 @@
           </div>
         </div>
         <p style="color:var(--muted);">The whiteboard is a Teams-plan feature. Start a free 7-day Teams trial to try it, or ask a teacher to invite you to their team.</p>
-        <a class="btn primary" href="/#pricing">See plans</a>
+        <a class="btn primary" href="/pricing">See plans</a>
       </section>
     </main>
+
+    <!-- Template picker modal -->
+    <dialog id="templateDialog" class="modal template-modal">
+      <div class="modal-card template-card">
+        <button class="modal-close" id="templateClose" aria-label="Close">×</button>
+        <h2>Start a new board</h2>
+        <label class="board-name-label">Board name
+          <input id="newBoardName" placeholder="e.g. Algebra II — Period 3" />
+        </label>
+        <p class="template-help">Pick a starting point. A template drops the equation or prompt on the board with a note telling you what to Analyze — or start blank.</p>
+        <div class="template-groups" id="templateGroups"></div>
+        <div class="template-actions">
+          <button class="btn primary" id="createBoardBtn">Create board</button>
+        </div>
+      </div>
+    </dialog>
   </div>
 
   <div class="toast" id="toast"></div>
 
-  <script src="/common.js?v=20260725-v21"></script>
-  <script src="/board-list.js?v=20260724-v6"></script>
+  <script src="/common.js?v=20260729-v26"></script>
+  <script src="/board-templates.js?v=20260729-v26"></script>
+  <script src="/board-list.js?v=20260729-v26"></script>
 </body>
 </html>

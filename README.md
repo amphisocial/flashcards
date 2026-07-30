@@ -261,3 +261,58 @@ If Google OAuth is not configured, email/password auth works normally.
 ## Notes before scaling
 
 This starter intentionally keeps storage simple with `data/store.json` to get the product live quickly. Before heavy traffic or paid production scale, move users, sessions, study sets, sharing, and usage counters to Postgres or MongoDB.
+
+---
+
+## Database (Postgres)
+
+As of v26 the app persists to **Postgres** instead of flat JSON files. The
+data layer (`server/db.js`) keeps the old synchronous `readStore()/writeStore()`
+contract — it serves an in-memory snapshot and flushes changes to Postgres in
+the background — so existing code is unchanged, but the source of truth is a
+real transactional database.
+
+### Required env
+
+```bash
+DATABASE_URL=postgresql://athenaboard:PASSWORD@127.0.0.1:5432/athenaboard
+ADMIN_EMAIL=anu@threadwire.ai        # full access, no billing; sees reward queue
+FOUNDER_EMAILS=a@x.edu,b@y.edu       # comma-separated founding teachers; full access
+```
+
+Admins and founders resolve to the effective **Teams** plan (all features,
+including the whiteboard) without paying. This is read live from `.env` on
+every request — add an email to `FOUNDER_EMAILS` and restart to grant access.
+
+### First-time setup / migration
+
+```bash
+npm install                 # brings in pg
+npm run migrate             # creates schema, imports any existing data/*.json,
+                            # seeds memberships from ADMIN_EMAIL / FOUNDER_EMAILS
+pm2 restart flashcards
+```
+
+`npm run migrate` is idempotent (safe to re-run) and backs up the JSON files
+to `data/*.migrated-<timestamp>.bak` before importing. The server will refuse
+to start if `DATABASE_URL` is unset or Postgres is unreachable.
+
+### New tables (money-touching data, properly typed)
+
+- `memberships` — role (admin/founder/member), plan, founder flag.
+- `referrals` — one row per invited email; `status` invited→joined→qualified.
+  Unique on `referred_email` (no double-payout). Self-referral blocked.
+- `reward_events` — `free_month` (any referrer, when the referred user creates
+  content) and `giftcard_25` (founder refers a paid/founder member; admin is
+  emailed to coordinate the code).
+- `founder_applications` — "Apply as a founding teacher" submissions.
+
+### Tests that need a database
+
+```bash
+export DATABASE_URL=postgresql://.../athenaboard_test   # a THROWAWAY db
+npm run test:db            # write-through layer + persistence across restart
+npm run test:membership    # roles, referral qualification, founder rewards
+```
+
+Point these at a scratch database — they insert and delete rows.

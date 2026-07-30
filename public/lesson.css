@@ -78,22 +78,3 @@
   body { background: #fff; color: #000; }
 }
 
-/* ---------- Interactive graph demo ---------- */
-.graph-holder { height: auto !important; min-height: 0; padding: 14px 14px 6px; display: block; }
-.graphdemo { position: relative; display: flex; flex-direction: column; gap: 12px; }
-.graphdemo-canvas {
-  display: block; width: 100%; height: 260px;
-  border-radius: 14px; border: 1px solid var(--line); background: rgba(8,17,31,0.72);
-}
-.graphdemo-eq {
-  position: absolute; top: 12px; right: 14px;
-  font-weight: 800; font-size: 0.92rem; color: #14d9c4;
-  background: rgba(8,17,31,0.82); border: 1px solid rgba(20,217,196,0.35);
-  padding: 4px 10px; border-radius: 999px; pointer-events: none;
-}
-.graphdemo-controls { display: grid; gap: 10px; }
-.graphdemo-slider { display: flex; flex-direction: column; gap: 4px; }
-.gd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.gd-label { font-size: 0.78rem; color: var(--muted); }
-.gd-val { font-size: 0.82rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
-.graphdemo-slider input[type="range"] { width: 100%; accent-color: #14d9c4; }

@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260729-v25" />
-  <link rel="stylesheet" href="/landing3d.css?v=20260729-v25" />
+  <link rel="stylesheet" href="/styles.css?v=20260729-v26" />
+  <link rel="stylesheet" href="/landing3d.css?v=20260729-v26" />
   <link rel="stylesheet" href="/viz3d.css?v=20260729-v26" />
 </head>
 <body data-page="landing">
@@ -35,26 +35,36 @@
     </header>
 
     <main id="top">
+      <!-- Thin attention strip: Founding-30 recruitment, up top, compact -->
+      <a class="founding-strip" href="#teachers" id="foundingStrip">
+        <span class="fs-badge">Now recruiting</span>
+        <span class="fs-text"><strong>The Founding 30 STEM Teachers</strong> — free Teams access this semester + a $25 referral reward.</span>
+        <span class="fs-cta">Apply →</span>
+      </a>
+
       <!-- HERO — one unforgettable statement -->
-      <section class="hero3d">
+      <section class="hero3d compact">
         <div class="hero-copy">
           <span class="eyebrow">For grades 5–9 · Math · Science · Geography · History</span>
           <h1>The AI whiteboard that turns a teacher's explanation into a live simulation.</h1>
-          <p>Write <code>y = x² − 3</code> and watch it become a graph you can bend with a slider. Sketch a molecule, a solid, or the Earth and <strong>rotate it in 3D</strong>. Drop a feather and a stone in real gravity. Every board is a live classroom your students join from the devices they already have.</p>
+          <p>Write an equation and watch it become a graph you can bend with a slider. Sketch a molecule or the Earth and <strong>rotate it in 3D</strong>. Every board is a live classroom your students join from the devices they already have.</p>
           <div class="hero-actions">
             <button class="btn primary large" id="ctaStart">Try a lesson free</button>
-            <a href="#lessons" class="btn soft large">See the classroom-ready lessons</a>
+            <a href="#lessons" class="btn soft large">See the lessons</a>
           </div>
           <div class="trust-row">
-            <span>◆ Aligned to Common Core &amp; NGSS</span>
-            <span>◆ Runs in any browser — no hardware</span>
+            <span>◆ Common Core &amp; NGSS</span>
+            <span>◆ No hardware</span>
             <span>◆ Every student on their own screen</span>
           </div>
         </div>
         <div class="hero-visual">
           <div class="demo3d-frame">
-            <div class="demo3d-holder" id="heroEarth" data-demo="earth"></div>
-            <div class="demo3d-cap">Draw a circle, write "Earth" — drag to spin, zoom, switch to a political map.</div>
+            <!-- Live interactive quadratic graph — the clearest hook. Visitors
+                 drag a, b, c before signing up. Falls back to nothing if JS
+                 fails; graphdemo.js mounts on load. -->
+            <div class="graph-holder hero-graph" id="heroGraph" data-demo="graph" data-family="parabola"></div>
+            <div class="demo3d-cap">This is live — drag <strong>a</strong>, <strong>b</strong> and <strong>c</strong> and watch the parabola change.</div>
           </div>
         </div>
       </section>
@@ -384,8 +394,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="/viz3d.js?v=20260726-v23"></script>
-  <script src="/common.js?v=20260729-v25"></script>
-  <script src="/landing.js?v=20260729-v25"></script>
-  <script src="/landing3d.js?v=20260729-v25"></script>
+  <script src="/graphdemo.js?v=20260729-v26"></script>
+  <script src="/common.js?v=20260729-v26"></script>
+  <script src="/landing.js?v=20260729-v26"></script>
+  <script src="/landing3d.js?v=20260729-v26"></script>
 </body>
 </html>

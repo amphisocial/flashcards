@@ -122,29 +122,63 @@ window.AppCommon = (() => {
   // Runs on every auth refresh so it reacts immediately to a trial
   // starting or expiring.
   function updateWhiteboardNav() {
+    renderAppNav();
+    // On the marketing landing page, reveal the signed-in shortcuts.
+    if (document.body.dataset.page === 'landing') {
+      const loggedIn = Boolean(state.user);
+      ['#landingLibraryLink', '#landingCreateLink', '#landingNotesLink'].forEach((sel) => {
+        const el = $(sel);
+        if (el) el.style.display = loggedIn ? '' : 'none';
+      });
+    }
+  }
+
+  // The unified in-app navigation. Per the product spec every app page shows
+  // the same three primary destinations plus Pricing, always visible so the
+  // top bar is a stable frame around /boards, /app, /notes, /library, /team,
+  // and /pricing. We rewrite whatever <nav class="nav-links"> the page shipped
+  // with, so there's a single source of truth here instead of six copies.
+  //   - Whiteboard  -> /boards       (the starting point)
+  //   - AI Workbench-> /library      (study material + New Study / New Notes)
+  //   - Team        -> /team         (Teams-plan/founder/admin only)
+  //   - Pricing     -> /pricing      (in-app, shows the user's status)
+  function renderAppNav() {
+    const page = document.body.dataset.page;
+    // Only rewrite on in-app pages; the marketing landing keeps its own nav.
+    const inApp = ['app', 'library', 'notes', 'team', 'board', 'board-list', 'pricing'].includes(page);
+    const nav = $('.nav-links');
+    if (!nav || !inApp) return;
+
     const user = state.user;
     const owns = Boolean(user && user.limits && user.limits.whiteboard);
-    // Students are on the free plan but still need a way to reach boards a
-    // teacher shared with them, so the Whiteboard link keys off access
-    // rather than plan. Team management stays owner-only.
-    const canSeeBoards = Boolean(user && (owns || (user.access && user.access.canSeeWhiteboard)));
-    const boardLink = $('#whiteboardNavLink');
-    if (boardLink) boardLink.style.display = canSeeBoards ? '' : 'none';
-    const teamLink = $('#teamNavLink');
-    if (teamLink) teamLink.style.display = owns ? '' : 'none';
-    // Signed-in people always get Create/Library on the landing page.
-    const loggedIn = Boolean(user);
-    ['#landingLibraryLink', '#landingCreateLink', '#landingNotesLink'].forEach((sel) => {
-      const el = $(sel);
-      if (el) el.style.display = loggedIn ? '' : 'none';
-    });
+    // Team management is for people who actually own a team (Teams plan,
+    // founder, or admin — all resolve to whiteboard access).
+    const showTeam = owns;
+
+    // Which item is active is derived from the current page.
+    const activeFor = {
+      'board-list': 'whiteboard', board: 'whiteboard',
+      app: 'workbench', notes: 'workbench', library: 'workbench',
+      team: 'team', pricing: 'pricing'
+    }[page];
+
+    const item = (key, href, label, show = true) =>
+      show ? `<a href="${href}"${activeFor === key ? ' class="active"' : ''} data-nav="${key}">${label}</a>` : '';
+
+    nav.innerHTML = [
+      item('whiteboard', '/boards', 'Whiteboard'),
+      item('workbench', '/library', 'AI Workbench'),
+      item('team', '/team', 'Team', showTeam),
+      item('pricing', '/pricing', 'Pricing')
+    ].filter(Boolean).join('\n');
   }
 
   // Students mostly consume what's shared with them, so Library is a better
   // landing spot than the create-a-set page.
   function homePathFor(user) {
-    if (user && user.access && user.access.isStudent && !(user.limits && user.limits.whiteboard)) return '/library';
-    return '/app';
+    // Whiteboard is the product's starting point: every signed-in user lands
+    // on their boards list. AI Workbench (study/notes) is a secondary area.
+    return '/boards';
   }
 
   function openAuth(mode) {

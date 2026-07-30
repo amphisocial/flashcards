@@ -30,12 +30,9 @@ const MAX_BOARDS_PER_TEACHER = 20;
 const MAX_PAGES_PER_BOARD = 20;
 const MAX_BACKGROUND_CHARS = 2_800_000; // ~2MB once base64-encoded
 
-function ensureBoardStore() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(BOARD_FILE)) {
-    fs.writeFileSync(BOARD_FILE, JSON.stringify({ boards: [] }, null, 2));
-  }
-}
+const db = require('./db');
+
+function ensureBoardStore() { /* schema created in db.init() */ }
 
 // Boards created by the first whiteboard release predate the title/shared/
 // isLive fields. Backfill them on read so old boards don't render blank or
@@ -52,27 +49,49 @@ function normalizeBoard(board, index) {
 }
 
 function readBoardStore() {
-  ensureBoardStore();
-  try {
-    const parsed = JSON.parse(fs.readFileSync(BOARD_FILE, 'utf8'));
-    parsed.boards ||= [];
-    parsed.boards.forEach(normalizeBoard);
-    return parsed;
-  } catch (error) {
-    console.error('Failed to read board store:', error);
-    return { boards: [] };
-  }
+  const store = db.readBoardStore();
+  (store.boards || []).forEach(normalizeBoard);
+  return store;
 }
 
 function writeBoardStore(store) {
-  ensureBoardStore();
-  const temp = `${BOARD_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(store, null, 2));
-  fs.renameSync(temp, BOARD_FILE);
+  db.writeBoardStore(store);
 }
 
 function boardId(prefix = 'brd') {
   return `${prefix}_${crypto.randomBytes(12).toString('hex')}`;
+}
+
+// Template catalog shared with the client picker. Seeding a board writes a
+// starter text object (equation or label) plus an instruction note onto the
+// first page, so the teacher lands on a canvas ready to Analyze.
+let BOARD_TEMPLATES = [];
+try {
+  ({ BOARD_TEMPLATES } = require('../public/board-templates.js'));
+} catch (_) { BOARD_TEMPLATES = []; }
+
+function seedBoardFromTemplate(board, templateId) {
+  if (!templateId || templateId === 'blank') return;
+  const tpl = BOARD_TEMPLATES.find((t) => t.id === templateId);
+  if (!tpl || !tpl.seed) return;
+  const page = board.pages[0];
+  const mkObj = (text, x, y, opts = {}) => ({
+    id: `obj_${crypto.randomBytes(6).toString('hex')}`,
+    type: opts.note ? 'note' : 'text',
+    x, y,
+    w: opts.note ? 300 : 420,
+    h: opts.note ? 120 : 48,
+    text,
+    color: opts.note ? '#ffcc66' : '#eef6ff'
+  });
+  const objs = [];
+  const main = tpl.seed.equation || tpl.seed.label;
+  if (main) objs.push(mkObj(main, 120, 120));
+  if (tpl.seed.instruction) objs.push(mkObj(tpl.seed.instruction, 120, 220, { note: true }));
+  page.objects.push(...objs);
+  // Give math templates a coordinate grid, science a blank surface.
+  if (['quadratic', 'linear'].includes(templateId)) page.template = 'coordinate';
+  board.seededFrom = templateId;
 }
 
 function nowIso() {
@@ -193,8 +212,13 @@ function attachBoardRoutes(app, deps) {
       strokes: [],
       aiNotes: []
     };
+    migrateBoardShape(board); // gives it pages[0]
+    // Seed starter content from the chosen template (if any).
+    seedBoardFromTemplate(board, req.body.template);
     store.boards.push(board);
     writeBoardStore(store);
+    // Creating a board is a qualifying action for referral rewards.
+    if (deps.onContentCreated) deps.onContentCreated(req.user);
     res.json({ board: boardSummary(board) });
   });
 

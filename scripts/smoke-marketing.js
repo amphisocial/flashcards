@@ -62,12 +62,17 @@ function ok(name, cond, detail) {
         /Math/.test(r.body) && /Science/.test(r.body) && /Geography/.test(r.body) && /History/.test(r.body));
       ok('references Common Core & NGSS', /Common Core/i.test(r.body) && /NGSS/i.test(r.body));
       ok('has the Founding 30 recruitment block', /Founding 30/i.test(r.body));
+      ok('thin Founding-30 attention strip up top', /founding-strip/.test(r.body));
+      ok('hero showcases the interactive quadratic graph (not the globe)',
+        /id="heroGraph"[^>]*data-family="parabola"/.test(r.body) && !/id="heroEarth"/.test(r.body));
+      ok('hero graph widget script + shared css loaded',
+        /graphdemo\.js/.test(r.body) && /viz3d\.css/.test(r.body));
       ok('testimonials carry the FTC beta-access disclosure',
         (r.body.match(/Received free beta access/g) || []).length >= 3);
       ok('testimonials name role + state, not anonymous',
         /8th-grade physical science · Massachusetts/.test(r.body));
-      ok('3D demo holders still present for viz3d to mount',
-        (r.body.match(/class="demo3d-holder"/g) || []).length >= 4);
+      ok('3D science grid still present for viz3d to mount',
+        (r.body.match(/class="demo3d-holder"/g) || []).length >= 3);
     }
 
     console.log('\nconcept pages');

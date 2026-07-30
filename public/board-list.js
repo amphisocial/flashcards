@@ -62,15 +62,93 @@
     }
   }
 
+  // ---- Template picker + New board ------------------------------------
+  function buildTemplatePicker() {
+    const groups = {};
+    (window.BOARD_TEMPLATES || []).forEach((t) => { (groups[t.subject] ||= []).push(t); });
+    const order = ['Math', 'Science', 'Geography', 'History', 'Freeform'];
+    const html = order.filter((s) => groups[s]).map((subject) => `
+      <div class="template-group">
+        <h4>${escapeHtml(subject)}</h4>
+        <div class="template-grid">
+          ${groups[subject].map((t) => `
+            <button class="template-tile${t.id === 'blank' ? ' blank' : ''}" data-id="${t.id}">
+              <strong>${escapeHtml(t.name)}</strong>
+              <span>${escapeHtml(t.blurb)}</span>
+              ${t.standard ? `<em>${escapeHtml(t.standard)}</em>` : ''}
+            </button>`).join('')}
+        </div>
+      </div>`).join('');
+    $('#templateGroups').innerHTML = html;
+
+    let selected = 'blank';
+    const tiles = $('#templateGroups').querySelectorAll('.template-tile');
+    const markSelected = (id) => {
+      selected = id;
+      tiles.forEach((el) => el.classList.toggle('selected', el.dataset.id === id));
+    };
+    markSelected('blank');
+    tiles.forEach((el) => el.addEventListener('click', () => markSelected(el.dataset.id)));
+
+    return () => selected;
+  }
+
+  let getSelectedTemplate = null;
+
+  function openNewBoard() {
+    if (!getSelectedTemplate) getSelectedTemplate = buildTemplatePicker();
+    $('#newBoardName').value = '';
+    const dlg = $('#templateDialog');
+    dlg.showModal();
+    setTimeout(() => $('#newBoardName').focus(), 50);
+  }
+
   async function createBoard() {
-    const title = prompt('Name this board (e.g. "Algebra II — Period 3"):', '');
-    if (title === null) return;
+    const title = $('#newBoardName').value.trim();
+    const template = getSelectedTemplate ? getSelectedTemplate() : 'blank';
+    $('#createBoardBtn').disabled = true;
     try {
-      const data = await api('/api/board/mine/new', { method: 'POST', body: JSON.stringify({ title }) });
+      const data = await api('/api/board/mine/new', {
+        method: 'POST',
+        body: JSON.stringify({ title, template })
+      });
       window.location.href = `/board/${data.board.id}`;
     } catch (error) {
       setStatus(error.message, 'error');
+      $('#createBoardBtn').disabled = false;
     }
+  }
+
+  // ---- Shared-with-you boards -----------------------------------------
+  async function loadSharedBoards() {
+    try {
+      const data = await api('/api/board/shared/mine');
+      if (!data.boards.length) {
+        $('#sharedBoardList').innerHTML = '<p class="set-meta">No boards shared with you yet.</p>';
+        return;
+      }
+      $('#sharedBoardList').innerHTML = data.boards.map((b) => `
+        <div class="set-item" data-id="${b.boardId}">
+          <span class="set-title">${escapeHtml(b.title)} ${b.isLive ? '<span style="color:#14d9c4; font-size:0.75rem; font-weight:700;">● LIVE</span>' : ''}</span>
+          <span class="set-meta">${escapeHtml(b.teacherName)}'s whiteboard • ${b.isLive ? 'live now' : 'snapshot'}</span>
+          <div class="set-actions">
+            <a class="btn primary" href="/board/${b.boardId}">${b.isLive ? 'Join' : 'View snapshot'}</a>
+          </div>
+        </div>
+      `).join('');
+    } catch (error) {
+      setStatus(error.message, 'error');
+    }
+  }
+
+  function switchScope(scope) {
+    $('#boardsToggle').querySelectorAll('.seg-btn').forEach((b) =>
+      b.classList.toggle('active', b.dataset.scope === scope));
+    const mine = scope === 'mine';
+    $('#teacherBoardList').style.display = mine ? '' : 'none';
+    $('#sharedBoardList').style.display = mine ? 'none' : '';
+    $('#boardsHint').style.display = mine ? '' : 'none';
+    if (mine) loadTeacherBoards(); else loadSharedBoards();
   }
 
   async function loadLiveBoards() {
@@ -101,7 +179,12 @@
     $('#viewerView').style.display = hasTeam ? 'none' : 'block';
 
     if (hasTeam) {
-      $('#newBoardBtn').addEventListener('click', createBoard);
+      $('#newBoardBtn').addEventListener('click', openNewBoard);
+      $('#createBoardBtn').addEventListener('click', createBoard);
+      $('#templateClose').addEventListener('click', () => $('#templateDialog').close());
+      $('#newBoardName').addEventListener('keydown', (e) => { if (e.key === 'Enter') createBoard(); });
+      $('#boardsToggle').querySelectorAll('.seg-btn').forEach((b) =>
+        b.addEventListener('click', () => switchScope(b.dataset.scope)));
       await loadTeacherBoards();
     } else {
       $('#refreshLive').addEventListener('click', loadLiveBoards);

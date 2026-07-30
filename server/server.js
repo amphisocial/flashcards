@@ -68,6 +68,45 @@ function canViewTeachersContent(store, teacherId, email) {
 }
 const { sendMail } = require('./mailer');
 
+// Notify the admin when someone applies to be a founding teacher. The
+// application is also persisted (founder_applications table) so it isn't lost
+// if SMTP is down — email is best-effort.
+function notifyFounderApplication({ name, email }) {
+  const to = (process.env.ADMIN_EMAIL || '').trim();
+  if (!to) return Promise.resolve({ sent: false, reason: 'no ADMIN_EMAIL' });
+  const who = name ? `${name} (${email})` : email;
+  const subject = `New Founding-30 application: ${who}`;
+  const text = `A new founding-teacher application came in.\n\nName: ${name || '(not given)'}\nEmail: ${email}\n\nReview and reach out to set up their onboarding.`;
+  const html = `<p>A new founding-teacher application came in.</p>
+    <ul><li><strong>Name:</strong> ${name || '(not given)'}</li>
+    <li><strong>Email:</strong> ${email}</li></ul>
+    <p>Review and reach out to set up their onboarding.</p>`;
+  return sendMail({ to, subject, text, html })
+    .catch((e) => { console.warn('Founder-application email failed:', e.message); return { sent: false }; });
+}
+
+// Notify the admin when a founding member qualifies for the $25 gift card so
+// they can coordinate sending a code.
+function notifyAdminOfReward({ founderEmail, referredEmail }) {
+  const to = (process.env.ADMIN_EMAIL || '').trim();
+  if (!to) return Promise.resolve({ sent: false, reason: 'no ADMIN_EMAIL' });
+  const subject = `$25 gift-card owed: founding member referral (${founderEmail})`;
+  const text = `Founding member ${founderEmail} referred ${referredEmail}, who became a paid/founding member.\n\nThey qualify for the $25 Amazon gift card. Coordinate sending a code.`;
+  const html = `<p>Founding member <strong>${founderEmail}</strong> referred <strong>${referredEmail}</strong>, who became a paid/founding member.</p>
+    <p>They qualify for the <strong>$25 Amazon gift card</strong>. Coordinate sending a code.</p>`;
+  return sendMail({ to, subject, text, html })
+    .catch((e) => { console.warn('Reward notification email failed:', e.message); return { sent: false }; });
+}
+
+// Send a referral invitation email on behalf of a member.
+function sendReferralInvite({ fromName, toEmail, link }) {
+  const subject = `${fromName} invited you to AthenaBoard`;
+  const text = `${fromName} thinks you'd like AthenaBoard — the AI whiteboard that turns your explanation into a live simulation.\n\nGet started: ${link}`;
+  const html = `<p><strong>${fromName}</strong> thinks you'd like AthenaBoard — the AI whiteboard that turns your explanation into a live simulation.</p><p><a href="${link}">Get started</a></p>`;
+  return sendMail({ to: toEmail, subject, text, html })
+    .catch((e) => { console.warn('Referral invite email failed:', e.message); return { sent: false }; });
+}
+
 // Load .env when present. Under systemd this is redundant (EnvironmentFile=
 // already injects it), but pm2 and plain `node server/server.js` need this
 // to pick up secrets/config from .env.
@@ -103,41 +142,22 @@ const STRIPE_PRICE_TO_PLAN = Object.fromEntries(
   ].filter(([priceId]) => Boolean(priceId))
 );
 
-function ensureStore() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(STORE_FILE)) {
-    const initial = {
-      users: [],
-      sessions: [],
-      quizlets: [],
-      events: []
-    };
-    fs.writeFileSync(STORE_FILE, JSON.stringify(initial, null, 2));
-  }
-}
+// Persistence now lives in Postgres (server/db.js). The db module keeps the
+// exact same synchronous readStore/writeStore contract the app was written
+// against — it serves an in-memory snapshot for reads and flushes changes to
+// Postgres in the background — so the ~40 call sites below are unchanged.
+const db = require('./db');
+
+// ensureStore is now a no-op kept for the few places that call it; the DB
+// schema is created by db.init() at boot.
+function ensureStore() { /* schema created in db.init() */ }
 
 function readStore() {
-  ensureStore();
-  try {
-    const parsed = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
-    parsed.users ||= [];
-    parsed.sessions ||= [];
-    parsed.quizlets ||= [];
-    parsed.passages ||= [];
-    parsed.events ||= [];
-    parsed.satSessions ||= [];
-    return parsed;
-  } catch (error) {
-    console.error('Failed to read store:', error);
-    return { users: [], sessions: [], quizlets: [], events: [], satSessions: [] };
-  }
+  return db.readStore();
 }
 
 function writeStore(store) {
-  ensureStore();
-  const temp = `${STORE_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(store, null, 2));
-  fs.renameSync(temp, STORE_FILE);
+  db.writeStore(store);
 }
 
 function id(prefix) {
@@ -249,6 +269,9 @@ function downgradeExpiredTrial(user) {
 function publicUser(user) {
   if (!user) return null;
   user = downgradeExpiredTrial(user);
+  const role = membership.role(user);              // admin | founder | member
+  const privileged = membership.isPrivileged(user.email);
+  const effPlan = membership.effectivePlan(user);  // privileged -> 'team'
   const plan = user.plan || 'free';
   const trialActive = isTrialActive(user);
   return {
@@ -258,9 +281,14 @@ function publicUser(user) {
     lastName: user.lastName || '',
     name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
     plan,
-    planLabel: PLAN_LIMITS[plan]?.label || 'Free',
+    // effectivePlan is what actually gates features; plan is what they pay for.
+    effectivePlan: effPlan,
+    role,
+    isAdmin: role === 'admin',
+    isFounder: role === 'founder',
+    planLabel: role === 'admin' ? 'Admin' : role === 'founder' ? 'Founder Teacher' : (PLAN_LIMITS[plan]?.label || 'Free'),
     subscriptionStatus: user.subscriptionStatus || 'free',
-    limits: PLAN_LIMITS[plan] || PLAN_LIMITS.free,
+    limits: membership.effectiveLimits(user),
     trial: {
       active: trialActive,
       plan: trialActive ? user.trialPlan : null,
@@ -334,7 +362,7 @@ function getDailyUsage(userId) {
 }
 
 function canCreateSet(user) {
-  const plan = user.plan || 'free';
+  const plan = membership.effectivePlan(user);
   const limit = PLAN_LIMITS[plan]?.setsPerDay || PLAN_LIMITS.free.setsPerDay;
   const used = getDailyUsage(user.id);
   return { ok: used < limit, used, limit, remaining: Math.max(0, limit - used) };
@@ -353,9 +381,17 @@ function userCanReadQuizlet(user, quizlet, store) {
   return (quizlet.invitedEmails || []).map(normalizeEmail).includes(normalizeEmail(user.email));
 }
 
+// Roles/access + referrals/rewards. Layered on top of PLAN_LIMITS so admins
+// and founders (from .env) get full access without billing.
+const { attachMembership } = require('./membership');
+const membership = attachMembership(db, {
+  PLAN_LIMITS,
+  // notifyAdminOfReward is wired after the mailer is defined below.
+  notifyAdminOfReward: (info) => notifyAdminOfReward(info)
+});
+
 function userHasWhiteboardAccess(user) {
-  const plan = user.plan || 'free';
-  return Boolean(PLAN_LIMITS[plan]?.whiteboard);
+  return membership.hasWhiteboard(user);
 }
 
 function compactText(text, maxLength = 16000) {
@@ -1042,6 +1078,14 @@ app.post('/api/auth/register', (req, res) => {
   store.users.push(user);
   writeStore(store);
   createSession(res, user.id);
+  // Sync the memberships table (grants admin/founder from .env if applicable).
+  membership.reconcile(user).catch(() => {});
+  // If they arrived via a referral link (?ref=email), mark the referral joined.
+  const refBy = normalizeEmail(req.body.referredBy || req.query.ref || '');
+  if (refBy && refBy !== email) {
+    db.query(`UPDATE referrals SET status = 'joined', referred_user_id = $2, joined_at = now()
+              WHERE lower(referred_email) = $1 AND status = 'invited'`, [email, user.id]).catch(() => {});
+  }
   res.json({ user: publicUser(user) });
 });
 
@@ -1054,6 +1098,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
   createSession(res, user.id);
+  membership.reconcile(user).catch(() => {});
   res.json({ user: publicUser(user) });
 });
 
@@ -1109,7 +1154,8 @@ app.get('/auth/google/callback', async (req, res) => {
     if (!profileResponse.ok || !profile.email) throw new Error('Could not read Google profile.');
     const user = upsertGoogleUser(profile);
     createSession(res, user.id);
-    res.redirect('/app?signedIn=google');
+    membership.reconcile(user).catch(() => {});
+    res.redirect('/boards?signedIn=google');
   } catch (error) {
     res.redirect(`/?googleError=${encodeURIComponent(error.message)}`);
   }
@@ -1140,6 +1186,9 @@ function saveGeneratedSet(user, options) {
   const studySet = buildStudySetObject(user, options);
   store.quizlets.push(studySet); // store key kept as "quizlets" for backward compatibility with existing data
   writeStore(store);
+  // Creating content is the "qualifying" action for a referral (per the
+  // product decision — a trial signup counts too). Fire-and-forget.
+  membership.onReferredContentCreated(user).catch(() => {});
   return studySet;
 }
 
@@ -1659,12 +1708,110 @@ function requirePageUser(req, res, next) {
   next();
 }
 
+// ---- Membership, referrals, founder applications, admin rewards ----------
+
+// Apply to the Founding-30 program. Requires being signed in (so we have a
+// real account to attach). Persists the application and emails the admin.
+app.post('/api/founder/apply', requireUser, async (req, res) => {
+  const user = req.user;
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || String(req.body.name || '').trim();
+  try {
+    await db.query(
+      `INSERT INTO founder_applications (name, email, user_id, notified) VALUES ($1, $2, $3, false)`,
+      [name, user.email, user.id]);
+    const r = await notifyFounderApplication({ name, email: user.email });
+    if (r && r.sent) {
+      await db.query(`UPDATE founder_applications SET notified = true WHERE user_id = $1`, [user.id]).catch(() => {});
+    }
+    res.json({ ok: true, emailed: Boolean(r && r.sent) });
+  } catch (e) {
+    console.error('founder apply failed:', e.message);
+    res.status(500).json({ error: 'Could not submit your application. Please try again.' });
+  }
+});
+
+// The signed-in user's membership + referral status (drives the pricing page).
+app.get('/api/membership', requireUser, async (req, res) => {
+  const user = req.user;
+  try {
+    const summary = await membership.referralSummary(user);
+    const seatInfo = (() => {
+      // For team plans, report seats used out of the cap.
+      if (membership.effectivePlan(user) !== 'team') return null;
+      const store = readStore();
+      const roster = (store.users.find((u) => u.id === user.id)?.teamRoster) || [];
+      return { used: roster.length, cap: PLAN_LIMITS.team.shareSeats };
+    })();
+    res.json({
+      role: membership.role(user),
+      isAdmin: membership.isAdmin(user),
+      isFounder: membership.isFounder(user),
+      plan: user.plan || 'free',
+      effectivePlan: membership.effectivePlan(user),
+      limits: membership.effectiveLimits(user),
+      seats: seatInfo,
+      referrals: summary,
+      // Founders see the $25 promo; everyone sees the free-month referral.
+      promos: {
+        freeMonthReferral: true,
+        founderGiftCard: membership.isFounder(user)
+      }
+    });
+  } catch (e) {
+    console.error('membership fetch failed:', e.message);
+    res.status(500).json({ error: 'Could not load membership.' });
+  }
+});
+
+// Send a referral invite. Records the referral and emails the invitee.
+app.post('/api/referral/invite', requireUser, async (req, res) => {
+  const user = req.user;
+  const toEmail = normalizeEmail(req.body.email);
+  if (!toEmail || !toEmail.includes('@')) return res.status(400).json({ error: 'Enter a valid email address.' });
+  try {
+    await membership.recordReferral(user, toEmail);
+    const fromName = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email;
+    const link = `${APP_BASE_URL}/?login=0&ref=${encodeURIComponent(user.email)}`;
+    const r = await sendReferralInvite({ fromName, toEmail, link });
+    res.json({ ok: true, emailed: Boolean(r && r.sent) });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Could not send the invite.' });
+  }
+});
+
+// Admin-only: pending gift-card rewards to fulfil.
+app.get('/api/admin/rewards', requireUser, async (req, res) => {
+  if (!membership.isAdmin(req.user)) return res.status(403).json({ error: 'Admins only.' });
+  try {
+    const pending = await membership.pendingRewards();
+    res.json({ pending });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load rewards.' });
+  }
+});
+
+// Admin-only: mark a reward resolved once the gift card has been sent.
+app.post('/api/admin/rewards/:id/resolve', requireUser, async (req, res) => {
+  if (!membership.isAdmin(req.user)) return res.status(403).json({ error: 'Admins only.' });
+  try {
+    await db.query(`UPDATE reward_events SET resolved = true WHERE id = $1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update the reward.' });
+  }
+});
+
 app.get('/app', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'app.html'));
 });
 
 app.get('/library', requirePageUser, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'library.html'));
+});
+
+// In-app pricing / account page (distinct from the marketing #pricing anchor).
+app.get('/pricing', requirePageUser, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'pricing.html'));
 });
 
 // ---- Team roster (Teams plan) --------------------------------------------
@@ -1741,7 +1888,8 @@ attachBoardRoutes(app, {
   askVisionAI: ({ instructions, imageDataUrl }) => askVisionAI({ instructions, imageDataUrl }),
   generateWithProvider,
   saveGeneratedSet,
-  canCreateSet
+  canCreateSet,
+  onContentCreated: (user) => { membership.onReferredContentCreated(user).catch(() => {}); }
 });
 
 // Board picker: teachers see their saved boards + New/Go Live controls;
@@ -1848,7 +1996,23 @@ attachBoardWebSocket(httpServer, {
   askVisionAI: ({ instructions, imageDataUrl }) => askVisionAI({ instructions, imageDataUrl })
 });
 
-httpServer.listen(PORT, () => {
-  ensureStore();
-  console.log(`Athena Flashcards running on ${PORT}`);
-});
+// Boot: initialize Postgres (create schema + warm the in-memory snapshot)
+// BEFORE we start accepting requests, so the first request sees real data.
+db.init()
+  .then(() => {
+    httpServer.listen(PORT, () => {
+      console.log(`AthenaBoard running on ${PORT} (Postgres-backed)`);
+    });
+  })
+  .catch((err) => {
+    console.error('FATAL: could not initialize the database:', err.message);
+    console.error('Check DATABASE_URL in .env and that Postgres is reachable.');
+    process.exit(1);
+  });
+
+// Flush pending writes on shutdown so nothing in flight is lost.
+function gracefulExit() {
+  db.drain().finally(() => process.exit(0));
+}
+process.on('SIGTERM', gracefulExit);
+process.on('SIGINT', gracefulExit);

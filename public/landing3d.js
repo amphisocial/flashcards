@@ -4,7 +4,9 @@
  * view, and are capped so a marketing page never runs many WebGL contexts.
  */
 (function () {
-  if (typeof window.AthenaViz3D === 'undefined') return;
+  // Proceed if either engine is present — the graph hero uses AthenaGraphDemo,
+  // the 3D grid uses AthenaViz3D. Bail only if neither loaded.
+  if (typeof window.AthenaViz3D === 'undefined' && typeof window.AthenaGraphDemo === 'undefined') return;
 
   // Acetic acid CH3COOH with explicit 3D coordinates (angstrom-ish), so the
   // molecule demo shows the real structure rather than a fallback.
@@ -39,6 +41,14 @@
     if (mounted.has(elm)) return;
     mounted.add(elm);
     try {
+      // Graph holders use the 2D interactive widget, not viz3d.
+      if (elm.dataset.demo === 'graph') {
+        if (window.AthenaGraphDemo) {
+          window.AthenaGraphDemo.mount(elm, { family: elm.dataset.family || 'parabola' });
+        }
+        return;
+      }
+      if (!window.AthenaViz3D) return;
       const h = window.AthenaViz3D.mount(elm, specFor(elm.dataset.demo));
       handles.push(h);
       // Cap live viewers; dispose oldest beyond 4 to stay light.
@@ -47,10 +57,13 @@
   }
 
   function init() {
-    const holders = Array.from(document.querySelectorAll('.demo3d-holder'));
+    // Both 3D viewers (.demo3d-holder) and the 2D graph widget (.graph-holder)
+    // are mounted through the same path, keyed by data-demo.
+    const holders = Array.from(document.querySelectorAll('.demo3d-holder, .graph-holder'));
     if (!holders.length) return;
-    // Mount the hero one immediately; lazy-mount the rest on scroll.
-    const hero = document.getElementById('heroEarth');
+    // Mount the hero visual immediately; lazy-mount the rest on scroll. The
+    // hero is now the interactive quadratic graph.
+    const hero = document.getElementById('heroGraph') || document.getElementById('heroEarth');
     if (hero) mountInto(hero);
 
     if ('IntersectionObserver' in window) {

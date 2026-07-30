@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/img/athenaboard-logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your plan | AthenaBoard</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260729-v26" />
+  <link rel="stylesheet" href="/pricing.css?v=20260729-v26" />
+</head>
+<body data-page="pricing">
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/boards" aria-label="AthenaBoard home">
+        <span class="brand-mark">AthenaBoard</span>
+        <span><strong>Athena</strong><span class="brand-suffix">Board</span></span>
+      </a>
+      <nav class="nav-links"></nav>
+      <div class="auth-area" id="authArea"></div>
+    </header>
+
+    <main class="pricing-page">
+      <!-- Current status -->
+      <section class="status-card" id="statusCard">
+        <div class="status-loading">Loading your plan…</div>
+      </section>
+
+      <!-- Feature access matrix -->
+      <section class="features-section">
+        <h2>What's included</h2>
+        <div class="feature-matrix" id="featureMatrix"></div>
+      </section>
+
+      <!-- Upgrade (Pro -> Teams), shown when relevant -->
+      <section class="upgrade-section" id="upgradeSection" style="display:none">
+        <h2>Upgrade</h2>
+        <div class="upgrade-card">
+          <div>
+            <h3>Teams — $9.99/mo</h3>
+            <p>Everything in Pro, plus the live AI whiteboard, 3D science, and sharing with up to 30 students.</p>
+          </div>
+          <button class="btn primary" id="upgradeTeamsBtn">Upgrade to Teams</button>
+        </div>
+      </section>
+
+      <!-- Referrals (everyone) -->
+      <section class="referral-section">
+        <h2>Refer a colleague</h2>
+        <p class="referral-blurb" id="referralBlurb">
+          Invite another teacher. When they sign up and create their first board or study set,
+          you get a free month of your current plan.
+        </p>
+        <div class="referral-form">
+          <input type="email" id="referralEmail" placeholder="colleague@school.edu" />
+          <button class="btn primary" id="referralSendBtn">Send invite</button>
+        </div>
+        <div class="referral-status" id="referralStatus"></div>
+        <div class="referral-stats" id="referralStats"></div>
+      </section>
+
+      <!-- Founder gift-card promo (founders only) -->
+      <section class="promo-section" id="promoSection" style="display:none">
+        <div class="promo-card">
+          <span class="promo-badge">Founding Teacher promo</span>
+          <h3>Refer a paid or founding member → $25 Amazon gift card</h3>
+          <p>As a founding teacher, when someone you refer becomes a paid or founding member,
+             you qualify for a $25 Amazon gift card. We'll email you to coordinate the code.</p>
+        </div>
+      </section>
+
+      <!-- Admin: pending gift-card rewards (admins only) -->
+      <section class="admin-section" id="adminSection" style="display:none">
+        <h2>Pending gift-card rewards</h2>
+        <div class="admin-rewards" id="adminRewards"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/common.js?v=20260729-v26"></script>
+  <script src="/pricing.js?v=20260729-v26"></script>
+</body>
+</html>
